@@ -6,6 +6,9 @@ import { Meeting } from './entities/meeting.entity';
 import { MeetingParticipant } from './entities/meeting-participant.entity';
 import { Transcription } from './entities/transcription.entity';
 import { RedisModule } from '../redis/redis.module';
+import { ChimeService } from './services/chime.service';
+import { TranscriptionService } from './services/transcription.service';
+import { TranscriptionGateway } from './gateways/transcription.gateway';
 
 @Module({
   imports: [
@@ -13,7 +16,16 @@ import { RedisModule } from '../redis/redis.module';
     RedisModule,
   ],
   controllers: [MeetingsController],
-  providers: [MeetingsService],
-  exports: [MeetingsService],
+  providers: [
+    MeetingsService,
+    ChimeService,
+    TranscriptionService,
+    TranscriptionGateway,
+  ],
+  exports: [
+    MeetingsService,
+    ChimeService,
+    TranscriptionService,
+  ],
 })
 export class MeetingsModule {}

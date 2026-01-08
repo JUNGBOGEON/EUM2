@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { LogOut, Bell } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import {
   Sidebar,
   SidebarContent,
@@ -18,19 +19,32 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { NAV_ITEMS } from '../_lib/constants';
+import { InvitationNotifications } from './invitation-notifications';
 import type { UserInfo } from '../_lib/types';
+import type { WorkspaceInvitation } from '../_hooks/use-invitations';
 
 interface AppSidebarProps {
   user: UserInfo | null;
   onLogout: () => void;
+  invitations?: WorkspaceInvitation[];
+  isLoadingInvitations?: boolean;
+  onAcceptInvitation?: (id: string) => Promise<void>;
+  onRejectInvitation?: (id: string) => Promise<void>;
 }
 
-export function AppSidebar({ user, onLogout }: AppSidebarProps) {
+export function AppSidebar({
+  user,
+  onLogout,
+  invitations = [],
+  isLoadingInvitations = false,
+  onAcceptInvitation,
+  onRejectInvitation,
+}: AppSidebarProps) {
   const pathname = usePathname();
 
   return (
     <Sidebar collapsible="icon">
-      {/* Header with Logo and Trigger */}
+      {/* Header with Logo, Notification, and Trigger */}
       <SidebarHeader className="h-14 border-b border-sidebar-border">
         <div className="flex h-full items-center justify-between px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Image
@@ -40,7 +54,20 @@ export function AppSidebar({ user, onLogout }: AppSidebarProps) {
             height={10}
             className="invert group-data-[collapsible=icon]:hidden"
           />
-          <SidebarTrigger />
+          <div className="flex items-center gap-1 group-data-[collapsible=icon]:hidden">
+            {onAcceptInvitation && onRejectInvitation && (
+              <InvitationNotifications
+                invitations={invitations}
+                isLoading={isLoadingInvitations}
+                onAccept={onAcceptInvitation}
+                onReject={onRejectInvitation}
+              />
+            )}
+            <SidebarTrigger />
+          </div>
+          <div className="hidden group-data-[collapsible=icon]:flex">
+            <SidebarTrigger />
+          </div>
         </div>
       </SidebarHeader>
 
@@ -51,6 +78,28 @@ export function AppSidebar({ user, onLogout }: AppSidebarProps) {
             <SidebarMenu>
               {NAV_ITEMS.map((item) => {
                 const isActive = pathname === item.href;
+                const isNotificationItem = item.href === '/notifications';
+
+                // 알림 메뉴 항목에 배지 표시
+                if (isNotificationItem && invitations.length > 0) {
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                        <Link href={item.href} className="relative">
+                          <item.icon />
+                          <span>{item.label}</span>
+                          <Badge
+                            variant="destructive"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 h-5 min-w-5 p-0 flex items-center justify-center text-xs group-data-[collapsible=icon]:hidden"
+                          >
+                            {invitations.length > 9 ? '9+' : invitations.length}
+                          </Badge>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                }
+
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>

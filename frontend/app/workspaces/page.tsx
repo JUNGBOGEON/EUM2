@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { FolderOpen, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +16,7 @@ import {
   CreateWorkspaceModal,
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
+import { useInvitations } from './_hooks/use-invitations';
 
 export default function WorkspacesPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -48,6 +49,19 @@ export default function WorkspacesPage() {
     refreshWorkspaces,
   } = useWorkspaces();
 
+  const {
+    pendingInvitations,
+    acceptInvitation,
+    rejectInvitation,
+    isLoading: isLoadingInvitations,
+  } = useInvitations({ userId: user?.id });
+
+  // 초대 수락 후 워크스페이스 목록 갱신
+  const handleAcceptInvitation = useCallback(async (invitationId: string) => {
+    await acceptInvitation(invitationId);
+    await refreshWorkspaces();
+  }, [acceptInvitation, refreshWorkspaces]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -58,7 +72,14 @@ export default function WorkspacesPage() {
 
   return (
     <SidebarProvider>
-      <AppSidebar user={user} onLogout={handleLogout} />
+      <AppSidebar
+        user={user}
+        onLogout={handleLogout}
+        invitations={pendingInvitations}
+        isLoadingInvitations={isLoadingInvitations}
+        onAcceptInvitation={handleAcceptInvitation}
+        onRejectInvitation={rejectInvitation}
+      />
 
       <SidebarInset>
         <div className="flex flex-1 flex-col">

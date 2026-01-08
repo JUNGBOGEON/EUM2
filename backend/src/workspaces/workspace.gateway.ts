@@ -27,6 +27,34 @@ export interface SessionUpdatePayload {
   } | null;
 }
 
+export interface InvitationNotificationPayload {
+  type: 'invitation_received' | 'invitation_cancelled' | 'invitation_accepted' | 'invitation_rejected';
+  invitation?: {
+    id: string;
+    workspace: {
+      id: string;
+      name: string;
+      icon?: string;
+      thumbnail?: string;
+    };
+    inviter: {
+      id: string;
+      name: string;
+      profileImage?: string;
+    };
+    message?: string;
+    createdAt: Date;
+  };
+  invitationId?: string;
+  user?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  userId?: string;
+  workspaceId?: string;
+}
+
 @WebSocketGateway({
   namespace: '/workspace',
   cors: {
@@ -46,6 +74,9 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   // 연결된 클라이언트 추적 (socketId -> workspaceIds)
   private clientWorkspaces = new Map<string, Set<string>>();
 
+  // 사용자 ID -> Socket ID 매핑 (초대 알림용)
+  private userSockets = new Map<string, Set<string>>();
+
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
     this.clientWorkspaces.set(client.id, new Set());
@@ -62,6 +93,40 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
       });
     }
     this.clientWorkspaces.delete(client.id);
+
+    // 사용자 소켓 매핑에서 제거
+    this.userSockets.forEach((sockets, userId) => {
+      sockets.delete(client.id);
+      if (sockets.size === 0) {
+        this.userSockets.delete(userId);
+      }
+    });
+  }
+
+  /**
+   * 사용자 인증 및 소켓 매핑 등록
+   */
+  @SubscribeMessage('authenticate')
+  handleAuthenticate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() userId: string,
+  ) {
+    if (!userId) {
+      return { success: false, error: 'userId is required' };
+    }
+
+    // 사용자 ID와 소켓 매핑
+    if (!this.userSockets.has(userId)) {
+      this.userSockets.set(userId, new Set());
+    }
+    this.userSockets.get(userId)!.add(client.id);
+
+    // 사용자 전용 room에 참가
+    client.join(`user:${userId}`);
+
+    this.logger.log(`User ${userId} authenticated with socket ${client.id}`);
+
+    return { success: true, userId };
   }
 
   /**
@@ -121,11 +186,28 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   }
 
   /**
+   * 특정 사용자에게 초대 알림 전송
+   */
+  sendInvitationNotification(userId: string, payload: InvitationNotificationPayload) {
+    const roomName = `user:${userId}`;
+    this.server.to(roomName).emit('invitationNotification', payload);
+    this.logger.log(`Sent invitation notification to user ${userId}: ${payload.type}`);
+  }
+
+  /**
    * 워크스페이스의 현재 연결된 클라이언트 수 조회
    */
   async getWorkspaceClientCount(workspaceId: string): Promise<number> {
     const roomName = `workspace:${workspaceId}`;
     const sockets = await this.server.in(roomName).fetchSockets();
     return sockets.length;
+  }
+
+  /**
+   * 사용자가 현재 온라인인지 확인
+   */
+  isUserOnline(userId: string): boolean {
+    const sockets = this.userSockets.get(userId);
+    return sockets ? sockets.size > 0 : false;
   }
 }

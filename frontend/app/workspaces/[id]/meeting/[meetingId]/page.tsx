@@ -21,13 +21,17 @@ import {
   useMeetingConnection,
 } from '@/hooks/meeting';
 
-// Components
+// New modular components
 import {
   MeetingHeader,
   MeetingControls,
   VideoGrid,
   TranscriptPanel,
-  DeviceSettingsModal,
+  DeviceSettingsDialog,
+} from './_components';
+
+// Legacy components for loading/error states
+import {
   LoadingView,
   ErrorView,
   PermissionBanner,
@@ -36,6 +40,9 @@ import {
 function MeetingRoomContent() {
   const params = useParams();
   const router = useRouter();
+  const workspaceId = params.id as string;
+  const meetingId = params.meetingId as string;
+  
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
 
   // Custom hooks
@@ -53,11 +60,11 @@ function MeetingRoomContent() {
   } = useDeviceManager();
 
   const { meeting, isJoining, error, userId, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
-    meetingId: params.meetingId as string,
-    workspaceId: params.id as string,
+    meetingId,
+    workspaceId,
   });
 
-  // 미팅 시작 시간 (timestamp)
+  // Meeting start time (timestamp)
   const meetingStartTime = meeting?.startedAt
     ? new Date(meeting.startedAt).getTime()
     : null;
@@ -73,7 +80,7 @@ function MeetingRoomContent() {
     isChangingLanguage,
     changeLanguage,
   } = useTranscription({
-    meetingId: params.meetingId as string,
+    meetingId,
     meetingStartTime,
   });
 
@@ -86,8 +93,15 @@ function MeetingRoomContent() {
   const { tiles: remoteVideoTiles } = useRemoteVideoTileState();
 
   const participantCount = Object.keys(roster).length;
+  
+  // Convert roster to participants array
+  const participants = Object.entries(roster).map(([attendeeId, attendee]) => ({
+    id: attendeeId,
+    name: (attendee as any).name || 'Unknown',
+    profileImage: (attendee as any).profileImage,
+  }));
 
-  // 카메라 토글 핸들러 (권한 요청 포함)
+  // Camera toggle handler (includes permission request)
   const handleToggleVideo = useCallback(async () => {
     if (!devicesInitialized) {
       const success = await selectDevices();
@@ -96,7 +110,7 @@ function MeetingRoomContent() {
     await toggleVideo();
   }, [devicesInitialized, selectDevices, toggleVideo]);
 
-  // 마이크 토글 핸들러 (권한 요청 포함)
+  // Microphone toggle handler (includes permission request)
   const handleToggleMute = useCallback(async () => {
     if (!devicesInitialized) {
       const success = await selectDevices();
@@ -115,43 +129,38 @@ function MeetingRoomContent() {
     return (
       <ErrorView
         error={error}
-        onBack={() => router.push(`/workspaces/${params.id}`)}
+        onBack={() => router.push(`/workspaces/${workspaceId}`)}
       />
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#191919]">
+    <div className="h-screen flex flex-col bg-[#0f0f0f]">
+      {/* Header */}
       <MeetingHeader
         title={meeting?.title || '화상회의'}
         participantCount={participantCount}
+        participants={participants}
+        meetingStartTime={meetingStartTime}
+        workspaceId={workspaceId}
+        meetingId={meetingId}
       />
 
+      {/* Permission Banner */}
       {permissionError && (
         <PermissionBanner message={permissionError} onClose={clearPermissionError} />
       )}
 
+      {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
         <VideoGrid
           remoteVideoTiles={remoteVideoTiles}
           isVideoEnabled={isVideoEnabled}
           onToggleVideo={handleToggleVideo}
         />
-
-        {showTranscript && (
-          <TranscriptPanel
-            transcripts={transcripts}
-            isTranscribing={isTranscribing}
-            isLoadingHistory={isLoadingHistory}
-            selectedLanguage={selectedLanguage}
-            isChangingLanguage={isChangingLanguage}
-            onLanguageChange={changeLanguage}
-            onClose={() => setShowTranscript(false)}
-            containerRef={transcriptContainerRef}
-          />
-        )}
       </main>
 
+      {/* Controls */}
       <MeetingControls
         muted={muted}
         isVideoEnabled={isVideoEnabled}
@@ -167,7 +176,21 @@ function MeetingRoomContent() {
         onEndMeeting={handleEndMeeting}
       />
 
-      <DeviceSettingsModal
+      {/* Transcript Panel (Sheet) */}
+      <TranscriptPanel
+        isOpen={showTranscript}
+        onClose={() => setShowTranscript(false)}
+        transcripts={transcripts}
+        isTranscribing={isTranscribing}
+        isLoadingHistory={isLoadingHistory}
+        selectedLanguage={selectedLanguage}
+        isChangingLanguage={isChangingLanguage}
+        onLanguageChange={changeLanguage}
+        containerRef={transcriptContainerRef}
+      />
+
+      {/* Device Settings Dialog */}
+      <DeviceSettingsDialog
         isOpen={showDeviceSettings}
         onClose={() => setShowDeviceSettings(false)}
         devicesInitialized={devicesInitialized}

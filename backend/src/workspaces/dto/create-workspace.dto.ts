@@ -18,4 +18,8 @@ export class CreateWorkspaceDto {
   @IsOptional()
   @IsString()
   thumbnail?: string;
+
+  @IsOptional()
+  @IsString()
+  banner?: string;
 }

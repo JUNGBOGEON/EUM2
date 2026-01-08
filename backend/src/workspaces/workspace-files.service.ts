@@ -37,6 +37,23 @@ export class WorkspaceFilesService {
   /**
    * 워크스페이스에 파일 업로드
    */
+  /**
+   * Decode filename from Latin-1 to UTF-8 (handles Korean and other non-ASCII characters)
+   */
+  private decodeFilename(filename: string): string {
+    try {
+      // Try to decode from Latin-1 to UTF-8
+      const decoded = Buffer.from(filename, 'latin1').toString('utf-8');
+      // Check if the decoded string looks valid (contains actual characters, not replacement chars)
+      if (decoded && !decoded.includes('�')) {
+        return decoded;
+      }
+      return filename;
+    } catch {
+      return filename;
+    }
+  }
+
   async uploadFile(
     workspaceId: string,
     uploaderId: string,
@@ -53,12 +70,15 @@ export class WorkspaceFilesService {
       throw new BadRequestException(`지원하지 않는 파일 형식입니다: ${file.mimetype}`);
     }
 
+    // Decode filename for proper Korean/Unicode support
+    const decodedFilename = this.decodeFilename(file.originalname);
+
     // Generate file ID and S3 key
     const fileId = uuidv4();
     const s3Key = this.s3StorageService.generateFileKey(
       workspaceId,
       fileId,
-      file.originalname,
+      decodedFilename,
     );
 
     // Upload to S3
@@ -69,7 +89,7 @@ export class WorkspaceFilesService {
       id: fileId,
       workspaceId,
       uploaderId,
-      filename: file.originalname,
+      filename: decodedFilename,
       s3Key,
       fileType,
       mimeType: file.mimetype,
@@ -172,6 +192,39 @@ export class WorkspaceFilesService {
       mimeType: file.mimeType,
       expiresIn: 3600,
     };
+  }
+
+  /**
+   * 파일 이름 변경
+   */
+  async renameFile(
+    workspaceId: string,
+    fileId: string,
+    newFilename: string,
+    userId: string,
+    isWorkspaceOwner: boolean,
+  ): Promise<WorkspaceFile> {
+    const file = await this.fileRepository.findOne({
+      where: { id: fileId, workspaceId },
+      relations: ['uploader'],
+    });
+
+    if (!file) {
+      throw new NotFoundException('파일을 찾을 수 없습니다');
+    }
+
+    // Authorization: owner or uploader can rename
+    if (!isWorkspaceOwner && file.uploaderId !== userId) {
+      throw new ForbiddenException('이 파일의 이름을 변경할 권한이 없습니다');
+    }
+
+    // Update filename
+    file.filename = newFilename;
+    const savedFile = await this.fileRepository.save(file);
+
+    this.logger.log(`File renamed: ${fileId} to "${newFilename}"`);
+
+    return savedFile;
   }
 
   /**

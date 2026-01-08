@@ -2,9 +2,11 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Query,
+  Body,
   UseGuards,
   Req,
   UseInterceptors,
@@ -77,6 +79,22 @@ export class WorkspaceFilesController {
     @Param('fileId') fileId: string,
   ) {
     return this.filesService.getDownloadUrl(workspaceId, fileId);
+  }
+
+  /**
+   * 파일 이름 변경
+   */
+  @Patch(':fileId')
+  async renameFile(
+    @Param('workspaceId') workspaceId: string,
+    @Param('fileId') fileId: string,
+    @Body() body: { filename: string },
+    @Req() req: any,
+  ) {
+    const workspace = await this.workspacesService.findOne(workspaceId);
+    const isOwner = workspace.ownerId === req.user.id;
+
+    return this.filesService.renameFile(workspaceId, fileId, body.filename, req.user.id, isOwner);
   }
 
   /**

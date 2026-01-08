@@ -6,7 +6,9 @@ import {
   UpdateDateColumn,
   ManyToOne,
   OneToMany,
+  ManyToMany,
   JoinColumn,
+  JoinTable,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { MeetingSession } from '../../meetings/entities/meeting-session.entity';
@@ -36,6 +38,9 @@ export class Workspace {
   @Column({ type: 'text', nullable: true })
   thumbnail: string;
 
+  @Column({ type: 'text', nullable: true })
+  banner: string;
+
   // ===== 소유자 =====
   @ManyToOne(() => User, (user) => user.workspaces, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
@@ -43,6 +48,15 @@ export class Workspace {
 
   @Column()
   ownerId: string;
+
+  // ===== 멤버들 (오너 제외) =====
+  @ManyToMany(() => User)
+  @JoinTable({
+    name: 'workspace_members',
+    joinColumn: { name: 'workspaceId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'userId', referencedColumnName: 'id' },
+  })
+  members: User[];
 
   // ===== 미팅 세션들 =====
   @OneToMany(() => MeetingSession, (session) => session.workspace)

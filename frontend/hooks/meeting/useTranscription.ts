@@ -1,19 +1,17 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  SocketTranscriptionClient,
-  TranscriptResult,
-} from '@/lib/socket-transcription';
+import { useMeetingManager } from 'amazon-chime-sdk-component-library-react';
 import type { TranscriptItem } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
+import type { TranscriptEvent } from 'amazon-chime-sdk-js';
+import { useParticipants } from './useParticipants';
+import { transcriptionLogger as logger } from '@/lib/utils/debug';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export interface UseTranscriptionOptions {
   meetingId: string | undefined;
-  userId: string | null;
-  devicesInitialized: boolean;
-  selectDevices: () => Promise<boolean>;
+  meetingStartTime: number | null;
 }
 
 export interface UseTranscriptionReturn {
@@ -27,63 +25,102 @@ export interface UseTranscriptionReturn {
 
 export function useTranscription({
   meetingId,
-  userId,
-  devicesInitialized,
-  selectDevices,
+  meetingStartTime,
 }: UseTranscriptionOptions): UseTranscriptionReturn {
+  const meetingManager = useMeetingManager();
+  const { getParticipantByAttendeeId } = useParticipants({ meetingId });
+
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
-  const transcribeClientRef = useRef<SocketTranscriptionClient | null>(null);
+  const isSubscribedRef = useRef(false);
 
-  // Socket.IO 트랜스크립션 결과 핸들러
-  const handleTranscriptResult = useCallback(
-    (result: TranscriptResult) => {
-      const speakerName = '나';
+  // TranscriptEvent 핸들러
+  const handleTranscriptEvent = useCallback(
+    (transcriptEvent: TranscriptEvent) => {
+      // TranscriptionStatus 이벤트 처리
+      if ('transcriptionStatus' in transcriptEvent) {
+        const status = (transcriptEvent as any).transcriptionStatus;
+        logger.log('Status event:', status?.type);
 
-      const newItem: TranscriptItem = {
-        id: result.resultId,
-        speakerName,
-        speakerId: userId || 'unknown',
-        text: result.transcript,
-        timestamp: result.startTimeMs,
-        isPartial: result.isPartial,
-      };
-
-      setTranscripts((prev) => {
-        const existingIndex = prev.findIndex((t) => t.id === newItem.id);
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          updated[existingIndex] = newItem;
-          return updated;
+        if (status?.type === 'started') {
+          setIsTranscribing(true);
+        } else if (status?.type === 'stopped' || status?.type === 'failed') {
+          setIsTranscribing(false);
         }
-        return [...prev, newItem];
-      });
+        return;
+      }
 
-      // 최종 결과만 서버에 저장 (isPartial = false)
-      if (!result.isPartial && meetingId) {
-        const avgConfidence = result.items
-          ? result.items.reduce((sum, item) => sum + (item.confidence || 0), 0) /
-            result.items.length
-          : 0;
+      // Transcript 이벤트 처리
+      const results = (transcriptEvent as any).results;
+      if (!results || !Array.isArray(results)) return;
 
-        fetch(`${API_URL}/api/meetings/${meetingId}/transcriptions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            meetingId,
-            resultId: result.resultId,
-            isPartial: result.isPartial,
-            transcript: result.transcript,
-            attendeeId: userId || 'unknown',
-            startTimeMs: result.startTimeMs,
-            endTimeMs: result.endTimeMs,
-            confidence: avgConfidence,
-            isStable: true,
-          }),
-        }).catch((err) => console.error('Failed to save transcription:', err));
+      for (const result of results) {
+        if (!result.alternatives || result.alternatives.length === 0) continue;
+
+        const alternative = result.alternatives[0];
+
+        // 발화자 정보 추출 - items[].attendee.attendeeId에서 가져옴
+        let speakerAttendeeId = 'unknown';
+        if (alternative.items && alternative.items.length > 0) {
+          const firstItem = alternative.items[0];
+          if (firstItem.attendee?.attendeeId) {
+            speakerAttendeeId = firstItem.attendee.attendeeId;
+          }
+        }
+
+        const speakerInfo = getParticipantByAttendeeId(speakerAttendeeId);
+
+        // 경과 시간 계산 (미팅 시작 시간 기준)
+        const elapsedMs = meetingStartTime
+          ? result.startTimeMs - meetingStartTime
+          : result.startTimeMs;
+
+        const newItem: TranscriptItem = {
+          id: result.resultId,
+          speakerName: speakerInfo.name,
+          speakerId: speakerAttendeeId,
+          speakerProfileImage: speakerInfo.profileImage,
+          text: alternative.transcript,
+          timestamp: elapsedMs > 0 ? elapsedMs : 0,
+          isPartial: result.isPartial,
+        };
+
+        setTranscripts((prev) => {
+          const existingIndex = prev.findIndex((t) => t.id === newItem.id);
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = newItem;
+            return updated;
+          }
+          return [...prev, newItem];
+        });
+
+        // 최종 결과만 서버에 저장
+        if (!result.isPartial && meetingId) {
+          const avgConfidence = alternative.items
+            ? alternative.items.reduce((sum: number, item: any) => sum + (item.confidence || 0), 0) /
+              alternative.items.length
+            : 0;
+
+          fetch(`${API_URL}/api/meetings/${meetingId}/transcriptions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              meetingId,
+              resultId: result.resultId,
+              isPartial: result.isPartial,
+              transcript: alternative.transcript,
+              attendeeId: speakerAttendeeId,
+              startTimeMs: result.startTimeMs,
+              endTimeMs: result.endTimeMs,
+              confidence: avgConfidence,
+              isStable: true,
+            }),
+          }).catch((err) => logger.error('Failed to save transcription:', err));
+        }
       }
 
       // 자동 스크롤
@@ -92,84 +129,76 @@ export function useTranscription({
           transcriptContainerRef.current.scrollHeight;
       }
     },
-    [userId, meetingId]
+    [meetingId, meetingStartTime, getParticipantByAttendeeId]
   );
 
-  // 트랜스크립션 클라이언트 정리 (컴포넌트 언마운트 시)
+  // TranscriptEvent 구독
   useEffect(() => {
-    return () => {
-      if (transcribeClientRef.current) {
-        transcribeClientRef.current.stop();
-        transcribeClientRef.current = null;
-      }
-    };
-  }, []);
+    const audioVideo = meetingManager.audioVideo;
+    if (!audioVideo) return;
 
-  // 트랜스크립션 시작/중지
+    const controller = audioVideo.transcriptionController;
+    if (!controller) {
+      // Fallback: AudioVideoObserver 사용
+      const observer = {
+        transcriptEventDidReceive: (event: TranscriptEvent) => {
+          handleTranscriptEvent(event);
+        },
+      };
+
+      audioVideo.addObserver(observer as any);
+      isSubscribedRef.current = true;
+      logger.log('Subscribed via AudioVideoObserver');
+
+      return () => {
+        audioVideo.removeObserver(observer as any);
+        isSubscribedRef.current = false;
+      };
+    }
+
+    controller.subscribeToTranscriptEvent(handleTranscriptEvent);
+    isSubscribedRef.current = true;
+    logger.log('Subscribed to transcript events');
+
+    return () => {
+      controller.unsubscribeFromTranscriptEvent(handleTranscriptEvent);
+      isSubscribedRef.current = false;
+    };
+  }, [meetingManager.audioVideo, handleTranscriptEvent]);
+
+  // 트랜스크립션 시작/중지 토글
   const toggleTranscription = useCallback(async () => {
     if (!meetingId) return;
 
     try {
       if (isTranscribing) {
-        // 트랜스크립션 중지
-        if (transcribeClientRef.current) {
-          transcribeClientRef.current.stop();
-          transcribeClientRef.current = null;
-        }
+        const response = await fetch(
+          `${API_URL}/api/meetings/${meetingId}/transcription/stop`,
+          { method: 'POST', credentials: 'include' }
+        );
+
+        if (!response.ok) throw new Error('Failed to stop transcription');
         setIsTranscribing(false);
+        logger.log('Stopped');
       } else {
-        // 마이크 권한 확인 및 스트림 획득
-        if (!devicesInitialized) {
-          const success = await selectDevices();
-          if (!success) {
-            console.error('Failed to initialize devices for transcription');
-            return;
+        const response = await fetch(
+          `${API_URL}/api/meetings/${meetingId}/transcription/start`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ languageCode: 'ko-KR' }),
           }
-        }
+        );
 
-        // 마이크 스트림 획득
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
-        });
-
-        // Socket.IO 트랜스크립션 클라이언트 생성 및 시작
-        transcribeClientRef.current = new SocketTranscriptionClient({
-          serverUrl: API_URL,
-          meetingId,
-          languageCode: 'ko-KR',
-          sampleRate: 16000,
-          onTranscript: handleTranscriptResult,
-          onError: (error) => {
-            console.error('Transcription error:', error);
-            setIsTranscribing(false);
-          },
-          onOpen: () => {
-            console.log('Transcription started');
-            setIsTranscribing(true);
-          },
-          onClose: () => {
-            console.log('Transcription stopped');
-            setIsTranscribing(false);
-          },
-        });
-
-        await transcribeClientRef.current.start(stream);
+        if (!response.ok) throw new Error('Failed to start transcription');
+        setIsTranscribing(true);
+        logger.log('Started');
       }
     } catch (err) {
-      console.error('Failed to toggle transcription:', err);
-      setIsTranscribing(false);
+      logger.error('Failed to toggle transcription:', err);
     }
-  }, [
-    meetingId,
-    isTranscribing,
-    devicesInitialized,
-    selectDevices,
-    handleTranscriptResult,
-  ]);
+  }, [meetingId, isTranscribing]);
 
   return {
     transcripts,

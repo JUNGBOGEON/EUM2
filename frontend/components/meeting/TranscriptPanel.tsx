@@ -1,7 +1,8 @@
 'use client';
 
 import { RefObject } from 'react';
-import { formatTime } from '@/lib/utils/time';
+import Image from 'next/image';
+import { formatElapsedTime } from '@/lib/utils/time';
 import type { TranscriptItem } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
 
 interface TranscriptPanelProps {
@@ -74,14 +75,30 @@ export function TranscriptPanel({
           transcripts.map((item) => (
             <div key={item.id} className={`${item.isPartial ? 'opacity-60' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
+                {/* 프로필 이미지 */}
+                {item.speakerProfileImage ? (
+                  <Image
+                    src={item.speakerProfileImage}
+                    alt={item.speakerName}
+                    width={20}
+                    height={20}
+                    className="rounded-full"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] text-white font-medium">
+                    {item.speakerName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                {/* 발화자 이름 */}
                 <span className="text-[12px] font-medium text-blue-400">
                   {item.speakerName}
                 </span>
+                {/* 경과 시간 */}
                 <span className="text-[10px] text-[#ffffff50]">
-                  {formatTime(item.timestamp)}
+                  {formatElapsedTime(item.timestamp)}
                 </span>
               </div>
-              <p className="text-[13px] text-[#ffffffcf] leading-relaxed">
+              <p className="text-[13px] text-[#ffffffcf] leading-relaxed pl-7">
                 {item.text}
               </p>
             </div>

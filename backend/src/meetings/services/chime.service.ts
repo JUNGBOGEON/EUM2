@@ -9,6 +9,8 @@ import {
   DeleteMeetingCommand,
   DeleteAttendeeCommand,
   GetMeetingCommand,
+  StartMeetingTranscriptionCommand,
+  StopMeetingTranscriptionCommand,
 } from '@aws-sdk/client-chime-sdk-meetings';
 
 import { Meeting, MeetingStatus } from '../entities/meeting.entity';
@@ -330,5 +332,50 @@ export class ChimeService {
       chimeMeetingId: meeting.chimeMeetingId,
       mediaPlacement: meeting.mediaPlacement || {},
     };
+  }
+
+
+  /**
+   * 미팅 트랜스크립션 시작 (Chime SDK Live Transcription)
+   */
+  async startMeetingTranscription(
+    chimeMeetingId: string,
+    languageCode: string = 'ko-KR',
+  ): Promise<void> {
+    const command = new StartMeetingTranscriptionCommand({
+      MeetingId: chimeMeetingId,
+      TranscriptionConfiguration: {
+        EngineTranscribeSettings: {
+          LanguageCode: languageCode as any,
+          // ap-southeast-2 (시드니) - 아시아에서 가장 가까운 지원 리전
+          Region: 'ap-southeast-2',
+        },
+      },
+    });
+
+    try {
+      await this.chimeClient.send(command);
+      console.log(`[Chime] Transcription started for meeting ${chimeMeetingId}`);
+    } catch (error) {
+      console.error('[Chime] Failed to start transcription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 미팅 트랜스크립션 중지
+   */
+  async stopMeetingTranscription(chimeMeetingId: string): Promise<void> {
+    const command = new StopMeetingTranscriptionCommand({
+      MeetingId: chimeMeetingId,
+    });
+
+    try {
+      await this.chimeClient.send(command);
+      console.log(`[Chime] Transcription stopped for meeting ${chimeMeetingId}`);
+    } catch (error) {
+      console.error('[Chime] Failed to stop transcription:', error);
+      throw error;
+    }
   }
 }

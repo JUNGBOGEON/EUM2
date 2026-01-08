@@ -6,6 +6,16 @@ const nextConfig: NextConfig = {
   },
   // React 19와 Chime SDK 호환성을 위한 설정
   transpilePackages: ['amazon-chime-sdk-component-library-react'],
+  // 외부 이미지 도메인 허용
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        pathname: '/**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

@@ -8,7 +8,6 @@ import { Transcription } from './entities/transcription.entity';
 import { RedisModule } from '../redis/redis.module';
 import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
-import { TranscriptionGateway } from './gateways/transcription.gateway';
 
 @Module({
   imports: [
@@ -20,7 +19,6 @@ import { TranscriptionGateway } from './gateways/transcription.gateway';
     MeetingsService,
     ChimeService,
     TranscriptionService,
-    TranscriptionGateway,
   ],
   exports: [
     MeetingsService,

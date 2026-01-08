@@ -38,7 +38,8 @@ export class TranscriptItemDto {
  */
 export class SaveTranscriptionDto {
   @IsString()
-  meetingId: string;
+  @IsOptional()
+  meetingId?: string;
 
   // Chime Result ID (부분 결과 업데이트 추적)
   @IsString()

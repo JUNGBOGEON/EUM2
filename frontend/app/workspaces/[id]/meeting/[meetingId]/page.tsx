@@ -57,6 +57,11 @@ function MeetingRoomContent() {
     workspaceId: params.id as string,
   });
 
+  // 미팅 시작 시간 (timestamp)
+  const meetingStartTime = meeting?.startedAt
+    ? new Date(meeting.startedAt).getTime()
+    : null;
+
   const {
     transcripts,
     isTranscribing,
@@ -66,9 +71,7 @@ function MeetingRoomContent() {
     transcriptContainerRef,
   } = useTranscription({
     meetingId: params.meetingId as string,
-    userId,
-    devicesInitialized,
-    selectDevices,
+    meetingStartTime,
   });
 
   // Chime SDK hooks

@@ -1,8 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
 
 import { Meeting } from '../entities/meeting.entity';
 import { MeetingParticipant } from '../entities/meeting-participant.entity';
@@ -12,6 +11,7 @@ import {
   SaveTranscriptionBatchDto,
 } from '../dto/save-transcription.dto';
 import { RedisService } from '../../redis/redis.service';
+import { ChimeService } from './chime.service';
 
 @Injectable()
 export class TranscriptionService {
@@ -24,19 +24,22 @@ export class TranscriptionService {
     private transcriptionRepository: Repository<Transcription>,
     private configService: ConfigService,
     private redisService: RedisService,
+    @Inject(forwardRef(() => ChimeService))
+    private chimeService: ChimeService,
   ) {}
 
   // ==========================================
-  // 트랜스크립션 시작/중지
+  // 트랜스크립션 시작/중지 (Chime SDK Live Transcription)
   // ==========================================
 
   /**
-   * 트랜스크립션 시작 (Presigned URL 반환)
+   * 트랜스크립션 시작 (Chime SDK Live Transcription)
+   * 미팅당 단일 세션으로 모든 참가자의 음성을 처리
    */
   async startTranscription(
     meetingId: string,
     languageCode: string = 'ko-KR',
-  ): Promise<{ presignedUrl: string; meetingId: string }> {
+  ): Promise<{ success: boolean; meetingId: string }> {
     const meeting = await this.meetingRepository.findOne({
       where: { id: meetingId },
     });
@@ -45,11 +48,18 @@ export class TranscriptionService {
       throw new NotFoundException('미팅을 찾을 수 없습니다.');
     }
 
-    // AWS Transcribe Streaming Presigned URL 생성
-    const presignedUrl = this.createTranscribePresignedUrl(languageCode);
+    if (!meeting.chimeMeetingId) {
+      throw new BadRequestException('Chime 미팅이 아직 시작되지 않았습니다.');
+    }
+
+    // Chime SDK Live Transcription 시작
+    await this.chimeService.startMeetingTranscription(
+      meeting.chimeMeetingId,
+      languageCode,
+    );
 
     return {
-      presignedUrl,
+      success: true,
       meetingId: meeting.id,
     };
   }
@@ -66,129 +76,14 @@ export class TranscriptionService {
       throw new NotFoundException('미팅을 찾을 수 없습니다.');
     }
 
-    // 프론트엔드에서 WebSocket 연결 종료 처리
-    // 백엔드에서는 별도 처리 필요 없음
+    if (!meeting.chimeMeetingId) {
+      throw new BadRequestException('Chime 미팅이 아직 시작되지 않았습니다.');
+    }
+
+    // Chime SDK Live Transcription 중지
+    await this.chimeService.stopMeetingTranscription(meeting.chimeMeetingId);
+
     return { success: true };
-  }
-
-  // ==========================================
-  // Presigned URL 생성
-  // ==========================================
-
-  /**
-   * AWS Transcribe Streaming용 Presigned URL 생성
-   * AWS Signature V4를 사용하여 WebSocket 연결에 필요한 인증된 URL 생성
-   */
-  private createTranscribePresignedUrl(
-    languageCode: string = 'ko-KR',
-    sampleRate: number = 16000,
-  ): string {
-    const region = this.configService.get('AWS_REGION') || 'ap-northeast-2';
-    const accessKeyId = this.configService.get('AWS_ACCESS_KEY_ID') || '';
-    const secretAccessKey = this.configService.get('AWS_SECRET_ACCESS_KEY') || '';
-
-    const service = 'transcribe';
-    // Host에 포트 포함 (AWS Transcribe Streaming 요구사항)
-    const host = `transcribestreaming.${region}.amazonaws.com:8443`;
-    const path = '/stream-transcription-websocket';
-
-    // 현재 시간 (UTC)
-    const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
-    const dateStamp = amzDate.slice(0, 8);
-
-    // Credential scope
-    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const algorithm = 'AWS4-HMAC-SHA256';
-
-    // 모든 쿼리 파라미터 (X-Amz-Signature 제외, 정렬 필요)
-    const queryParams: Record<string, string> = {
-      'X-Amz-Algorithm': algorithm,
-      'X-Amz-Credential': `${accessKeyId}/${credentialScope}`,
-      'X-Amz-Date': amzDate,
-      'X-Amz-Expires': '300',
-      'X-Amz-SignedHeaders': 'host',
-      'language-code': languageCode,
-      'media-encoding': 'pcm',
-      'sample-rate': sampleRate.toString(),
-    };
-
-    // Canonical query string (정렬된 순서, URL 인코딩)
-    const canonicalQueryString = Object.keys(queryParams)
-      .sort()
-      .map(
-        (key) =>
-          `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`,
-      )
-      .join('&');
-
-    // Canonical headers (host에 포트 포함)
-    const canonicalHeaders = `host:${host}\n`;
-    const signedHeaders = 'host';
-
-    // Payload hash (빈 문자열의 SHA256)
-    const payloadHash = crypto.createHash('sha256').update('').digest('hex');
-
-    // Canonical request
-    const canonicalRequest = [
-      'GET',
-      path,
-      canonicalQueryString,
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash,
-    ].join('\n');
-
-    // String to sign
-    const stringToSign = [
-      algorithm,
-      amzDate,
-      credentialScope,
-      crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
-    ].join('\n');
-
-    // Signing key 생성
-    const getSignatureKey = (
-      key: string,
-      dateStamp: string,
-      regionName: string,
-      serviceName: string,
-    ): Buffer => {
-      const kDate = crypto
-        .createHmac('sha256', `AWS4${key}`)
-        .update(dateStamp)
-        .digest();
-      const kRegion = crypto
-        .createHmac('sha256', kDate)
-        .update(regionName)
-        .digest();
-      const kService = crypto
-        .createHmac('sha256', kRegion)
-        .update(serviceName)
-        .digest();
-      const kSigning = crypto
-        .createHmac('sha256', kService)
-        .update('aws4_request')
-        .digest();
-      return kSigning;
-    };
-
-    const signingKey = getSignatureKey(
-      secretAccessKey,
-      dateStamp,
-      region,
-      service,
-    );
-    const signature = crypto
-      .createHmac('sha256', signingKey)
-      .update(stringToSign)
-      .digest('hex');
-
-    // Presigned URL 조합 (쿼리 파라미터 + 서명)
-    const presignedUrl =
-      `wss://${host}${path}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
-
-    return presignedUrl;
   }
 
   // ==========================================
@@ -201,8 +96,13 @@ export class TranscriptionService {
   async saveTranscription(
     dto: SaveTranscriptionDto,
   ): Promise<{ buffered: boolean; bufferSize: number; flushed?: boolean }> {
+    const meetingId = dto.meetingId;
+    if (!meetingId) {
+      throw new BadRequestException('meetingId is required');
+    }
+
     const meeting = await this.meetingRepository.findOne({
-      where: { id: dto.meetingId },
+      where: { id: meetingId },
     });
 
     if (!meeting) {
@@ -216,7 +116,7 @@ export class TranscriptionService {
 
     // Redis 버퍼에 추가
     const bufferSize = await this.redisService.addTranscriptionToBuffer(
-      dto.meetingId,
+      meetingId,
       {
         resultId: dto.resultId,
         isPartial: dto.isPartial,
@@ -232,10 +132,10 @@ export class TranscriptionService {
     );
 
     // 자동 플러시 조건 확인 (30개 이상 또는 30초 경과)
-    const shouldFlush = await this.shouldAutoFlush(dto.meetingId, bufferSize);
+    const shouldFlush = await this.shouldAutoFlush(meetingId, bufferSize);
 
     if (shouldFlush) {
-      await this.flushTranscriptionBuffer(dto.meetingId);
+      await this.flushTranscriptionBuffer(meetingId);
       return { buffered: true, bufferSize: 0, flushed: true };
     }
 

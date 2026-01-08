@@ -8,16 +8,16 @@ import type { TranscriptItem } from '@/app/workspaces/[id]/meeting/[meetingId]/t
 interface TranscriptPanelProps {
   transcripts: TranscriptItem[];
   isTranscribing: boolean;
+  isLoadingHistory: boolean;
   onClose: () => void;
-  onToggleTranscription: () => void;
   containerRef: RefObject<HTMLDivElement | null>;
 }
 
 export function TranscriptPanel({
   transcripts,
   isTranscribing,
+  isLoadingHistory,
   onClose,
-  onToggleTranscription,
   containerRef,
 }: TranscriptPanelProps) {
   return (
@@ -50,7 +50,32 @@ export function TranscriptPanel({
       </div>
 
       <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        {transcripts.length === 0 ? (
+        {isLoadingHistory ? (
+          <div className="text-center py-8">
+            <svg
+              className="animate-spin h-8 w-8 mx-auto text-blue-500 mb-3"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <p className="text-[13px] text-[#ffffff71]">
+              이전 자막 불러오는 중...
+            </p>
+          </div>
+        ) : transcripts.length === 0 ? (
           <div className="text-center py-8">
             <svg
               className="w-12 h-12 mx-auto text-[#ffffff29] mb-3"
@@ -68,14 +93,13 @@ export function TranscriptPanel({
             <p className="text-[13px] text-[#ffffff71]">
               {isTranscribing
                 ? '대화를 기다리는 중...'
-                : '자막을 시작하려면 아래 버튼을 누르세요'}
+                : '자막이 자동으로 시작됩니다'}
             </p>
           </div>
         ) : (
           transcripts.map((item) => (
             <div key={item.id} className={`${item.isPartial ? 'opacity-60' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
-                {/* 프로필 이미지 */}
                 {item.speakerProfileImage ? (
                   <Image
                     src={item.speakerProfileImage}
@@ -89,11 +113,9 @@ export function TranscriptPanel({
                     {item.speakerName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                {/* 발화자 이름 */}
                 <span className="text-[12px] font-medium text-blue-400">
                   {item.speakerName}
                 </span>
-                {/* 경과 시간 */}
                 <span className="text-[10px] text-[#ffffff50]">
                   {formatElapsedTime(item.timestamp)}
                 </span>
@@ -106,18 +128,21 @@ export function TranscriptPanel({
         )}
       </div>
 
-      {/* Transcript Control */}
+      {/* 상태 표시 영역 */}
       <div className="p-3 border-t border-[#ffffff14]">
-        <button
-          onClick={onToggleTranscription}
-          className={`w-full py-2 px-4 rounded-lg text-[13px] font-medium transition-colors ${
-            isTranscribing
-              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-              : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-          }`}
-        >
-          {isTranscribing ? '자막 중지' : '자막 시작'}
-        </button>
+        <div className="flex items-center justify-center gap-2 text-[12px] text-[#ffffff71]">
+          {isTranscribing ? (
+            <>
+              <span className="w-2 h-2 bg-green-500 rounded-full" />
+              <span>자막 활성화됨 (회의 종료 시 자동 저장)</span>
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 bg-gray-500 rounded-full" />
+              <span>자막 대기중...</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

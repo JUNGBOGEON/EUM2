@@ -10,17 +10,33 @@ import { transcriptionLogger as logger } from '@/lib/utils/debug';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export interface UseTranscriptionOptions {
-  meetingId: string | undefined;
+  meetingId: string | undefined; // sessionId
   meetingStartTime: number | null;
 }
 
 export interface UseTranscriptionReturn {
   transcripts: TranscriptItem[];
   isTranscribing: boolean;
+  isLoadingHistory: boolean;
   showTranscript: boolean;
   setShowTranscript: (show: boolean) => void;
-  toggleTranscription: () => Promise<void>;
   transcriptContainerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+interface TranscriptionHistoryItem {
+  id: string;
+  resultId: string;
+  originalText: string;
+  speakerId?: string;
+  chimeAttendeeId?: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  speaker?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  relativeStartSec?: number;
 }
 
 export function useTranscription({
@@ -32,9 +48,62 @@ export function useTranscription({
 
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const isSubscribedRef = useRef(false);
+  const hasLoadedHistoryRef = useRef(false);
+
+  // 기존 자막 히스토리 로드 (중간 참여자용)
+  const loadTranscriptionHistory = useCallback(async () => {
+    if (!meetingId || hasLoadedHistoryRef.current) return;
+
+    hasLoadedHistoryRef.current = true;
+    setIsLoadingHistory(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/meetings/${meetingId}/transcriptions/final`,
+        { credentials: 'include' }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to load transcription history');
+      }
+
+      const historyItems: TranscriptionHistoryItem[] = await response.json();
+
+      if (historyItems.length > 0) {
+        const sessionStartMs = meetingStartTime || Date.now();
+
+        const historyTranscripts: TranscriptItem[] = historyItems.map((item) => ({
+          id: item.resultId || item.id,
+          speakerName: item.speaker?.name || '참가자',
+          speakerId: item.speakerId || item.chimeAttendeeId || 'unknown',
+          speakerProfileImage: item.speaker?.profileImage,
+          text: item.originalText,
+          timestamp: item.relativeStartSec
+            ? item.relativeStartSec * 1000
+            : (item.startTimeMs - sessionStartMs),
+          isPartial: false,
+        }));
+
+        setTranscripts(historyTranscripts);
+        logger.log(`Loaded ${historyTranscripts.length} historical transcripts`);
+      }
+    } catch (error) {
+      logger.error('Failed to load transcription history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [meetingId, meetingStartTime]);
+
+  // 미팅 참여 시 기존 자막 로드
+  useEffect(() => {
+    if (meetingId && !hasLoadedHistoryRef.current) {
+      loadTranscriptionHistory();
+    }
+  }, [meetingId, loadTranscriptionHistory]);
 
   // TranscriptEvent 핸들러
   const handleTranscriptEvent = useCallback(
@@ -109,7 +178,7 @@ export function useTranscription({
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-              meetingId,
+              sessionId: meetingId,
               resultId: result.resultId,
               isPartial: result.isPartial,
               transcript: alternative.transcript,
@@ -166,46 +235,12 @@ export function useTranscription({
     };
   }, [meetingManager.audioVideo, handleTranscriptEvent]);
 
-  // 트랜스크립션 시작/중지 토글
-  const toggleTranscription = useCallback(async () => {
-    if (!meetingId) return;
-
-    try {
-      if (isTranscribing) {
-        const response = await fetch(
-          `${API_URL}/api/meetings/${meetingId}/transcription/stop`,
-          { method: 'POST', credentials: 'include' }
-        );
-
-        if (!response.ok) throw new Error('Failed to stop transcription');
-        setIsTranscribing(false);
-        logger.log('Stopped');
-      } else {
-        const response = await fetch(
-          `${API_URL}/api/meetings/${meetingId}/transcription/start`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ languageCode: 'ko-KR' }),
-          }
-        );
-
-        if (!response.ok) throw new Error('Failed to start transcription');
-        setIsTranscribing(true);
-        logger.log('Started');
-      }
-    } catch (err) {
-      logger.error('Failed to toggle transcription:', err);
-    }
-  }, [meetingId, isTranscribing]);
-
   return {
     transcripts,
     isTranscribing,
+    isLoadingHistory,
     showTranscript,
     setShowTranscript,
-    toggleTranscription,
     transcriptContainerRef,
   };
 }

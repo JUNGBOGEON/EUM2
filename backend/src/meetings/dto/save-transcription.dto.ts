@@ -39,7 +39,7 @@ export class TranscriptItemDto {
 export class SaveTranscriptionDto {
   @IsString()
   @IsOptional()
-  meetingId?: string;
+  sessionId?: string;
 
   // Chime Result ID (부분 결과 업데이트 추적)
   @IsString()
@@ -97,7 +97,7 @@ export class SaveTranscriptionDto {
  */
 export class SaveTranscriptionBatchDto {
   @IsString()
-  meetingId: string;
+  sessionId: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -110,7 +110,7 @@ export class SaveTranscriptionBatchDto {
  */
 export class TranscriptionStatusDto {
   @IsString()
-  meetingId: string;
+  sessionId: string;
 
   @IsString()
   status: 'started' | 'stopped' | 'interrupted' | 'resumed' | 'failed';

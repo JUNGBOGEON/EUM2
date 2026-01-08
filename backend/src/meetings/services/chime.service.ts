@@ -1,36 +1,46 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { v4 as uuidv4 } from 'uuid';
 import {
   ChimeSDKMeetingsClient,
   CreateMeetingCommand,
   CreateAttendeeCommand,
   DeleteMeetingCommand,
   DeleteAttendeeCommand,
-  GetMeetingCommand,
   StartMeetingTranscriptionCommand,
   StopMeetingTranscriptionCommand,
 } from '@aws-sdk/client-chime-sdk-meetings';
 
-import { Meeting, MeetingStatus } from '../entities/meeting.entity';
+import { MeetingSession, SessionStatus } from '../entities/meeting-session.entity';
 import {
-  MeetingParticipant,
+  SessionParticipant,
   ParticipantRole,
-} from '../entities/meeting-participant.entity';
+} from '../entities/session-participant.entity';
+import { Workspace } from '../../workspaces/entities/workspace.entity';
 import { RedisService } from '../../redis/redis.service';
+import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
+import { User } from '../../users/entities/user.entity';
 
 @Injectable()
 export class ChimeService {
   private chimeClient: ChimeSDKMeetingsClient;
 
   constructor(
-    @InjectRepository(Meeting)
-    private meetingRepository: Repository<Meeting>,
-    @InjectRepository(MeetingParticipant)
-    private participantRepository: Repository<MeetingParticipant>,
+    @InjectRepository(MeetingSession)
+    private sessionRepository: Repository<MeetingSession>,
+    @InjectRepository(SessionParticipant)
+    private participantRepository: Repository<SessionParticipant>,
+    @InjectRepository(Workspace)
+    private workspaceRepository: Repository<Workspace>,
     private configService: ConfigService,
     private redisService: RedisService,
+    private workspaceGateway: WorkspaceGateway,
   ) {
     this.chimeClient = new ChimeSDKMeetingsClient({
       region: this.configService.get('AWS_REGION') || 'ap-northeast-2',
@@ -42,80 +52,112 @@ export class ChimeService {
   }
 
   /**
-   * Chime 미팅 시작 (호스트만)
+   * 워크스페이스에서 새 미팅 세션 시작
+   * Google Meet 방식: 워크스페이스에 입장하면 바로 세션 생성/참가
    */
-  async startChimeMeeting(
-    meetingId: string,
+  async startSession(
+    workspaceId: string,
     hostId: string,
+    title?: string,
   ): Promise<{
-    meeting: Meeting;
+    session: MeetingSession;
     attendee: {
       attendeeId: string;
       joinToken: string;
     };
   }> {
-    const meeting = await this.meetingRepository.findOne({
-      where: { id: meetingId },
+    // 워크스페이스 확인
+    const workspace = await this.workspaceRepository.findOne({
+      where: { id: workspaceId },
     });
 
-    if (!meeting) {
-      throw new NotFoundException('미팅을 찾을 수 없습니다.');
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스를 찾을 수 없습니다.');
     }
 
-    if (meeting.hostId !== hostId) {
-      throw new BadRequestException('미팅 호스트만 미팅을 시작할 수 있습니다.');
+    // 진행 중인 세션이 있는지 확인
+    const activeSession = await this.sessionRepository.findOne({
+      where: { workspaceId, status: SessionStatus.ACTIVE },
+    });
+
+    if (activeSession) {
+      // 이미 진행 중인 세션이 있으면 해당 세션에 참가
+      return this.joinSession(activeSession.id, hostId);
     }
+
+    // 새 세션 생성
+    const externalMeetingId = uuidv4();
 
     // AWS Chime Meeting 생성
     const createMeetingCommand = new CreateMeetingCommand({
-      ClientRequestToken: meeting.externalMeetingId,
-      ExternalMeetingId: meeting.externalMeetingId,
+      ClientRequestToken: externalMeetingId,
+      ExternalMeetingId: externalMeetingId,
       MediaRegion: this.configService.get('AWS_REGION') || 'ap-northeast-2',
       MeetingFeatures: {
-        Audio: {
-          EchoReduction: 'AVAILABLE',
-        },
-        Video: {
-          MaxResolution: 'FHD',
-        },
-        Content: {
-          MaxResolution: 'FHD',
-        },
-        Attendee: {
-          MaxCount: 10,
-        },
+        Audio: { EchoReduction: 'AVAILABLE' },
+        Video: { MaxResolution: 'FHD' },
+        Content: { MaxResolution: 'FHD' },
+        Attendee: { MaxCount: 10 },
       },
     });
 
-    const chimeMeetingResponse =
-      await this.chimeClient.send(createMeetingCommand);
+    const chimeMeetingResponse = await this.chimeClient.send(createMeetingCommand);
     const chimeMeeting = chimeMeetingResponse.Meeting;
 
     if (!chimeMeeting) {
       throw new BadRequestException('Chime 미팅 생성에 실패했습니다.');
     }
 
-    // 미팅 정보 업데이트
-    meeting.chimeMeetingId = chimeMeeting.MeetingId;
-    meeting.mediaPlacement = chimeMeeting.MediaPlacement as Record<string, any>;
-    meeting.mediaRegion = chimeMeeting.MediaRegion;
-    meeting.status = MeetingStatus.ACTIVE;
-    meeting.startedAt = new Date();
+    // 세션 저장
+    const session = new MeetingSession();
+    session.title = title || `${workspace.name} 회의`;
+    session.workspaceId = workspaceId;
+    session.hostId = hostId;
+    session.externalMeetingId = externalMeetingId;
+    session.chimeMeetingId = chimeMeeting.MeetingId;
+    session.mediaPlacement = chimeMeeting.MediaPlacement as Record<string, any>;
+    session.mediaRegion = chimeMeeting.MediaRegion;
+    session.status = SessionStatus.ACTIVE;
+    session.startedAt = new Date();
 
-    await this.meetingRepository.save(meeting);
+    await this.sessionRepository.save(session);
 
     // 호스트를 첫 번째 참가자로 추가
-    const attendee = await this.addAttendee(meeting, hostId, ParticipantRole.HOST);
+    const attendee = await this.addAttendee(session, hostId, ParticipantRole.HOST);
 
     // Redis에 세션 정보 캐싱
-    await this.redisService.setMeetingSession(meetingId, {
+    await this.redisService.setMeetingSession(session.id, {
       chimeMeetingId: chimeMeeting.MeetingId!,
       mediaPlacement: chimeMeeting.MediaPlacement,
       participants: [hostId],
     });
 
+    // 자동으로 트랜스크립션 시작
+    try {
+      await this.startSessionTranscription(chimeMeeting.MeetingId!, 'ko-KR');
+      console.log(`[Chime] Auto-started transcription for session ${session.id}`);
+    } catch (error) {
+      console.error('[Chime] Failed to auto-start transcription:', error);
+      // 트랜스크립션 시작 실패해도 세션은 정상 진행
+    }
+
+    // WebSocket으로 세션 시작 브로드캐스트
+    const host = await this.getHostInfo(hostId);
+    this.workspaceGateway.broadcastSessionUpdate({
+      workspaceId,
+      session: {
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        hostId: session.hostId,
+        startedAt: session.startedAt!,
+        participantCount: 1,
+        host,
+      },
+    });
+
     return {
-      meeting,
+      session,
       attendee: {
         attendeeId: attendee.chimeAttendeeId!,
         joinToken: attendee.joinToken!,
@@ -124,39 +166,38 @@ export class ChimeService {
   }
 
   /**
-   * 미팅 참가
+   * 세션 참가
    */
-  async joinMeeting(
-    meetingId: string,
+  async joinSession(
+    sessionId: string,
     userId: string,
   ): Promise<{
-    meeting: Meeting;
+    session: MeetingSession;
     attendee: {
       attendeeId: string;
       joinToken: string;
     };
   }> {
-    const meeting = await this.meetingRepository.findOne({
-      where: { id: meetingId },
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
     });
 
-    if (!meeting) {
-      throw new NotFoundException('미팅을 찾을 수 없습니다.');
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
     }
 
-    if (meeting.status !== MeetingStatus.ACTIVE) {
-      throw new BadRequestException('아직 시작되지 않은 미팅입니다.');
+    if (session.status !== SessionStatus.ACTIVE) {
+      throw new BadRequestException('종료된 세션입니다.');
     }
 
     // 이미 참가 중인지 확인
     let participant = await this.participantRepository.findOne({
-      where: { meetingId, userId },
+      where: { sessionId, userId },
     });
 
-    // 이미 참가 중인 경우 (joinedAt이 있고 leftAt이 없음) 기존 정보 반환
-    if (participant && participant.joinedAt && !participant.leftAt && participant.joinToken) {
+    if (participant?.joinedAt && !participant.leftAt && participant.joinToken) {
       return {
-        meeting,
+        session,
         attendee: {
           attendeeId: participant.chimeAttendeeId!,
           joinToken: participant.joinToken!,
@@ -165,15 +206,16 @@ export class ChimeService {
     }
 
     // 새 참가자 추가
-    const role =
-      meeting.hostId === userId ? ParticipantRole.HOST : ParticipantRole.PARTICIPANT;
-    const attendee = await this.addAttendee(meeting, userId, role);
+    const role = session.hostId === userId 
+      ? ParticipantRole.HOST 
+      : ParticipantRole.PARTICIPANT;
+    const attendee = await this.addAttendee(session, userId, role);
 
     // Redis 세션 업데이트
-    await this.redisService.addParticipant(meetingId, userId);
+    await this.redisService.addParticipant(sessionId, userId);
 
     return {
-      meeting,
+      session,
       attendee: {
         attendeeId: attendee.chimeAttendeeId!,
         joinToken: attendee.joinToken!,
@@ -182,19 +224,19 @@ export class ChimeService {
   }
 
   /**
-   * 미팅 나가기
+   * 세션 나가기
    */
-  async leaveMeeting(meetingId: string, userId: string): Promise<void> {
-    const meeting = await this.meetingRepository.findOne({
-      where: { id: meetingId },
+  async leaveSession(sessionId: string, userId: string): Promise<void> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
     });
 
-    if (!meeting) {
-      throw new NotFoundException('미팅을 찾을 수 없습니다.');
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
     }
 
     const participant = await this.participantRepository.findOne({
-      where: { meetingId, userId },
+      where: { sessionId, userId },
     });
 
     if (!participant) {
@@ -202,11 +244,11 @@ export class ChimeService {
     }
 
     // Chime에서 참가자 제거
-    if (meeting.chimeMeetingId && participant.chimeAttendeeId) {
+    if (session.chimeMeetingId && participant.chimeAttendeeId) {
       try {
         await this.chimeClient.send(
           new DeleteAttendeeCommand({
-            MeetingId: meeting.chimeMeetingId,
+            MeetingId: session.chimeMeetingId,
             AttendeeId: participant.chimeAttendeeId,
           }),
         );
@@ -215,36 +257,50 @@ export class ChimeService {
       }
     }
 
-    // 퇴장 시간 기록
+    // 퇴장 시간 및 참가 시간 기록
     participant.leftAt = new Date();
+    if (participant.joinedAt) {
+      participant.durationSec = Math.floor(
+        (participant.leftAt.getTime() - participant.joinedAt.getTime()) / 1000
+      );
+    }
     await this.participantRepository.save(participant);
 
     // Redis 세션에서 참가자 제거
-    await this.redisService.removeParticipant(meetingId, userId);
+    await this.redisService.removeParticipant(sessionId, userId);
   }
 
   /**
-   * 미팅 종료 (호스트만)
+   * 세션 종료 (호스트만)
    */
-  async endMeeting(meetingId: string, hostId: string): Promise<Meeting> {
-    const meeting = await this.meetingRepository.findOne({
-      where: { id: meetingId },
+  async endSession(sessionId: string, hostId: string): Promise<MeetingSession> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
     });
 
-    if (!meeting) {
-      throw new NotFoundException('미팅을 찾을 수 없습니다.');
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
     }
 
-    if (meeting.hostId !== hostId) {
-      throw new BadRequestException('미팅 호스트만 미팅을 종료할 수 있습니다.');
+    if (session.hostId !== hostId) {
+      throw new BadRequestException('호스트만 세션을 종료할 수 있습니다.');
     }
 
-    if (meeting.chimeMeetingId) {
+    if (session.chimeMeetingId) {
+      // 먼저 트랜스크립션 중지
       try {
-        // Chime 미팅 삭제
+        await this.stopSessionTranscription(session.chimeMeetingId);
+        console.log(`[Chime] Auto-stopped transcription for session ${sessionId}`);
+      } catch (error) {
+        console.error('[Chime] Failed to auto-stop transcription:', error);
+        // 트랜스크립션 중지 실패해도 세션 종료 진행
+      }
+
+      // Chime 미팅 삭제
+      try {
         await this.chimeClient.send(
           new DeleteMeetingCommand({
-            MeetingId: meeting.chimeMeetingId,
+            MeetingId: session.chimeMeetingId,
           }),
         );
       } catch (error) {
@@ -252,28 +308,63 @@ export class ChimeService {
       }
     }
 
-    meeting.status = MeetingStatus.ENDED;
-    meeting.endedAt = new Date();
+    // 세션 종료 처리
+    session.status = SessionStatus.ENDED;
+    session.endedAt = new Date();
+    if (session.startedAt) {
+      session.durationSec = Math.floor(
+        (session.endedAt.getTime() - session.startedAt.getTime()) / 1000
+      );
+    }
 
-    await this.meetingRepository.save(meeting);
+    await this.sessionRepository.save(session);
 
     // Redis 세션 삭제
-    await this.redisService.deleteMeetingSession(meetingId);
+    await this.redisService.deleteMeetingSession(sessionId);
 
-    return meeting;
+    // WebSocket으로 세션 종료 브로드캐스트
+    this.workspaceGateway.broadcastSessionUpdate({
+      workspaceId: session.workspaceId,
+      session: null, // null = 세션 종료됨
+    });
+
+    return session;
+  }
+
+  /**
+   * 호스트 정보 조회 (내부 메서드)
+   */
+  private async getHostInfo(hostId: string): Promise<{
+    id: string;
+    name: string;
+    profileImage?: string;
+  } | undefined> {
+    const participant = await this.participantRepository.findOne({
+      where: { userId: hostId },
+      relations: ['user'],
+    });
+
+    if (participant?.user) {
+      return {
+        id: participant.user.id,
+        name: participant.user.name,
+        profileImage: participant.user.profileImage ?? undefined,
+      };
+    }
+
+    return undefined;
   }
 
   /**
    * 참가자 추가 (내부 메서드)
    */
-  async addAttendee(
-    meeting: Meeting,
+  private async addAttendee(
+    session: MeetingSession,
     userId: string,
     role: ParticipantRole,
-  ): Promise<MeetingParticipant> {
-    // Chime Attendee 생성
+  ): Promise<SessionParticipant> {
     const createAttendeeCommand = new CreateAttendeeCommand({
-      MeetingId: meeting.chimeMeetingId!,
+      MeetingId: session.chimeMeetingId!,
       ExternalUserId: userId,
     });
 
@@ -284,14 +375,13 @@ export class ChimeService {
       throw new BadRequestException('Chime 참가자 생성에 실패했습니다.');
     }
 
-    // DB에 참가자 저장
     let participant = await this.participantRepository.findOne({
-      where: { meetingId: meeting.id, userId },
+      where: { sessionId: session.id, userId },
     });
 
     if (!participant) {
-      participant = new MeetingParticipant();
-      participant.meetingId = meeting.id;
+      participant = new SessionParticipant();
+      participant.sessionId = session.id;
       participant.userId = userId;
     }
 
@@ -299,46 +389,78 @@ export class ChimeService {
     participant.joinToken = chimeAttendee.JoinToken;
     participant.role = role;
     participant.joinedAt = new Date();
+    participant.leftAt = undefined;
 
     return this.participantRepository.save(participant);
   }
 
   /**
-   * 참가자 목록 조회
+   * 세션 참가자 목록 조회
    */
-  async getParticipants(meetingId: string): Promise<MeetingParticipant[]> {
+  async getParticipants(sessionId: string): Promise<SessionParticipant[]> {
     return this.participantRepository.find({
-      where: { meetingId },
+      where: { sessionId },
       relations: ['user'],
     });
   }
 
   /**
-   * Chime 미팅 정보 조회
+   * 세션 정보 조회
    */
-  async getMeetingInfo(meetingId: string): Promise<{
+  async getSessionInfo(sessionId: string): Promise<{
     chimeMeetingId: string;
     mediaPlacement: Record<string, any>;
   } | null> {
-    const meeting = await this.meetingRepository.findOne({
-      where: { id: meetingId },
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
     });
 
-    if (!meeting || !meeting.chimeMeetingId) {
+    if (!session || !session.chimeMeetingId) {
       return null;
     }
 
     return {
-      chimeMeetingId: meeting.chimeMeetingId,
-      mediaPlacement: meeting.mediaPlacement || {},
+      chimeMeetingId: session.chimeMeetingId,
+      mediaPlacement: session.mediaPlacement || {},
     };
   }
 
+  /**
+   * 워크스페이스의 활성 세션 조회
+   */
+  async getActiveSession(workspaceId: string): Promise<MeetingSession | null> {
+    return this.sessionRepository.findOne({
+      where: { workspaceId, status: SessionStatus.ACTIVE },
+      relations: ['host', 'participants', 'participants.user'],
+    });
+  }
 
   /**
-   * 미팅 트랜스크립션 시작 (Chime SDK Live Transcription)
+   * 세션 조회
    */
-  async startMeetingTranscription(
+  async findSession(sessionId: string): Promise<MeetingSession | null> {
+    return this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['host', 'workspace', 'participants', 'participants.user'],
+    });
+  }
+
+  /**
+   * 워크스페이스의 세션 히스토리 조회
+   */
+  async getSessionHistory(workspaceId: string): Promise<MeetingSession[]> {
+    return this.sessionRepository.find({
+      where: { workspaceId },
+      relations: ['host'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  // ==========================================
+  // 트랜스크립션 관련
+  // ==========================================
+
+  async startSessionTranscription(
     chimeMeetingId: string,
     languageCode: string = 'ko-KR',
   ): Promise<void> {
@@ -347,7 +469,6 @@ export class ChimeService {
       TranscriptionConfiguration: {
         EngineTranscribeSettings: {
           LanguageCode: languageCode as any,
-          // ap-southeast-2 (시드니) - 아시아에서 가장 가까운 지원 리전
           Region: 'ap-southeast-2',
         },
       },
@@ -355,24 +476,21 @@ export class ChimeService {
 
     try {
       await this.chimeClient.send(command);
-      console.log(`[Chime] Transcription started for meeting ${chimeMeetingId}`);
+      console.log(`[Chime] Transcription started for session`);
     } catch (error) {
       console.error('[Chime] Failed to start transcription:', error);
       throw error;
     }
   }
 
-  /**
-   * 미팅 트랜스크립션 중지
-   */
-  async stopMeetingTranscription(chimeMeetingId: string): Promise<void> {
+  async stopSessionTranscription(chimeMeetingId: string): Promise<void> {
     const command = new StopMeetingTranscriptionCommand({
       MeetingId: chimeMeetingId,
     });
 
     try {
       await this.chimeClient.send(command);
-      console.log(`[Chime] Transcription stopped for meeting ${chimeMeetingId}`);
+      console.log(`[Chime] Transcription stopped`);
     } catch (error) {
       console.error('[Chime] Failed to stop transcription:', error);
       throw error;

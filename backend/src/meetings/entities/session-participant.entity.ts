@@ -7,30 +7,36 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Meeting } from './meeting.entity';
+import { MeetingSession } from './meeting-session.entity';
 
 export enum ParticipantRole {
   HOST = 'host',
   PARTICIPANT = 'participant',
 }
 
-@Entity('meeting_participants')
-export class MeetingParticipant {
+/**
+ * SessionParticipant Entity
+ *
+ * 미팅 세션의 참가자 정보
+ * - AWS Chime Attendee 정보 포함
+ * - 참가/퇴장 시간 기록
+ */
+@Entity('session_participants')
+export class SessionParticipant {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // AWS Chime Attendee ID
+  // ===== AWS Chime 관련 =====
   @Column({ nullable: true })
   chimeAttendeeId?: string;
 
-  // AWS Chime External User ID
   @Column({ nullable: true })
   externalUserId?: string;
 
-  // AWS Chime Join Token
   @Column({ nullable: true })
   joinToken?: string;
 
+  // ===== 역할 =====
   @Column({
     type: 'enum',
     enum: ParticipantRole,
@@ -38,15 +44,16 @@ export class MeetingParticipant {
   })
   role: ParticipantRole;
 
-  // 미팅
-  @ManyToOne(() => Meeting, (meeting) => meeting.participants, {
+  // ===== 관계 =====
+  // 미팅 세션
+  @ManyToOne(() => MeetingSession, (session) => session.participants, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'meetingId' })
-  meeting: Meeting;
+  @JoinColumn({ name: 'sessionId' })
+  session: MeetingSession;
 
   @Column()
-  meetingId: string;
+  sessionId: string;
 
   // 사용자
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
@@ -56,14 +63,18 @@ export class MeetingParticipant {
   @Column()
   userId: string;
 
-  // 참가 시간
+  // ===== 시간 정보 =====
   @Column({ type: 'timestamp', nullable: true })
   joinedAt?: Date;
 
-  // 퇴장 시간
   @Column({ type: 'timestamp', nullable: true })
   leftAt?: Date;
 
+  // 참가 총 시간 (초)
+  @Column({ type: 'int', nullable: true })
+  durationSec?: number;
+
+  // ===== 시스템 필드 =====
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -45,7 +45,7 @@ export function useParticipants({
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_URL}/api/meetings/${meetingId}/participants`, {
+      const response = await fetch(`${API_URL}/api/meetings/sessions/${meetingId}/participants`, {
         credentials: 'include',
       });
 

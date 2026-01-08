@@ -1,16 +1,20 @@
 'use client';
 
+import { useState } from 'react';
+
 interface MeetingControlsProps {
   muted: boolean;
   isVideoEnabled: boolean;
   isLocalUserSharing: boolean;
   showTranscript: boolean;
+  isHost?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleTranscript: () => void;
   onOpenSettings: () => void;
   onLeave: () => void;
+  onEndMeeting?: () => void;
 }
 
 export function MeetingControls({
@@ -18,13 +22,28 @@ export function MeetingControls({
   isVideoEnabled,
   isLocalUserSharing,
   showTranscript,
+  isHost = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
   onToggleTranscript,
   onOpenSettings,
   onLeave,
+  onEndMeeting,
 }: MeetingControlsProps) {
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
+  const handleEndClick = () => {
+    if (showEndConfirm) {
+      onEndMeeting?.();
+      setShowEndConfirm(false);
+    } else {
+      setShowEndConfirm(true);
+      // 3초 후 자동으로 확인 상태 해제
+      setTimeout(() => setShowEndConfirm(false), 3000);
+    }
+  };
+
   return (
     <footer className="flex-shrink-0 flex items-center justify-center gap-4 px-4 py-4 bg-[#252525] border-t border-[#ffffff14]">
       {/* Mute/Unmute */}
@@ -192,10 +211,13 @@ export function MeetingControls({
         </svg>
       </button>
 
+      {/* Divider */}
+      <div className="w-px h-8 bg-[#ffffff29]" />
+
       {/* Leave Meeting */}
       <button
         onClick={onLeave}
-        className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
+        className="flex items-center gap-2 px-4 h-12 rounded-full bg-[#ffffff14] hover:bg-[#ffffff29] transition-colors"
         title="미팅 나가기"
       >
         <svg
@@ -208,10 +230,41 @@ export function MeetingControls({
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
           />
         </svg>
+        <span className="text-[13px] text-white font-medium">나가기</span>
       </button>
+
+      {/* End Meeting (Host only) */}
+      {isHost && onEndMeeting && (
+        <button
+          onClick={handleEndClick}
+          className={`flex items-center gap-2 px-4 h-12 rounded-full transition-colors ${
+            showEndConfirm
+              ? 'bg-red-600 hover:bg-red-700'
+              : 'bg-red-500 hover:bg-red-600'
+          }`}
+          title="회의 종료 (모든 참가자)"
+        >
+          <svg
+            className="w-5 h-5 text-white"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"
+            />
+          </svg>
+          <span className="text-[13px] text-white font-medium">
+            {showEndConfirm ? '다시 클릭하여 종료' : '회의 종료'}
+          </span>
+        </button>
+      )}
     </footer>
   );
 }

@@ -52,7 +52,7 @@ function MeetingRoomContent() {
     clearPermissionError,
   } = useDeviceManager();
 
-  const { meeting, isJoining, error, userId, handleLeave } = useMeetingConnection({
+  const { meeting, isJoining, error, userId, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
     meetingId: params.meetingId as string,
     workspaceId: params.id as string,
   });
@@ -65,9 +65,9 @@ function MeetingRoomContent() {
   const {
     transcripts,
     isTranscribing,
+    isLoadingHistory,
     showTranscript,
     setShowTranscript,
-    toggleTranscription,
     transcriptContainerRef,
   } = useTranscription({
     meetingId: params.meetingId as string,
@@ -139,8 +139,8 @@ function MeetingRoomContent() {
           <TranscriptPanel
             transcripts={transcripts}
             isTranscribing={isTranscribing}
+            isLoadingHistory={isLoadingHistory}
             onClose={() => setShowTranscript(false)}
-            onToggleTranscription={toggleTranscription}
             containerRef={transcriptContainerRef}
           />
         )}
@@ -151,12 +151,14 @@ function MeetingRoomContent() {
         isVideoEnabled={isVideoEnabled}
         isLocalUserSharing={isLocalUserSharing}
         showTranscript={showTranscript}
+        isHost={isHost}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
         onToggleTranscript={() => setShowTranscript(!showTranscript)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
+        onEndMeeting={handleEndMeeting}
       />
 
       <DeviceSettingsModal

@@ -5,6 +5,7 @@ import { MeetingSession, SummaryStatus } from '../entities/meeting-session.entit
 import { TranscriptionService } from './transcription.service';
 import { BedrockService } from '../../ai/bedrock.service';
 import { S3StorageService } from '../../storage/s3-storage.service';
+import { WorkspaceFilesService } from '../../workspaces/workspace-files.service';
 
 @Injectable()
 export class SummaryService {
@@ -16,6 +17,7 @@ export class SummaryService {
     private transcriptionService: TranscriptionService,
     private bedrockService: BedrockService,
     private s3StorageService: S3StorageService,
+    private workspaceFilesService: WorkspaceFilesService,
   ) {}
 
   /**
@@ -70,14 +72,28 @@ export class SummaryService {
       // 4. Bedrock으로 요약 생성
       const summaryMarkdown = await this.bedrockService.generateSummary(formattedTranscript);
 
-      // 5. S3에 저장
-      const s3Key = await this.s3StorageService.uploadSummary(
-        sessionId,
+      // 5. S3에 저장 (새로운 워크스페이스 중심 구조 사용)
+      const s3Key = this.s3StorageService.generateSummaryKeyV2(
         session.workspaceId,
-        summaryMarkdown,
+        sessionId,
       );
 
-      // 6. DB에 S3 키 저장 및 상태 업데이트
+      await this.s3StorageService.uploadFile(
+        s3Key,
+        Buffer.from(summaryMarkdown, 'utf-8'),
+        'text/markdown; charset=utf-8',
+      );
+
+      // 6. WorkspaceFile 레코드 생성 (파일 저장소에 표시용)
+      await this.workspaceFilesService.createSummaryFileRecord(
+        session.workspaceId,
+        sessionId,
+        s3Key,
+        Buffer.byteLength(summaryMarkdown, 'utf-8'),
+        session.title,
+      );
+
+      // 7. DB에 S3 키 저장 및 상태 업데이트
       await this.sessionRepository.update(sessionId, {
         summaryS3Key: s3Key,
         summaryStatus: SummaryStatus.COMPLETED,

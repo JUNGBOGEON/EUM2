@@ -4,6 +4,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -122,5 +123,86 @@ export class S3StorageService {
       this.logger.error(`Failed to get summary content from S3: ${key}`, error);
       throw error;
     }
+  }
+
+  // ===== 새로운 워크스페이스 파일 관련 메서드 =====
+
+  /**
+   * 워크스페이스 파일용 S3 키 생성
+   */
+  generateFileKey(
+    workspaceId: string,
+    fileId: string,
+    originalFilename: string,
+  ): string {
+    const sanitizedFilename = this.sanitizeFilename(originalFilename);
+    return `workspaces/${workspaceId}/files/${fileId}_${sanitizedFilename}`;
+  }
+
+  /**
+   * AI 요약용 S3 키 생성 (새로운 워크스페이스 중심 구조)
+   */
+  generateSummaryKeyV2(workspaceId: string, sessionId: string): string {
+    return `workspaces/${workspaceId}/summaries/${sessionId}.md`;
+  }
+
+  /**
+   * 파일을 S3에 업로드
+   */
+  async uploadFile(
+    key: string,
+    body: Buffer,
+    contentType: string,
+  ): Promise<string> {
+    try {
+      this.logger.log(`Uploading file to S3: ${key}`);
+
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+        }),
+      );
+
+      this.logger.log(`File uploaded successfully: ${key}`);
+      return key;
+    } catch (error) {
+      this.logger.error(`Failed to upload file to S3: ${key}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * S3에서 파일 삭제
+   */
+  async deleteFile(key: string): Promise<void> {
+    try {
+      this.logger.log(`Deleting file from S3: ${key}`);
+
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
+
+      this.logger.log(`File deleted successfully: ${key}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete file from S3: ${key}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 파일명 정제 (S3 키에 안전하게 사용)
+   */
+  private sanitizeFilename(filename: string): string {
+    return filename
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[^a-zA-Z0-9가-힣._-]/g, '_') // Keep alphanumeric, Korean, dots, underscores, hyphens
+      .substring(0, 100); // Limit length
   }
 }

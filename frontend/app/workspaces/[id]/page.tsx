@@ -237,16 +237,8 @@ export default function WorkspaceDetailPage() {
           />
         )}
 
-        {/* Storage Section */}
-        {sessionHistory.length > 0 && (
-          <WorkspaceStorage
-            workspaceId={workspaceId}
-            sessions={sessionHistory}
-            onSessionClick={(sessionId) => {
-              setSelectedSessionId(sessionId);
-            }}
-          />
-        )}
+        {/* File Storage Section */}
+        <WorkspaceStorage workspaceId={workspaceId} />
 
         {/* Session history */}
         <SessionHistoryList

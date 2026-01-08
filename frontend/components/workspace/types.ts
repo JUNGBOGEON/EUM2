@@ -71,3 +71,37 @@ export interface MeetingSummary {
   content: string | null;
   presignedUrl: string | null;
 }
+
+// ===== 워크스페이스 파일 관련 타입 =====
+
+export type WorkspaceFileType = 'image' | 'document' | 'summary';
+
+export interface WorkspaceFile {
+  id: string;
+  workspaceId: string;
+  filename: string;
+  fileType: WorkspaceFileType;
+  mimeType: string;
+  size: number;
+  sessionId?: string;
+  session?: {
+    id: string;
+    title: string;
+  };
+  uploaderId?: string;
+  uploader?: UserInfo;
+  createdAt: string;
+}
+
+export interface FileListResponse {
+  files: WorkspaceFile[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface FileDownloadResponse {
+  presignedUrl: string;
+  filename: string;
+  mimeType: string;
+  expiresIn: number;
+}

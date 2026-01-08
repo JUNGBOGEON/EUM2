@@ -5,14 +5,21 @@ import {
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 
-const SUMMARY_SYSTEM_PROMPT = `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
+// Dynamic prompt function - injects current date
+const getSummarySystemPrompt = (currentDate: string) => `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
 당신의 임무는 회의 녹취록(Transcript)을 분석하여 팀원들이 즉시 업무에 착수할 수 있도록 명확하고 구조화된 회의록(Minutes)을 작성하는 것입니다.
+
+[현재 날짜]
+${currentDate}
 
 [지시사항]
 1. 어조: 비즈니스적이고, 객관적이며, 간결한 '해요체' 또는 '하십시오체'를 사용하세요.
 2. 언어: 입력된 회의의 주 언어(대부분 한국어)로 작성하세요.
 3. 핵심 파악: 잡담이나 불필요한 추임새는 제거하고, '결정된 사항'과 '할 일'에 집중하세요.
-4. 일정 추출: 날짜나 마감기한이 언급되었다면 반드시 명시하세요.
+4. 일정 추출: 날짜나 마감기한이 언급되었다면 반드시 명시하세요. 연도가 명시되지 않은 경우 현재 연도(${currentDate.split('년')[0]}년)를 기준으로 합니다. 절대로 과거 연도를 임의로 추측하지 마세요.
+5. STT 오류 교정: 음성 인식(STT) 특성상 동음이의어나 오타가 있을 수 있습니다. 문맥을 파악하여 올바른 단어로 교정하세요.
+   - 예: "만주하시길" → "완주하시길", "내 오기" → "5기" 등
+   - 한글 발음이 비슷한 단어들을 문맥에 맞게 교정하세요.
 
 [출력 형식]
 반드시 아래의 Markdown 포맷을 따르세요:
@@ -41,7 +48,8 @@ const SUMMARY_SYSTEM_PROMPT = `당신은 기업용 협업 툴 'EUM'의 전문 AI
 export class BedrockService {
   private readonly logger = new Logger(BedrockService.name);
   private readonly bedrockClient: BedrockRuntimeClient;
-  private readonly modelId = 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+  // Cross-region inference profile for Claude 3.5 Sonnet v2 (APAC)
+  private readonly modelId = 'apac.anthropic.claude-3-5-sonnet-20241022-v2:0';
 
   constructor(private configService: ConfigService) {
     const region =
@@ -73,9 +81,14 @@ export class BedrockService {
     try {
       this.logger.log('Generating meeting summary with Bedrock Claude...');
 
+      // Generate current date in Korean format
+      const now = new Date();
+      const currentDate = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`;
+      const systemPrompt = getSummarySystemPrompt(currentDate);
+
       const command = new ConverseCommand({
         modelId: this.modelId,
-        system: [{ text: SUMMARY_SYSTEM_PROMPT }],
+        system: [{ text: systemPrompt }],
         messages: [
           {
             role: 'user',

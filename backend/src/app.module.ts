@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { MeetingsModule } from './meetings/meetings.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     AuthModule,
     UsersModule,
     WorkspacesModule,
+    RedisModule,
+    MeetingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

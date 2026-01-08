@@ -7,6 +7,8 @@ import {
   ActiveSessionBanner,
   QuickStartMeeting,
   SessionHistoryList,
+  MeetingDetailModal,
+  WorkspaceStorage,
   type Workspace,
   type UserInfo,
   type MeetingSession,
@@ -28,6 +30,7 @@ export default function WorkspaceDetailPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   // WebSocket 연결로 실시간 세션 업데이트 수신
   const handleSessionUpdate = useCallback((session: SessionInfo | null) => {
@@ -234,15 +237,32 @@ export default function WorkspaceDetailPage() {
           />
         )}
 
+        {/* Storage Section */}
+        {sessionHistory.length > 0 && (
+          <WorkspaceStorage
+            workspaceId={workspaceId}
+            sessions={sessionHistory}
+            onSessionClick={(sessionId) => {
+              setSelectedSessionId(sessionId);
+            }}
+          />
+        )}
+
         {/* Session history */}
         <SessionHistoryList
           sessions={sessionHistory}
           onSessionClick={(sessionId) => {
-            // 종료된 세션 상세 페이지로 이동 (추후 구현)
-            console.log('View session:', sessionId);
+            setSelectedSessionId(sessionId);
           }}
         />
       </main>
+
+      {/* Meeting Detail Modal */}
+      <MeetingDetailModal
+        isOpen={!!selectedSessionId}
+        onClose={() => setSelectedSessionId(null)}
+        sessionId={selectedSessionId || ''}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import type { MeetingSession } from './types';
+import type { MeetingSession, SummaryStatus } from './types';
 
 interface SessionHistoryListProps {
   sessions: MeetingSession[];
@@ -33,6 +33,71 @@ function formatDate(dateString?: string): string {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+// 요약 상태 배지 컴포넌트
+function SummaryStatusBadge({ status }: { status?: SummaryStatus }) {
+  if (!status) return null;
+
+  const config: Record<SummaryStatus, { icon: React.ReactNode; className: string; tooltip: string }> = {
+    pending: {
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      className: 'bg-gray-100 text-gray-500',
+      tooltip: '요약 대기 중',
+    },
+    processing: {
+      icon: (
+        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      ),
+      className: 'bg-blue-100 text-blue-600',
+      tooltip: 'AI 분석 중',
+    },
+    completed: {
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+      ),
+      className: 'bg-green-100 text-green-600',
+      tooltip: 'AI 요약 완료',
+    },
+    failed: {
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      ),
+      className: 'bg-red-100 text-red-500',
+      tooltip: '요약 실패',
+    },
+    skipped: {
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+        </svg>
+      ),
+      className: 'bg-gray-100 text-gray-400',
+      tooltip: '요약 없음',
+    },
+  };
+
+  const { icon, className, tooltip } = config[status];
+
+  return (
+    <div
+      className={`flex items-center justify-center w-6 h-6 rounded-full ${className}`}
+      title={tooltip}
+    >
+      {icon}
+    </div>
+  );
 }
 
 export function SessionHistoryList({ sessions, onSessionClick }: SessionHistoryListProps) {
@@ -77,6 +142,24 @@ export function SessionHistoryList({ sessions, onSessionClick }: SessionHistoryL
                   <span className="flex-shrink-0 px-2 py-0.5 bg-[#e3e2e0] text-[#37352f99] text-[11px] font-medium rounded-full">
                     종료됨
                   </span>
+                  {/* AI 요약 상태 배지 */}
+                  {session.summaryStatus === 'completed' && (
+                    <span className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-600 text-[11px] font-medium rounded-full flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      AI 요약
+                    </span>
+                  )}
+                  {session.summaryStatus === 'processing' && (
+                    <span className="flex-shrink-0 px-2 py-0.5 bg-blue-100 text-blue-600 text-[11px] font-medium rounded-full flex items-center gap-1">
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      분석 중
+                    </span>
+                  )}
                 </div>
 
                 <div className="mt-2 flex items-center gap-4 text-[13px] text-[#37352f99]">
@@ -118,37 +201,43 @@ export function SessionHistoryList({ sessions, onSessionClick }: SessionHistoryL
                 </div>
               </div>
 
-              {/* Participant avatars */}
-              {session.participants && session.participants.length > 0 && (
-                <div className="flex -space-x-2 ml-4">
-                  {session.participants.slice(0, 4).map((participant, index) => (
-                    <div
-                      key={participant.id}
-                      className="relative"
-                      style={{ zIndex: session.participants!.length - index }}
-                    >
-                      {participant.user?.profileImage ? (
-                        <Image
-                          src={participant.user.profileImage}
-                          alt={participant.user.name}
-                          width={28}
-                          height={28}
-                          className="rounded-full border-2 border-white"
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-[#e3e2e0] border-2 border-white flex items-center justify-center text-[10px] font-medium text-[#37352f]">
-                          {participant.user?.name?.charAt(0).toUpperCase() || '?'}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {session.participants.length > 4 && (
-                    <div className="w-7 h-7 rounded-full bg-[#37352f] border-2 border-white flex items-center justify-center text-[10px] font-medium text-white">
-                      +{session.participants.length - 4}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Right side: Summary status icon + Participant avatars */}
+              <div className="flex items-center gap-3 ml-4">
+                {/* Summary status icon */}
+                <SummaryStatusBadge status={session.summaryStatus} />
+
+                {/* Participant avatars */}
+                {session.participants && session.participants.length > 0 && (
+                  <div className="flex -space-x-2">
+                    {session.participants.slice(0, 4).map((participant, index) => (
+                      <div
+                        key={participant.id}
+                        className="relative"
+                        style={{ zIndex: session.participants!.length - index }}
+                      >
+                        {participant.user?.profileImage ? (
+                          <Image
+                            src={participant.user.profileImage}
+                            alt={participant.user.name}
+                            width={28}
+                            height={28}
+                            className="rounded-full border-2 border-white"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-[#e3e2e0] border-2 border-white flex items-center justify-center text-[10px] font-medium text-[#37352f]">
+                            {participant.user?.name?.charAt(0).toUpperCase() || '?'}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {session.participants.length > 4 && (
+                      <div className="w-7 h-7 rounded-full bg-[#37352f] border-2 border-white flex items-center justify-center text-[10px] font-medium text-white">
+                        +{session.participants.length - 4}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -11,6 +11,7 @@ import {
 } from './dto/save-transcription.dto';
 import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
+import { SummaryService } from './services/summary.service';
 
 /**
  * MeetingsService
@@ -21,6 +22,8 @@ import { TranscriptionService } from './services/transcription.service';
  */
 @Injectable()
 export class MeetingsService {
+  private readonly logger = new Logger(MeetingsService.name);
+
   constructor(
     @InjectRepository(MeetingSession)
     private sessionRepository: Repository<MeetingSession>,
@@ -30,6 +33,7 @@ export class MeetingsService {
     private transcriptionRepository: Repository<Transcription>,
     private chimeService: ChimeService,
     private transcriptionService: TranscriptionService,
+    private summaryService: SummaryService,
   ) {}
 
   // ==========================================
@@ -66,11 +70,18 @@ export class MeetingsService {
     // 트랜스크립션 버퍼 플러시 후 세션 종료
     const flushResult =
       await this.transcriptionService.flushAllTranscriptionsOnSessionEnd(sessionId);
-    console.log(
+    this.logger.log(
       `[Session End] Flushed ${flushResult.flushed} transcriptions for session ${sessionId}`,
     );
 
-    return this.chimeService.endSession(sessionId, hostId);
+    const session = await this.chimeService.endSession(sessionId, hostId);
+
+    // 요약 생성 (비동기 - 세션 종료 응답을 블로킹하지 않음)
+    this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
+      this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
+    });
+
+    return session;
   }
 
   /**
@@ -124,6 +135,14 @@ export class MeetingsService {
     return this.transcriptionService.stopTranscription(sessionId);
   }
 
+  async changeTranscriptionLanguage(sessionId: string, languageCode: string) {
+    return this.transcriptionService.changeLanguage(sessionId, languageCode);
+  }
+
+  async getCurrentTranscriptionLanguage(sessionId: string) {
+    return this.transcriptionService.getCurrentLanguage(sessionId);
+  }
+
   async saveTranscription(dto: SaveTranscriptionDto) {
     return this.transcriptionService.saveTranscription(dto);
   }
@@ -154,5 +173,17 @@ export class MeetingsService {
 
   async getTranscriptForSummary(sessionId: string) {
     return this.transcriptionService.getTranscriptForSummary(sessionId);
+  }
+
+  // ==========================================
+  // 요약 기능 (SummaryService 위임)
+  // ==========================================
+
+  async getSummary(sessionId: string) {
+    return this.summaryService.getSummary(sessionId);
+  }
+
+  async regenerateSummary(sessionId: string) {
+    return this.summaryService.regenerateSummary(sessionId);
   }
 }

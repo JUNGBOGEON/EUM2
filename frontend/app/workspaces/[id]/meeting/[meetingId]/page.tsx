@@ -69,6 +69,9 @@ function MeetingRoomContent() {
     showTranscript,
     setShowTranscript,
     transcriptContainerRef,
+    selectedLanguage,
+    isChangingLanguage,
+    changeLanguage,
   } = useTranscription({
     meetingId: params.meetingId as string,
     meetingStartTime,
@@ -140,6 +143,9 @@ function MeetingRoomContent() {
             transcripts={transcripts}
             isTranscribing={isTranscribing}
             isLoadingHistory={isLoadingHistory}
+            selectedLanguage={selectedLanguage}
+            isChangingLanguage={isChangingLanguage}
+            onLanguageChange={changeLanguage}
             onClose={() => setShowTranscript(false)}
             containerRef={transcriptContainerRef}
           />

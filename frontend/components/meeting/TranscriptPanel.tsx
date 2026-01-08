@@ -1,14 +1,18 @@
 'use client';
 
-import { RefObject } from 'react';
+import { RefObject, useState } from 'react';
 import Image from 'next/image';
 import { formatElapsedTime } from '@/lib/utils/time';
+import { TRANSCRIPTION_LANGUAGES } from '@/lib/constants/languages';
 import type { TranscriptItem } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
 
 interface TranscriptPanelProps {
   transcripts: TranscriptItem[];
   isTranscribing: boolean;
   isLoadingHistory: boolean;
+  selectedLanguage: string;
+  isChangingLanguage: boolean;
+  onLanguageChange: (languageCode: string) => void;
   onClose: () => void;
   containerRef: RefObject<HTMLDivElement | null>;
 }
@@ -17,9 +21,14 @@ export function TranscriptPanel({
   transcripts,
   isTranscribing,
   isLoadingHistory,
+  selectedLanguage,
+  isChangingLanguage,
+  onLanguageChange,
   onClose,
   containerRef,
 }: TranscriptPanelProps) {
+  const currentLang = TRANSCRIPTION_LANGUAGES.find((l) => l.code === selectedLanguage);
+
   return (
     <div className="w-80 flex-shrink-0 bg-[#252525] border-l border-[#ffffff14] flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#ffffff14]">
@@ -128,18 +137,62 @@ export function TranscriptPanel({
         )}
       </div>
 
-      {/* 상태 표시 영역 */}
-      <div className="p-3 border-t border-[#ffffff14]">
-        <div className="flex items-center justify-center gap-2 text-[12px] text-[#ffffff71]">
-          {isTranscribing ? (
+      {/* 언어 선택 및 상태 영역 */}
+      <div className="p-3 border-t border-[#ffffff14] space-y-3">
+        {/* 언어 선택 */}
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-[#ffffff71] whitespace-nowrap">언어</span>
+          <select
+            value={selectedLanguage}
+            onChange={(e) => onLanguageChange(e.target.value)}
+            disabled={isChangingLanguage}
+            className="flex-1 bg-[#333333] text-[13px] text-[#ffffffcf] rounded-md px-2 py-1.5 border border-[#ffffff14] focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {TRANSCRIPTION_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.flag} {lang.name}
+              </option>
+            ))}
+          </select>
+          {isChangingLanguage && (
+            <svg
+              className="animate-spin h-4 w-4 text-blue-500"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+          )}
+        </div>
+
+        {/* 상태 표시 */}
+        <div className="flex items-center justify-center gap-2 text-[11px] text-[#ffffff60]">
+          {isChangingLanguage ? (
+            <>
+              <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+              <span>언어 변경 중...</span>
+            </>
+          ) : isTranscribing ? (
             <>
               <span className="w-2 h-2 bg-green-500 rounded-full" />
-              <span>자막 활성화됨 (회의 종료 시 자동 저장)</span>
+              <span>{currentLang?.flag} {currentLang?.name}로 자막 인식 중</span>
             </>
           ) : (
             <>
               <span className="w-2 h-2 bg-gray-500 rounded-full" />
-              <span>자막 대기중...</span>
+              <span>자막 시작 대기중</span>
             </>
           )}
         </div>

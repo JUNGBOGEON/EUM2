@@ -21,6 +21,10 @@ export interface UseTranscriptionReturn {
   showTranscript: boolean;
   setShowTranscript: (show: boolean) => void;
   transcriptContainerRef: React.RefObject<HTMLDivElement | null>;
+  // 언어 관련
+  selectedLanguage: string;
+  isChangingLanguage: boolean;
+  changeLanguage: (languageCode: string) => Promise<void>;
 }
 
 interface TranscriptionHistoryItem {
@@ -50,9 +54,12 @@ export function useTranscription({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
+  const [selectedLanguage, setSelectedLanguage] = useState('ko-KR');
+  const [isChangingLanguage, setIsChangingLanguage] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const isSubscribedRef = useRef(false);
   const hasLoadedHistoryRef = useRef(false);
+  const hasLoadedLanguageRef = useRef(false);
 
   // 기존 자막 히스토리 로드 (중간 참여자용)
   const loadTranscriptionHistory = useCallback(async () => {
@@ -104,6 +111,73 @@ export function useTranscription({
       loadTranscriptionHistory();
     }
   }, [meetingId, loadTranscriptionHistory]);
+
+  // 현재 언어 로드
+  const loadCurrentLanguage = useCallback(async () => {
+    if (!meetingId || hasLoadedLanguageRef.current) return;
+
+    hasLoadedLanguageRef.current = true;
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/meetings/${meetingId}/transcription/language`,
+        { credentials: 'include' }
+      );
+
+      if (response.ok) {
+        const language = await response.text();
+        // JSON 문자열인 경우 파싱
+        const parsedLanguage = language.replace(/"/g, '');
+        if (parsedLanguage) {
+          setSelectedLanguage(parsedLanguage);
+          logger.log(`Loaded current language: ${parsedLanguage}`);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to load current language:', error);
+    }
+  }, [meetingId]);
+
+  // 미팅 참여 시 현재 언어 로드
+  useEffect(() => {
+    if (meetingId && !hasLoadedLanguageRef.current) {
+      loadCurrentLanguage();
+    }
+  }, [meetingId, loadCurrentLanguage]);
+
+  // 언어 변경
+  const changeLanguage = useCallback(async (languageCode: string) => {
+    if (!meetingId || isChangingLanguage) return;
+
+    setIsChangingLanguage(true);
+    logger.log(`Changing language to: ${languageCode}`);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/meetings/${meetingId}/transcription/change-language`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ languageCode }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to change language');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setSelectedLanguage(result.languageCode);
+        logger.log(`Language changed successfully to: ${result.languageCode}`);
+      }
+    } catch (error) {
+      logger.error('Failed to change language:', error);
+    } finally {
+      setIsChangingLanguage(false);
+    }
+  }, [meetingId, isChangingLanguage]);
 
   // TranscriptEvent 핸들러
   const handleTranscriptEvent = useCallback(
@@ -242,5 +316,9 @@ export function useTranscription({
     showTranscript,
     setShowTranscript,
     transcriptContainerRef,
+    // 언어 관련
+    selectedLanguage,
+    isChangingLanguage,
+    changeLanguage,
   };
 }

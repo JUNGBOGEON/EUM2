@@ -24,6 +24,22 @@ export enum SessionStatus {
 }
 
 /**
+ * 요약 생성 상태
+ * - PENDING: 대기 중
+ * - PROCESSING: 처리 중
+ * - COMPLETED: 완료
+ * - FAILED: 실패
+ * - SKIPPED: 스킵 (발화 기록 없음 등)
+ */
+export enum SummaryStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  SKIPPED = 'skipped',
+}
+
+/**
  * MeetingSession Entity
  *
  * Google Meet 방식의 일회성 세션
@@ -98,6 +114,19 @@ export class MeetingSession {
   // 세션 총 시간 (초)
   @Column({ type: 'int', nullable: true })
   durationSec?: number;
+
+  // ===== AI 요약 =====
+  // S3에 저장된 요약 파일 키
+  @Column({ nullable: true })
+  summaryS3Key?: string;
+
+  // 요약 생성 상태
+  @Column({
+    type: 'enum',
+    enum: SummaryStatus,
+    default: SummaryStatus.PENDING,
+  })
+  summaryStatus: SummaryStatus;
 
   // ===== 시스템 필드 =====
   @CreateDateColumn()

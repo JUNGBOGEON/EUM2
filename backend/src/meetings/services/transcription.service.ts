@@ -83,6 +83,65 @@ export class TranscriptionService {
     return { success: true };
   }
 
+  /**
+   * 트랜스크립션 언어 변경 (실시간)
+   * 현재 트랜스크립션을 중지하고 새 언어로 재시작
+   */
+  async changeLanguage(
+    sessionId: string,
+    newLanguageCode: string,
+  ): Promise<{ success: boolean; languageCode: string }> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
+    }
+
+    if (!session.chimeMeetingId) {
+      throw new BadRequestException('Chime 세션이 아직 시작되지 않았습니다.');
+    }
+
+    // 현재 트랜스크립션 중지
+    try {
+      await this.chimeService.stopSessionTranscription(session.chimeMeetingId);
+    } catch (error) {
+      console.log('[Transcription] Stop failed (may not be running):', error);
+    }
+
+    // 짧은 대기 (AWS Transcribe 상태 전환 대기)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // 새 언어로 재시작
+    await this.chimeService.startSessionTranscription(
+      session.chimeMeetingId,
+      newLanguageCode,
+    );
+
+    // Redis에 현재 언어 저장
+    await this.redisService.set(
+      `transcription:language:${sessionId}`,
+      newLanguageCode,
+      2 * 60 * 60 * 1000, // 2시간 TTL
+    );
+
+    console.log(`[Transcription] Language changed to ${newLanguageCode} for session ${sessionId}`);
+
+    return {
+      success: true,
+      languageCode: newLanguageCode,
+    };
+  }
+
+  /**
+   * 세션의 현재 트랜스크립션 언어 조회
+   */
+  async getCurrentLanguage(sessionId: string): Promise<string> {
+    const cached = await this.redisService.get<string>(`transcription:language:${sessionId}`);
+    return cached || 'ko-KR'; // 기본값
+  }
+
   // ==========================================
   // 트랜스크립션 저장
   // ==========================================

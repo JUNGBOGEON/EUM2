@@ -34,13 +34,40 @@ export interface MeetingSession {
   durationSec?: number;
   participantCount?: number;
   participants?: SessionParticipant[];
+  summaryStatus?: SummaryStatus;
+  summaryS3Key?: string;
 }
 
 export interface SessionParticipant {
   id: string;
   userId: string;
   user?: UserInfo;
+  role?: 'HOST' | 'PARTICIPANT';
   joinedAt?: string;
   leftAt?: string;
   durationSec?: number;
+}
+
+// 발화 스크립트 (트랜스크립션) 타입
+export interface MeetingTranscription {
+  id: string;
+  speakerId?: string;
+  speaker?: UserInfo;
+  chimeAttendeeId?: string;
+  originalText: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  relativeStartSec?: number;
+  languageCode?: string;
+  confidence?: number;
+}
+
+// 요약 상태 타입
+export type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+// 회의 요약 타입
+export interface MeetingSummary {
+  status: SummaryStatus;
+  content: string | null;
+  presignedUrl: string | null;
 }

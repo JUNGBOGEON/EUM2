@@ -132,9 +132,16 @@ export class ChimeService {
       participants: [hostId],
     });
 
-    // 자동으로 트랜스크립션 시작
+    // 자동으로 트랜스크립션 시작 (기본 언어: ko-KR)
+    const defaultLanguage = 'ko-KR';
     try {
-      await this.startSessionTranscription(chimeMeeting.MeetingId!, 'ko-KR');
+      await this.startSessionTranscription(chimeMeeting.MeetingId!, defaultLanguage);
+      // Redis에 현재 언어 저장
+      await this.redisService.set(
+        `transcription:language:${session.id}`,
+        defaultLanguage,
+        2 * 60 * 60 * 1000, // 2시간 TTL
+      );
       console.log(`[Chime] Auto-started transcription for session ${session.id}`);
     } catch (error) {
       console.error('[Chime] Failed to auto-start transcription:', error);

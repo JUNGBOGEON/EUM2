@@ -121,6 +121,25 @@ export class MeetingsController {
   }
 
   /**
+   * 트랜스크립션 언어 변경 (실시간)
+   */
+  @Post(':sessionId/transcription/change-language')
+  changeTranscriptionLanguage(
+    @Param('sessionId') sessionId: string,
+    @Body('languageCode') languageCode: string,
+  ) {
+    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode);
+  }
+
+  /**
+   * 현재 트랜스크립션 언어 조회
+   */
+  @Get(':sessionId/transcription/language')
+  getCurrentTranscriptionLanguage(@Param('sessionId') sessionId: string) {
+    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId);
+  }
+
+  /**
    * 세션 트랜스크립션 조회
    */
   @Get(':sessionId/transcriptions')
@@ -188,5 +207,29 @@ export class MeetingsController {
   @Get(':sessionId/transcriptions/buffer-status')
   getTranscriptionBufferStatus(@Param('sessionId') sessionId: string) {
     return this.meetingsService.getTranscriptionBufferStatus(sessionId);
+  }
+
+  // ==========================================
+  // 요약 API
+  // ==========================================
+
+  /**
+   * 세션 요약 조회
+   * - status: 요약 생성 상태 (pending, processing, completed, failed, skipped)
+   * - content: 요약 마크다운 (completed 상태일 때만)
+   * - presignedUrl: S3 Presigned URL (completed 상태일 때만)
+   */
+  @Get(':sessionId/summary')
+  getSummary(@Param('sessionId') sessionId: string) {
+    return this.meetingsService.getSummary(sessionId);
+  }
+
+  /**
+   * 세션 요약 재생성
+   * - 요약이 실패했거나 다시 생성하고 싶을 때 사용
+   */
+  @Post(':sessionId/summary/regenerate')
+  regenerateSummary(@Param('sessionId') sessionId: string) {
+    return this.meetingsService.regenerateSummary(sessionId);
   }
 }

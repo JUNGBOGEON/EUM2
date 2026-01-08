@@ -48,12 +48,13 @@ ${currentDate}
 export class BedrockService {
   private readonly logger = new Logger(BedrockService.name);
   private readonly bedrockClient: BedrockRuntimeClient;
-  // Cross-region inference profile for Claude 3.5 Sonnet v2 (APAC)
-  private readonly modelId = 'apac.anthropic.claude-3-5-sonnet-20241022-v2:0';
+  // Amazon Nova Pro APAC - 도쿄/서울 리전 자동 라우팅 (별도 승인 불필요)
+  private readonly modelId = 'apac.amazon.nova-pro-v1:0';
 
   constructor(private configService: ConfigService) {
+    // ap-northeast-2 (서울)
     const region =
-      this.configService.get<string>('AWS_BEDROCK_REGION') || 'ap-northeast-1';
+      this.configService.get<string>('AWS_BEDROCK_REGION') || 'ap-northeast-2';
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
 

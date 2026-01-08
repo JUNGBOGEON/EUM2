@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useMeetingDetail, useMeetingSummary } from '@/hooks/workspace';
+import { SummaryCard } from './SummaryCard';
 import type { SessionParticipant, MeetingTranscription, MeetingSummary, SummaryStatus } from './types';
 
 interface MeetingDetailModalProps {
@@ -182,6 +183,10 @@ export function MeetingDetailModal({
                   error={summaryError}
                   onRegenerate={regenerate}
                   isRegenerating={isRegenerating}
+                  sessionTitle={session?.title}
+                  sessionDate={session?.startedAt}
+                  participantCount={participants.length}
+                  duration={formatDuration(session?.durationSec)}
                 />
               )}
               {activeTab === 'details' && (
@@ -256,12 +261,20 @@ function SummarySection({
   error,
   onRegenerate,
   isRegenerating,
+  sessionTitle,
+  sessionDate,
+  participantCount,
+  duration,
 }: {
   summary: MeetingSummary | null;
   isLoading: boolean;
   error: string | null;
   onRegenerate: () => void;
   isRegenerating: boolean;
+  sessionTitle?: string;
+  sessionDate?: string;
+  participantCount?: number;
+  duration?: string;
 }) {
   if (isLoading) {
     return (
@@ -309,9 +322,18 @@ function SummarySection({
 
       {/* 요약 내용 */}
       {summary.status === 'completed' && summary.content ? (
-        <div className="relative">
+        <div className="space-y-4">
+          {/* 이미지 카드 내보내기 */}
+          <SummaryCard
+            content={summary.content}
+            sessionTitle={sessionTitle}
+            sessionDate={sessionDate}
+            participantCount={participantCount}
+            duration={duration}
+          />
+
           {/* 재생성 버튼 */}
-          <div className="absolute top-0 right-0">
+          <div className="flex justify-end">
             <button
               onClick={onRegenerate}
               disabled={isRegenerating}

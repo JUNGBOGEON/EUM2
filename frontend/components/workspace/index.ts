@@ -5,3 +5,4 @@ export { QuickStartMeeting } from './QuickStartMeeting';
 export { SessionHistoryList } from './SessionHistoryList';
 export { MeetingDetailModal } from './MeetingDetailModal';
 export { WorkspaceStorage } from './WorkspaceStorage';
+export { SummaryCard } from './SummaryCard';

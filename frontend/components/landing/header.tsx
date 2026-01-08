@@ -3,7 +3,7 @@ import Image from 'next/image';
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 w-full bg-white dark:bg-[#191919]">
+    <header className="sticky top-0 z-50 w-full bg-[#191919]">
       <nav className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center">
           <Image
@@ -11,20 +11,20 @@ export function Header() {
             alt="EUM"
             width={36}
             height={13}
-            className="dark:invert"
+            className="invert"
           />
         </Link>
 
         <div className="flex items-center gap-2">
           <Link
             href="/login"
-            className="px-4 py-1.5 text-sm text-[#37352f] hover:bg-[#f7f6f3] rounded-full transition-colors dark:text-[#ffffffcf] dark:hover:bg-[#ffffff0e]"
+            className="px-4 py-1.5 text-sm text-[#ffffffcf] hover:bg-[#ffffff0e] rounded-full transition-colors"
           >
             로그인
           </Link>
           <Link
             href="/login"
-            className="px-4 py-1.5 text-sm text-white bg-[#37352f] hover:bg-[#2f2f2f] rounded-full transition-colors dark:bg-[#ffffffcf] dark:text-[#191919] dark:hover:bg-white"
+            className="px-4 py-1.5 text-sm bg-[#ffffffcf] text-[#191919] hover:bg-white rounded-full transition-colors"
           >
             시작하기
           </Link>

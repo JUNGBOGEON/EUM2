@@ -25,6 +25,7 @@ export class WorkspacesService {
   async findAllByUser(ownerId: string): Promise<Workspace[]> {
     return this.workspacesRepository.find({
       where: { ownerId },
+      relations: ['owner'],
       order: { createdAt: 'DESC' },
     });
   }

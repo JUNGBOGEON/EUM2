@@ -10,7 +10,7 @@ export function GoogleLoginButton() {
   return (
     <button
       onClick={handleGoogleLogin}
-      className="w-full flex items-center justify-center gap-3 rounded-full border border-[#e3e2e0] bg-white px-6 py-3 text-[15px] font-medium text-[#37352f] hover:bg-[#f7f6f3] transition-colors dark:border-[#ffffff14] dark:bg-[#252525] dark:text-[#ffffffcf] dark:hover:bg-[#2f2f2f]"
+      className="w-full flex items-center justify-center gap-3 rounded-full border border-[#ffffff14] bg-[#252525] px-6 py-3 text-[15px] font-medium text-[#ffffffcf] hover:bg-[#2f2f2f] transition-colors"
     >
       <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24">
         <path

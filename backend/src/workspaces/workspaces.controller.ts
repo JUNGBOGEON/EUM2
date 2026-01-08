@@ -6,6 +6,7 @@ import {
   Param,
   Delete,
   Put,
+  Patch,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -35,6 +36,14 @@ export class WorkspacesController {
 
   @Put(':id')
   update(
+    @Param('id') id: string,
+    @Body() updateWorkspaceDto: Partial<CreateWorkspaceDto>,
+  ) {
+    return this.workspacesService.update(id, updateWorkspaceDto);
+  }
+
+  @Patch(':id')
+  patch(
     @Param('id') id: string,
     @Body() updateWorkspaceDto: Partial<CreateWorkspaceDto>,
   ) {

@@ -57,9 +57,9 @@ export default function CreateWorkspacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#191919]">
+    <div className="min-h-screen bg-[#191919]">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-[#e3e2e0] bg-white dark:border-[#ffffff14] dark:bg-[#191919]">
+      <header className="sticky top-0 z-50 w-full border-b border-[#ffffff14] bg-[#191919]">
         <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-3">
           <Link href="/workspaces" className="flex items-center">
             <Image
@@ -67,12 +67,12 @@ export default function CreateWorkspacePage() {
               alt="EUM"
               width={36}
               height={13}
-              className="dark:invert"
+              className="invert"
             />
           </Link>
           <Link
             href="/workspaces"
-            className="text-[14px] text-[#37352fa6] hover:text-[#37352f] transition-colors dark:text-[#ffffff71] dark:hover:text-[#ffffffcf]"
+            className="text-[14px] text-[#ffffff71] hover:text-[#ffffffcf] transition-colors"
           >
             취소
           </Link>
@@ -82,17 +82,17 @@ export default function CreateWorkspacePage() {
       {/* Main Content */}
       <main className="mx-auto max-w-[480px] px-4 py-16">
         <div className="mb-10">
-          <h1 className="text-[28px] font-bold text-[#37352f] dark:text-[#ffffffcf]">
+          <h1 className="text-[28px] font-bold text-[#ffffffcf]">
             새 워크스페이스
           </h1>
-          <p className="mt-2 text-[15px] text-[#37352fa6] dark:text-[#ffffff71]">
+          <p className="mt-2 text-[15px] text-[#ffffff71]">
             팀과 함께할 공간을 만드세요
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[14px] text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+            <div className="rounded-lg border bg-red-900/20 border-red-800 p-4 text-[14px] text-red-400">
               {error}
             </div>
           )}
@@ -100,7 +100,7 @@ export default function CreateWorkspacePage() {
           <div>
             <label
               htmlFor="name"
-              className="block text-[14px] font-medium text-[#37352f] dark:text-[#ffffffcf] mb-2"
+              className="block text-[14px] font-medium text-[#ffffffcf] mb-2"
             >
               이름
             </label>
@@ -110,7 +110,7 @@ export default function CreateWorkspacePage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="워크스페이스 이름"
-              className="w-full rounded-lg border border-[#e3e2e0] bg-white px-4 py-3 text-[15px] text-[#37352f] placeholder-[#37352f80] focus:border-[#37352f] focus:outline-none dark:border-[#ffffff14] dark:bg-[#252525] dark:text-[#ffffffcf] dark:placeholder-[#ffffff40] dark:focus:border-[#ffffff40]"
+              className="w-full rounded-lg border border-[#ffffff14] bg-[#252525] px-4 py-3 text-[15px] text-[#ffffffcf] placeholder-[#ffffff40] focus:border-[#ffffff40] focus:outline-none"
               required
               maxLength={100}
             />
@@ -119,9 +119,9 @@ export default function CreateWorkspacePage() {
           <div>
             <label
               htmlFor="description"
-              className="block text-[14px] font-medium text-[#37352f] dark:text-[#ffffffcf] mb-2"
+              className="block text-[14px] font-medium text-[#ffffffcf] mb-2"
             >
-              설명 <span className="font-normal text-[#37352f80] dark:text-[#ffffff40]">(선택)</span>
+              설명 <span className="font-normal text-[#ffffff40]">(선택)</span>
             </label>
             <textarea
               id="description"
@@ -129,7 +129,7 @@ export default function CreateWorkspacePage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="어떤 공간인가요?"
               rows={3}
-              className="w-full rounded-lg border border-[#e3e2e0] bg-white px-4 py-3 text-[15px] text-[#37352f] placeholder-[#37352f80] focus:border-[#37352f] focus:outline-none resize-none dark:border-[#ffffff14] dark:bg-[#252525] dark:text-[#ffffffcf] dark:placeholder-[#ffffff40] dark:focus:border-[#ffffff40]"
+              className="w-full rounded-lg border border-[#ffffff14] bg-[#252525] px-4 py-3 text-[15px] text-[#ffffffcf] placeholder-[#ffffff40] focus:border-[#ffffff40] focus:outline-none resize-none"
               maxLength={500}
             />
           </div>
@@ -137,11 +137,11 @@ export default function CreateWorkspacePage() {
           <button
             type="submit"
             disabled={isLoading || !name.trim()}
-            className="w-full flex items-center justify-center gap-2 rounded-full bg-[#37352f] px-6 py-3 text-[15px] font-medium text-white hover:bg-[#2f2f2f] disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-[#ffffffcf] dark:text-[#191919] dark:hover:bg-white"
+            className="w-full flex items-center justify-center gap-2 rounded-full bg-[#ffffffcf] px-6 py-3 text-[15px] font-medium text-[#191919] hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? (
               <>
-                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin dark:border-[#191919] dark:border-t-transparent" />
+                <div className="h-4 w-4 border-2 border-[#191919] border-t-transparent rounded-full animate-spin" />
                 생성 중...
               </>
             ) : (

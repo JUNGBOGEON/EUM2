@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import cookieParser from 'cookie-parser';
+import * as bodyParser from 'body-parser';
 import { AppModule } from './app.module';
 
 class SocketIoAdapter extends IoAdapter {
@@ -40,6 +41,10 @@ async function bootstrap() {
 
   // WebSocket Adapter
   app.useWebSocketAdapter(new SocketIoAdapter(app));
+
+  // Body Parser with increased limit for base64 images
+  app.use(bodyParser.json({ limit: '10mb' }));
+  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   // Cookie Parser
   app.use(cookieParser());

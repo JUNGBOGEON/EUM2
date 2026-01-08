@@ -33,6 +33,9 @@ export class Workspace {
   @Column({ nullable: true })
   icon: string;
 
+  @Column({ type: 'text', nullable: true })
+  thumbnail: string;
+
   // ===== 소유자 =====
   @ManyToOne(() => User, (user) => user.workspaces, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })

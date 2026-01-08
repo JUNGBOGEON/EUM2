@@ -14,4 +14,8 @@ export class CreateWorkspaceDto {
   @IsOptional()
   @IsString()
   icon?: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnail?: string;
 }

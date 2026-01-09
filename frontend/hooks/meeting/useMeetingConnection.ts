@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMeetingManager } from 'amazon-chime-sdk-component-library-react';
-import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
+import { MeetingSessionConfiguration, AudioVideoObserver } from 'amazon-chime-sdk-js';
 import type { MeetingInfo } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
 import { setCurrentUserCache, clearCurrentUserCache } from '@/lib/meeting/current-user-cache';
 
@@ -40,7 +40,7 @@ export function useMeetingConnection({
   const router = useRouter();
   const meetingManager = useMeetingManager();
   const hasJoinedRef = useRef(false);
-  const observerRef = useRef<any>(null);
+  const observerRef = useRef<AudioVideoObserver | null>(null);
 
   const [meeting, setMeeting] = useState<MeetingInfo | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -137,9 +137,6 @@ export function useMeetingConnection({
       setCurrentUserCache({ attendeeId: attendee.attendeeId });
 
       await meetingManager.join(meetingSessionConfiguration);
-      await meetingManager.start();
-
-      setMeeting(sessionInfo);
 
       // Debug Observer - Register BEFORE start
       // Store in ref for cleanup
@@ -193,14 +190,18 @@ export function useMeetingConnection({
   const handleLeave = useCallback(async () => {
     try {
       clearCurrentUserCache();  // 캐시 초기화
-      await fetch(`${API_URL}/api/meetings/sessions/${sessionId}/leave`, {
+      const response = await fetch(`${API_URL}/api/meetings/sessions/${sessionId}/leave`, {
         method: 'POST',
         credentials: 'include',
       });
+      if (!response.ok) {
+        throw new Error(`Failed to leave session: ${response.status}`);
+      }
       await meetingManager.leave();
       router.push(`/workspaces/${workspaceId}`);
     } catch (err) {
       console.error('Failed to leave session:', err);
+      // Failsafe: Redirect anyway
       router.push(`/workspaces/${workspaceId}`);
     }
   }, [sessionId, workspaceId, meetingManager, router]);
@@ -208,9 +209,13 @@ export function useMeetingConnection({
   // 회의 종료 (호스트 전용 - 모든 참가자 종료)
   const handleEndMeeting = useCallback(async () => {
     try {
-      await fetch(`${API_URL}/api/meetings/sessions/${sessionId}`, {
+      const response = await fetch(`${API_URL}/api/meetings/sessions/${sessionId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
+      if (!response.ok) {
+        throw new Error(`Failed to end session: ${response.status}`);
+      }
       await meetingManager.leave();
       router.push(`/workspaces/${workspaceId}`);
     } catch (err) {

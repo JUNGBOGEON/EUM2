@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { RedisModule } from './redis/redis.module';
+import { WhiteboardModule } from './whiteboard/whiteboard.module';
 
 @Module({
   imports: [
@@ -21,9 +22,9 @@ import { RedisModule } from './redis/redis.module';
         type: 'postgres',
         host: configService.get('DB_HOST'),
         port: configService.get<number>('DB_PORT') || 5432,
-        username: configService.get('DB_USERNAME'),
+        username: configService.get('DB_USERNAME') || configService.get('DB_USER'), // Support OldEum env
         password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
+        database: configService.get('DB_DATABASE') || configService.get('DB_NAME'), // Support OldEum env
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: configService.get('NODE_ENV') !== 'production',
         ssl: configService.get('DB_HOST')?.includes('rds.amazonaws.com')
@@ -44,8 +45,9 @@ import { RedisModule } from './redis/redis.module';
     WorkspacesModule,
     RedisModule,
     MeetingsModule,
+    WhiteboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

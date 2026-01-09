@@ -149,7 +149,6 @@ function MeetingRoomContent() {
             <VideoGrid
               remoteVideoTiles={remoteVideoTiles}
               isVideoEnabled={isVideoEnabled}
-              onToggleVideo={handleToggleVideo}
               currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
               participants={participants}
               currentAttendeeId={currentAttendeeId}

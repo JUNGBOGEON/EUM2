@@ -40,6 +40,7 @@ export function useMeetingConnection({
   const router = useRouter();
   const meetingManager = useMeetingManager();
   const hasJoinedRef = useRef(false);
+  const observerRef = useRef<any>(null);
 
   const [meeting, setMeeting] = useState<MeetingInfo | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -140,23 +141,29 @@ export function useMeetingConnection({
 
       setMeeting(sessionInfo);
 
-      // Debug Observer
-      const observer = {
+      // Debug Observer - Register BEFORE start
+      // Store in ref for cleanup
+      observerRef.current = {
         audioVideoDidStart: () => {
           console.log('[MeetingConnection] AudioVideo started');
         },
         videoTileDidAdd: (tileState: any) => {
-          console.log('[MeetingConnection] Video tile added:', tileState);
+          console.log('[MeetingConnection] Video tile added:', {
+            tileId: tileState.tileId,
+            isLocal: tileState.localTile,
+            isContent: tileState.isContent,
+            boundAttendeeId: tileState.boundAttendeeId
+          });
         },
         videoTileDidRemove: (tileState: any) => {
-          console.log('[MeetingConnection] Video tile removed:', tileState);
-        },
-        encodingSimulcastLayersDidChange: (bitrate: any) => {
-          console.log('[MeetingConnection] Encoding Simulcast Change:', bitrate);
+          console.log('[MeetingConnection] Video tile removed:', tileState.tileId);
         }
       };
-      meetingManager.audioVideo?.addObserver(observer);
+      meetingManager.audioVideo?.addObserver(observerRef.current);
 
+      await meetingManager.start();
+
+      setMeeting(sessionInfo);
       setIsJoining(false);
     } catch (err) {
       console.error('Failed to join session:', err);
@@ -171,6 +178,14 @@ export function useMeetingConnection({
     hasJoinedRef.current = true;
 
     joinOrStartSession();
+
+    // Cleanup observer on unmount
+    return () => {
+      if (observerRef.current && meetingManager.audioVideo) {
+        console.log('[MeetingConnection] Removing observer');
+        meetingManager.audioVideo.removeObserver(observerRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -195,12 +210,13 @@ export function useMeetingConnection({
     try {
       await fetch(`${API_URL}/api/meetings/sessions/${sessionId}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
       await meetingManager.leave();
       router.push(`/workspaces/${workspaceId}`);
     } catch (err) {
-      console.error('Failed to end session:', err);
+      console.error('Failed to end session (server request failed):', err);
+      // Failsafe: Still try to leave locally and redirect
+      try { await meetingManager.leave(); } catch (e) { console.warn('Local leave failed:', e); }
       router.push(`/workspaces/${workspaceId}`);
     }
   }, [sessionId, workspaceId, meetingManager, router]);

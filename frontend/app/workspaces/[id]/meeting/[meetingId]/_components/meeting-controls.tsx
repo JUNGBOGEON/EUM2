@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   PhoneOff,
+  Languages,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -36,9 +37,12 @@ interface MeetingControlsProps {
   isVideoEnabled: boolean;
   isLocalUserSharing: boolean;
   isHost?: boolean;
+  translationEnabled?: boolean;
+  isTogglingTranslation?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
+  onToggleTranslation?: () => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -49,9 +53,12 @@ export function MeetingControls({
   isVideoEnabled,
   isLocalUserSharing,
   isHost = false,
+  translationEnabled = false,
+  isTogglingTranslation = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
+  onToggleTranslation,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -132,6 +139,30 @@ export function MeetingControls({
             <p>{isLocalUserSharing ? '화면 공유 중지' : '화면 공유'}</p>
           </TooltipContent>
         </Tooltip>
+
+        {/* Translation Toggle */}
+        {onToggleTranslation && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggleTranslation}
+                disabled={isTogglingTranslation}
+                className={`h-12 w-12 rounded-full transition-colors ${
+                  translationEnabled
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <Languages className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{translationEnabled ? '번역 끄기' : '번역 켜기'}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Settings */}
         <Tooltip>

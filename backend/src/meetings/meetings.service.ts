@@ -12,6 +12,7 @@ import {
 import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
 import { SummaryService } from './services/summary.service';
+import { TranslationService } from './services/translation.service';
 
 /**
  * MeetingsService
@@ -34,6 +35,7 @@ export class MeetingsService {
     private chimeService: ChimeService,
     private transcriptionService: TranscriptionService,
     private summaryService: SummaryService,
+    private translationService: TranslationService,
   ) {}
 
   // ==========================================
@@ -135,8 +137,22 @@ export class MeetingsService {
     return this.transcriptionService.stopTranscription(sessionId);
   }
 
-  async changeTranscriptionLanguage(sessionId: string, languageCode: string) {
-    return this.transcriptionService.changeLanguage(sessionId, languageCode);
+  /**
+   * 트랜스크립션 언어 변경
+   * - 세션 전체 음성 인식 언어 변경 (AWS Chime Transcribe)
+   * - 사용자별 번역 타겟 언어도 함께 업데이트
+   */
+  async changeTranscriptionLanguage(sessionId: string, languageCode: string, userId?: string) {
+    // 1. 세션 레벨 트랜스크립션 언어 변경
+    const result = await this.transcriptionService.changeLanguage(sessionId, languageCode);
+
+    // 2. 사용자별 번역 타겟 언어도 함께 업데이트 (userId가 있는 경우)
+    if (userId) {
+      await this.translationService.setUserLanguage(sessionId, userId, languageCode);
+      this.logger.log(`[Translation] User ${userId} language set to ${languageCode}`);
+    }
+
+    return result;
   }
 
   async getCurrentTranscriptionLanguage(sessionId: string) {
@@ -189,5 +205,39 @@ export class MeetingsService {
 
   async regenerateSummary(sessionId: string) {
     return this.summaryService.regenerateSummary(sessionId);
+  }
+
+  // ==========================================
+  // 번역 기능 (TranslationService 위임)
+  // ==========================================
+
+  /**
+   * 번역 활성화/비활성화
+   */
+  async toggleTranslation(sessionId: string, userId: string, enabled: boolean) {
+    await this.translationService.setTranslationEnabled(sessionId, userId, enabled);
+    return { success: true, enabled };
+  }
+
+  /**
+   * 번역 상태 조회
+   */
+  async getTranslationStatus(sessionId: string, userId: string) {
+    return this.translationService.getTranslationStatus(sessionId, userId);
+  }
+
+  /**
+   * 사용자 언어 설정
+   */
+  async setUserLanguage(sessionId: string, userId: string, languageCode: string) {
+    await this.translationService.setUserLanguage(sessionId, userId, languageCode);
+    return { success: true, languageCode };
+  }
+
+  /**
+   * 세션 참가자 언어 설정 목록
+   */
+  async getSessionLanguagePreferences(sessionId: string) {
+    return this.translationService.getSessionLanguagePreferences(sessionId);
   }
 }

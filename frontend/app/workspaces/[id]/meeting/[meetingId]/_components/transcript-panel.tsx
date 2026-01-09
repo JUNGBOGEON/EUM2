@@ -15,7 +15,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatElapsedTime } from '@/lib/utils/time';
 import { TRANSCRIPTION_LANGUAGES } from '@/lib/constants/languages';
-import type { TranscriptItem } from '../types';
+import type { TranscriptItem, TranslatedTranscript } from '@/lib/types';
 
 interface TranscriptPanelProps {
   transcripts: TranscriptItem[];
@@ -26,6 +26,9 @@ interface TranscriptPanelProps {
   onLanguageChange: (languageCode: string) => void;
   containerRef: RefObject<HTMLDivElement | null>;
   getParticipantByAttendeeId?: (attendeeId: string) => { name: string; profileImage?: string };
+  // 번역 관련
+  translationEnabled?: boolean;
+  getTranslation?: (resultId: string) => TranslatedTranscript | undefined;
 }
 
 export function TranscriptPanel({
@@ -37,6 +40,8 @@ export function TranscriptPanel({
   onLanguageChange,
   containerRef,
   getParticipantByAttendeeId,
+  translationEnabled = false,
+  getTranslation,
 }: TranscriptPanelProps) {
   const currentLang = TRANSCRIPTION_LANGUAGES.find((l) => l.code === selectedLanguage);
 
@@ -90,6 +95,10 @@ export function TranscriptPanel({
               const speakerName = dynamicSpeaker?.name || item.speakerName;
               const speakerProfileImage = dynamicSpeaker?.profileImage || item.speakerProfileImage;
 
+              // 번역 조회
+              const translation = translationEnabled && getTranslation ? getTranslation(item.id) : undefined;
+              const targetLang = translation ? TRANSCRIPTION_LANGUAGES.find((l) => l.code === translation.targetLanguage) : undefined;
+
               return (
                 <div
                   key={item.id}
@@ -126,6 +135,12 @@ export function TranscriptPanel({
                   <p className="text-sm text-white/80 leading-relaxed pl-8">
                     {item.text}
                   </p>
+                  {/* 번역된 텍스트 표시 */}
+                  {translation && (
+                    <p className="text-sm text-blue-300/80 leading-relaxed pl-8 mt-1 italic">
+                      {targetLang?.flag} {translation.translatedText}
+                    </p>
+                  )}
                 </div>
               );
             })
@@ -164,17 +179,23 @@ export function TranscriptPanel({
         </div>
 
         {/* Status */}
-        <div className="flex items-center justify-center gap-2 text-xs text-white/40">
+        <div className="flex flex-col items-center justify-center gap-1 text-xs text-white/40">
           {isChangingLanguage ? (
-            <>
+            <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
               <span>언어 변경 중...</span>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full" />
               <span>{currentLang?.flag} {currentLang?.name}로 자막 인식 중</span>
-            </>
+            </div>
+          )}
+          {translationEnabled && (
+            <div className="flex items-center gap-2 text-blue-400">
+              <Languages className="h-3 w-3" />
+              <span>다른 언어 → {currentLang?.flag} {currentLang?.name}로 번역 중</span>
+            </div>
           )}
         </div>
       </div>

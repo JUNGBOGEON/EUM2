@@ -142,3 +142,37 @@ export interface TranscriptionState {
   isTranscribing: boolean;
   showTranscript: boolean;
 }
+
+/**
+ * 번역된 자막 아이템
+ */
+export interface TranslatedTranscript {
+  resultId: string;
+  speakerId: string;
+  speakerName: string;
+  originalText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  timestamp: number;
+}
+
+/**
+ * 번역 상태
+ */
+export interface TranslationState {
+  enabled: boolean;
+  userLanguage: string;
+  translations: Map<string, TranslatedTranscript>; // resultId -> translation
+}
+
+/**
+ * Chime 로스터 참가자 (확장된 타입)
+ * Chime SDK의 RosterAttendeeType을 확장하여 커스텀 속성 포함
+ */
+export interface ChimeRosterAttendee {
+  chimeAttendeeId?: string;
+  externalUserId?: string;
+  name?: string;
+  profileImage?: string;
+}

@@ -19,6 +19,7 @@ import {
   useDeviceManager,
   useTranscription,
   useMeetingConnection,
+  useTranslation,
 } from '@/hooks/meeting';
 
 // New modular components
@@ -36,6 +37,9 @@ import {
   ErrorView,
   PermissionBanner,
 } from '@/components/meeting';
+
+// Types
+import type { ChimeRosterAttendee } from '@/lib/types';
 
 function MeetingRoomContent() {
   const params = useParams();
@@ -86,6 +90,17 @@ function MeetingRoomContent() {
     currentAttendeeId,
   });
 
+  // Translation hook
+  const {
+    translationEnabled,
+    isTogglingTranslation,
+    toggleTranslation,
+    getTranslation,
+  } = useTranslation({
+    meetingId,
+    userId,
+  });
+
   // Chime SDK hooks
   const { isVideoEnabled, toggleVideo } = useLocalVideo();
   const { muted, toggleMute } = useToggleLocalMute();
@@ -96,12 +111,15 @@ function MeetingRoomContent() {
 
   const participantCount = Object.keys(roster).length;
   
-  // Convert roster to participants array
-  const participants = Object.entries(roster).map(([attendeeId, attendee]) => ({
-    id: attendeeId,
-    name: (attendee as any).name || 'Unknown',
-    profileImage: (attendee as any).profileImage,
-  }));
+  // Convert roster to participants array (with proper typing)
+  const participants = Object.entries(roster).map(([attendeeId, attendee]) => {
+    const typedAttendee = attendee as ChimeRosterAttendee;
+    return {
+      id: attendeeId,
+      name: typedAttendee.name || 'Unknown',
+      profileImage: typedAttendee.profileImage,
+    };
+  });
 
   // Camera toggle handler (includes permission request)
   const handleToggleVideo = useCallback(async () => {
@@ -174,6 +192,8 @@ function MeetingRoomContent() {
           onLanguageChange={changeLanguage}
           containerRef={transcriptContainerRef}
           getParticipantByAttendeeId={getParticipantByAttendeeId}
+          translationEnabled={translationEnabled}
+          getTranslation={getTranslation}
         />
       </main>
 
@@ -183,9 +203,12 @@ function MeetingRoomContent() {
         isVideoEnabled={isVideoEnabled}
         isLocalUserSharing={isLocalUserSharing}
         isHost={isHost}
+        translationEnabled={translationEnabled}
+        isTogglingTranslation={isTogglingTranslation}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
+        onToggleTranslation={toggleTranslation}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeeting}

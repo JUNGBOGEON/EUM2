@@ -55,6 +55,21 @@ export interface InvitationNotificationPayload {
   workspaceId?: string;
 }
 
+/**
+ * 번역된 자막 WebSocket 페이로드
+ */
+export interface TranslatedTranscriptPayload {
+  type: 'translated_transcript';
+  resultId: string;
+  speakerId: string;
+  speakerName: string;
+  originalText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  timestamp: number;
+}
+
 @WebSocketGateway({
   namespace: '/workspace',
   cors: {
@@ -209,5 +224,14 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   isUserOnline(userId: string): boolean {
     const sockets = this.userSockets.get(userId);
     return sockets ? sockets.size > 0 : false;
+  }
+
+  /**
+   * 특정 사용자에게 번역된 자막 전송
+   */
+  sendTranslatedTranscript(userId: string, payload: TranslatedTranscriptPayload) {
+    const roomName = `user:${userId}`;
+    this.server.to(roomName).emit('translatedTranscript', payload);
+    this.logger.debug(`Sent translated transcript to user ${userId}: ${payload.sourceLanguage} → ${payload.targetLanguage}`);
   }
 }

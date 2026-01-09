@@ -122,13 +122,15 @@ export class MeetingsController {
 
   /**
    * 트랜스크립션 언어 변경 (실시간)
+   * - 세션 전체 음성 인식 언어 변경 + 사용자별 번역 타겟 언어도 함께 업데이트
    */
   @Post(':sessionId/transcription/change-language')
   changeTranscriptionLanguage(
     @Param('sessionId') sessionId: string,
     @Body('languageCode') languageCode: string,
+    @Req() req: any,
   ) {
-    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode);
+    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode, req.user.id);
   }
 
   /**
@@ -239,5 +241,52 @@ export class MeetingsController {
   @Post(':sessionId/summary/regenerate')
   regenerateSummary(@Param('sessionId') sessionId: string) {
     return this.meetingsService.regenerateSummary(sessionId);
+  }
+
+  // ==========================================
+  // 번역 API
+  // ==========================================
+
+  /**
+   * 번역 활성화/비활성화 토글
+   */
+  @Post(':sessionId/translation/toggle')
+  toggleTranslation(
+    @Param('sessionId') sessionId: string,
+    @Body('enabled') enabled: boolean,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.toggleTranslation(sessionId, req.user.id, enabled);
+  }
+
+  /**
+   * 번역 상태 조회 (활성화 여부 + 사용자 언어)
+   */
+  @Get(':sessionId/translation/status')
+  getTranslationStatus(
+    @Param('sessionId') sessionId: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.getTranslationStatus(sessionId, req.user.id);
+  }
+
+  /**
+   * 사용자 언어 설정 변경 (기존 changeLanguage 확장)
+   */
+  @Post(':sessionId/translation/language')
+  setUserLanguage(
+    @Param('sessionId') sessionId: string,
+    @Body('languageCode') languageCode: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.setUserLanguage(sessionId, req.user.id, languageCode);
+  }
+
+  /**
+   * 세션 참가자들의 언어 설정 목록
+   */
+  @Get(':sessionId/translation/preferences')
+  getLanguagePreferences(@Param('sessionId') sessionId: string) {
+    return this.meetingsService.getSessionLanguagePreferences(sessionId);
   }
 }

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -18,9 +19,12 @@ import {
 } from '../dto/save-transcription.dto';
 import { RedisService } from '../../redis/redis.service';
 import { ChimeService } from './chime.service';
+import { TranslationService } from './translation.service';
 
 @Injectable()
 export class TranscriptionService {
+  private readonly logger = new Logger(TranscriptionService.name);
+
   constructor(
     @InjectRepository(MeetingSession)
     private sessionRepository: Repository<MeetingSession>,
@@ -32,6 +36,8 @@ export class TranscriptionService {
     private redisService: RedisService,
     @Inject(forwardRef(() => ChimeService))
     private chimeService: ChimeService,
+    @Inject(forwardRef(() => TranslationService))
+    private translationService: TranslationService,
   ) {}
 
   // ==========================================
@@ -182,6 +188,11 @@ export class TranscriptionService {
       },
     );
 
+    // 최종 결과에 대해 번역 트리거 (비동기)
+    this.triggerTranslation(sessionId, dto).catch((err) => {
+      this.logger.warn(`Translation trigger failed: ${err.message}`);
+    });
+
     const shouldFlush = await this.shouldAutoFlush(sessionId, bufferSize);
 
     if (shouldFlush) {
@@ -190,6 +201,50 @@ export class TranscriptionService {
     }
 
     return { buffered: true, bufferSize };
+  }
+
+  /**
+   * 번역 트리거 (비동기)
+   * Final 트랜스크립션이 저장될 때 호출됨
+   */
+  private async triggerTranslation(
+    sessionId: string,
+    dto: SaveTranscriptionDto,
+  ): Promise<void> {
+    // 발화자 정보 조회
+    const participant = await this.participantRepository.findOne({
+      where: { sessionId, chimeAttendeeId: dto.attendeeId },
+      relations: ['user'],
+    });
+
+    if (!participant) {
+      this.logger.debug(`Participant not found for attendeeId: ${dto.attendeeId}`);
+      return;
+    }
+
+    // 세션 시작 시간 조회
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+    const sessionStartMs = session?.startedAt?.getTime() || Date.now();
+
+    // 발화자의 언어 설정 조회 (발화자가 설정한 언어 = 발화자가 말하는 언어)
+    const speakerLanguage = await this.translationService.getUserLanguage(
+      sessionId,
+      participant.userId,
+    );
+
+    // 번역 요청 생성
+    await this.translationService.processTranslation({
+      sessionId,
+      speakerUserId: participant.userId,
+      speakerAttendeeId: dto.attendeeId,
+      speakerName: participant.user?.name || '참가자',
+      originalText: dto.transcript,
+      sourceLanguage: speakerLanguage, // 발화자의 개인 언어 설정 사용
+      resultId: dto.resultId,
+      timestamp: dto.startTimeMs - sessionStartMs,
+    });
   }
 
   async saveTranscriptionBatch(dto: SaveTranscriptionBatchDto): Promise<{

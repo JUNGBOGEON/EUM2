@@ -16,6 +16,7 @@ import {
 } from 'amazon-chime-sdk-component-library-react';
 import { ThemeProvider } from 'styled-components';
 import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
+import WhiteboardCanvas from '@/components/whiteboard/WhiteboardCanvas';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -43,6 +44,7 @@ function MeetingRoomContent() {
   const { isLocalUserSharing } = useContentShareState();
   const { roster } = useRosterState();
   const audioVideo = useAudioVideo();
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
 
   const participantCount = Object.keys(roster).length;
 
@@ -221,9 +223,15 @@ function MeetingRoomContent() {
         </div>
       </header>
 
-      {/* Video Grid */}
-      <main className="flex-1 p-4 overflow-hidden">
-        <VideoTileGrid layout="standard" />
+      {/* Video Grid or Whiteboard */}
+      <main className="flex-1 p-4 overflow-hidden relative">
+        {showWhiteboard ? (
+          <div className="absolute inset-0 z-10 bg-white">
+            <WhiteboardCanvas />
+          </div>
+        ) : (
+          <VideoTileGrid layout="standard" />
+        )}
       </main>
 
       {/* Controls */}
@@ -231,11 +239,10 @@ function MeetingRoomContent() {
         {/* Mute/Unmute */}
         <button
           onClick={toggleMute}
-          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
-            muted
+          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${muted
               ? 'bg-red-500 hover:bg-red-600'
               : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
-          }`}
+            }`}
           title={muted ? '음소거 해제' : '음소거'}
         >
           {muted ? (
@@ -253,11 +260,10 @@ function MeetingRoomContent() {
         {/* Video On/Off */}
         <button
           onClick={toggleVideo}
-          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
-            !isVideoEnabled
+          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${!isVideoEnabled
               ? 'bg-red-500 hover:bg-red-600'
               : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
-          }`}
+            }`}
           title={isVideoEnabled ? '카메라 끄기' : '카메라 켜기'}
         >
           {isVideoEnabled ? (
@@ -274,15 +280,28 @@ function MeetingRoomContent() {
         {/* Screen Share */}
         <button
           onClick={() => toggleContentShare()}
-          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
-            isLocalUserSharing
+          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${isLocalUserSharing
               ? 'bg-green-500 hover:bg-green-600'
               : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
-          }`}
+            }`}
           title={isLocalUserSharing ? '화면 공유 중지' : '화면 공유'}
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </button>
+
+        {/* Whiteboard Toggle */}
+        <button
+          onClick={() => setShowWhiteboard(!showWhiteboard)}
+          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${showWhiteboard
+              ? 'bg-blue-500 hover:bg-blue-600'
+              : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
+            }`}
+          title={showWhiteboard ? '화이트보드 닫기' : '화이트보드 열기'}
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
         </button>
 

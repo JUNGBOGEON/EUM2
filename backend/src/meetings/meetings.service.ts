@@ -177,18 +177,30 @@ export class MeetingsService {
     }
 
     // 새 참가자 추가
-    const attendee = await this.addAttendee(meeting, userId, ParticipantRole.PARTICIPANT);
+    try {
+      const attendee = await this.addAttendee(meeting, userId, ParticipantRole.PARTICIPANT);
 
-    // Redis 세션 업데이트
-    await this.redisService.addParticipant(meetingId, userId);
+      // Redis 세션 업데이트
+      await this.redisService.addParticipant(meetingId, userId);
 
-    return {
-      meeting,
-      attendee: {
-        attendeeId: attendee.chimeAttendeeId!,
-        joinToken: attendee.joinToken!,
-      },
-    };
+      return {
+        meeting,
+        attendee: {
+          attendeeId: attendee.chimeAttendeeId!,
+          joinToken: attendee.joinToken!,
+        },
+      };
+    } catch (error) {
+      if (error.name === 'NotFoundException' || error.name === 'NotFound') {
+        // AWS에서 미팅을 찾을 수 없는 경우 (만료 등)
+        // 미팅 상태 초기화하여 다시 시작할 수 있게 함
+        meeting.chimeMeetingId = undefined;
+        meeting.status = MeetingStatus.SCHEDULED;
+        await this.meetingRepository.save(meeting);
+        throw new BadRequestException('미팅 세션이 만료되었습니다. 다시 시작해 주세요.');
+      }
+      throw error;
+    }
   }
 
   // Chime Attendee 추가

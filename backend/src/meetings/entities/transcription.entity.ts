@@ -19,7 +19,7 @@ export class Transcription {
   originalText: string;
 
   // 원본 언어 코드 (ko, en, ja 등)
-  @Column()
+  @Column({ nullable: true })
   originalLanguage: string;
 
   // 번역된 텍스트 (JSON 형태로 여러 언어 저장)
@@ -33,7 +33,7 @@ export class Transcription {
   @JoinColumn({ name: 'meetingId' })
   meeting: Meeting;
 
-  @Column()
+  @Column({ nullable: true })
   meetingId: string;
 
   // 발화자

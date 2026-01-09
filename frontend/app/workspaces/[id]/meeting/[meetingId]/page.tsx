@@ -42,7 +42,7 @@ function MeetingRoomContent() {
   const router = useRouter();
   const workspaceId = params.id as string;
   const meetingId = params.meetingId as string;
-  
+
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
 
   // Custom hooks
@@ -95,7 +95,7 @@ function MeetingRoomContent() {
   const { tiles: remoteVideoTiles } = useRemoteVideoTileState();
 
   const participantCount = Object.keys(roster).length;
-  
+
   // Convert roster to participants array
   const participants = Object.entries(roster).map(([attendeeId, attendee]) => ({
     id: attendeeId,
@@ -155,7 +155,7 @@ function MeetingRoomContent() {
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
         {/* Video Area */}
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col h-full">
           <VideoGrid
             remoteVideoTiles={remoteVideoTiles}
             isVideoEnabled={isVideoEnabled}

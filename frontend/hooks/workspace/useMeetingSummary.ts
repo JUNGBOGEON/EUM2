@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import type { MeetingSummary, SummaryStatus } from '@/components/workspace/types';
+/**
+ * 미팅 요약 관리 훅
+ * 
+ * 새 API 클라이언트와 에러 핸들링 유틸리티를 사용합니다.
+ */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { useState, useEffect, useCallback } from 'react';
+import { meetingsApi } from '@/lib/api';
+import { handleError, getErrorMessage } from '@/lib/utils/error';
+import type { MeetingSummary, SummaryStatus } from '@/lib/types';
 
 export interface UseMeetingSummaryReturn {
   summary: MeetingSummary | null;
@@ -32,21 +38,12 @@ export function useMeetingSummary(
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/meetings/${sessionId}/summary`,
-        { credentials: 'include' }
-      );
-
-      if (!response.ok) {
-        throw new Error('요약 정보를 불러오는데 실패했습니다.');
-      }
-
-      const data = await response.json();
+      const data = await meetingsApi.getSummary(sessionId);
       setSummary(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : '요약 정보를 불러오는데 실패했습니다.'
-      );
+      const message = getErrorMessage(err);
+      setError(message);
+      handleError(err, { showToast: false, context: 'fetchSummary' });
     } finally {
       setIsLoading(false);
     }
@@ -59,19 +56,9 @@ export function useMeetingSummary(
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/meetings/${sessionId}/summary/regenerate`,
-        {
-          method: 'POST',
-          credentials: 'include',
-        }
-      );
+      await meetingsApi.regenerateSummary(sessionId);
 
-      if (!response.ok) {
-        throw new Error('요약 재생성 요청에 실패했습니다.');
-      }
-
-      // 요약 재생성 후 상태 업데이트를 위해 폴링 시작
+      // 요약 재생성 후 상태 업데이트를 위해 processing으로 설정
       setSummary((prev) =>
         prev ? { ...prev, status: 'processing' as SummaryStatus } : null
       );
@@ -81,9 +68,9 @@ export function useMeetingSummary(
         fetchSummary();
       }, 3000);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : '요약 재생성 요청에 실패했습니다.'
-      );
+      const message = getErrorMessage(err);
+      setError(message);
+      handleError(err, { showToast: true, context: 'regenerateSummary' });
     } finally {
       setIsRegenerating(false);
     }
@@ -120,3 +107,5 @@ export function useMeetingSummary(
     isRegenerating,
   };
 }
+
+export default useMeetingSummary;

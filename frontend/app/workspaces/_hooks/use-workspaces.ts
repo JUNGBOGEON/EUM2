@@ -1,10 +1,17 @@
 'use client';
 
+/**
+ * 워크스페이스 목록 관리 훅
+ * 
+ * 새 API 클라이언트와 에러 핸들링 유틸리티를 사용합니다.
+ */
+
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { API_URL } from '../_lib/constants';
-import type { Workspace, UserInfo } from '../_lib/types';
+import { authApi, workspacesApi } from '@/lib/api';
+import { handleError, ApiError } from '@/lib/utils/error';
+import type { Workspace, UserInfo } from '@/lib/types';
 
 export function useWorkspaces() {
   const router = useRouter();
@@ -28,25 +35,17 @@ export function useWorkspaces() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const userRes = await fetch(`${API_URL}/api/auth/me`, {
-          credentials: 'include',
-        });
-        if (!userRes.ok) {
+        const userData = await authApi.me();
+        setUser(userData);
+
+        const workspacesData = await workspacesApi.list();
+        setWorkspaces(workspacesData);
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 401) {
           router.push('/login');
           return;
         }
-        const userData = await userRes.json();
-        setUser(userData);
-
-        const workspacesRes = await fetch(`${API_URL}/api/workspaces`, {
-          credentials: 'include',
-        });
-        if (workspacesRes.ok) {
-          const workspacesData = await workspacesRes.json();
-          setWorkspaces(workspacesData);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
+        handleError(error, { showToast: false, context: 'fetchWorkspaces' });
         router.push('/login');
       } finally {
         setLoading(false);
@@ -59,27 +58,22 @@ export function useWorkspaces() {
   // Refresh workspaces
   const refreshWorkspaces = useCallback(async () => {
     try {
-      const workspacesRes = await fetch(`${API_URL}/api/workspaces`, {
-        credentials: 'include',
-      });
-      if (workspacesRes.ok) {
-        const workspacesData = await workspacesRes.json();
-        setWorkspaces(workspacesData);
-      }
+      const workspacesData = await workspacesApi.list();
+      setWorkspaces(workspacesData);
     } catch (error) {
-      console.error('Failed to refresh workspaces:', error);
+      handleError(error, { showToast: false, context: 'refreshWorkspaces' });
     }
   }, []);
 
   // Logout handler
   const handleLogout = useCallback(async () => {
     try {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        credentials: 'include',
-      });
+      await authApi.logout();
       router.push('/');
     } catch (error) {
-      console.error('Failed to logout:', error);
+      handleError(error, { showToast: false, context: 'logout' });
+      // 에러가 나도 로그인 페이지로 이동
+      router.push('/');
     }
   }, [router]);
 
@@ -110,32 +104,22 @@ export function useWorkspaces() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_URL}/api/workspaces/${selectedWorkspace.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: editName.trim(),
-          description: editDescription.trim() || undefined,
-        }),
+      await workspacesApi.update(selectedWorkspace.id, {
+        name: editName.trim(),
+        description: editDescription.trim() || undefined,
       });
 
-      if (response.ok) {
-        setWorkspaces((prev) =>
-          prev.map((ws) =>
-            ws.id === selectedWorkspace.id
-              ? { ...ws, name: editName.trim(), description: editDescription.trim() || undefined }
-              : ws
-          )
-        );
-        setEditDialogOpen(false);
-        toast.success('워크스페이스가 수정되었습니다');
-      } else {
-        toast.error('워크스페이스 수정에 실패했습니다');
-      }
+      setWorkspaces((prev) =>
+        prev.map((ws) =>
+          ws.id === selectedWorkspace.id
+            ? { ...ws, name: editName.trim(), description: editDescription.trim() || undefined }
+            : ws
+        )
+      );
+      setEditDialogOpen(false);
+      toast.success('워크스페이스가 수정되었습니다');
     } catch (error) {
-      console.error('Failed to update workspace:', error);
-      toast.error('워크스페이스 수정에 실패했습니다');
+      handleError(error, { showToast: true, context: 'updateWorkspace' });
     } finally {
       setIsSubmitting(false);
     }
@@ -147,21 +131,12 @@ export function useWorkspaces() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_URL}/api/workspaces/${selectedWorkspace.id}/leave`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        setWorkspaces((prev) => prev.filter((ws) => ws.id !== selectedWorkspace.id));
-        setLeaveDialogOpen(false);
-        toast.success('워크스페이스에서 나갔습니다');
-      } else {
-        toast.error('워크스페이스 나가기에 실패했습니다');
-      }
+      await workspacesApi.leave(selectedWorkspace.id);
+      setWorkspaces((prev) => prev.filter((ws) => ws.id !== selectedWorkspace.id));
+      setLeaveDialogOpen(false);
+      toast.success('워크스페이스에서 나갔습니다');
     } catch (error) {
-      console.error('Failed to leave workspace:', error);
-      toast.error('워크스페이스 나가기에 실패했습니다');
+      handleError(error, { showToast: true, context: 'leaveWorkspace' });
     } finally {
       setIsSubmitting(false);
     }
@@ -173,21 +148,12 @@ export function useWorkspaces() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_URL}/api/workspaces/${selectedWorkspace.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        setWorkspaces((prev) => prev.filter((ws) => ws.id !== selectedWorkspace.id));
-        setDeleteDialogOpen(false);
-        toast.success('워크스페이스가 삭제되었습니다');
-      } else {
-        toast.error('워크스페이스 삭제에 실패했습니다');
-      }
+      await workspacesApi.delete(selectedWorkspace.id);
+      setWorkspaces((prev) => prev.filter((ws) => ws.id !== selectedWorkspace.id));
+      setDeleteDialogOpen(false);
+      toast.success('워크스페이스가 삭제되었습니다');
     } catch (error) {
-      console.error('Failed to delete workspace:', error);
-      toast.error('워크스페이스 삭제에 실패했습니다');
+      handleError(error, { showToast: true, context: 'deleteWorkspace' });
     } finally {
       setIsSubmitting(false);
     }
@@ -228,3 +194,5 @@ export function useWorkspaces() {
     refreshWorkspaces,
   };
 }
+
+export default useWorkspaces;

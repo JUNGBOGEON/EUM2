@@ -86,7 +86,7 @@ export function TranscriptPanel({
             // Transcripts list
             transcripts.map((item) => {
               // 동적으로 화자 정보 조회 (최신 참가자 정보 사용)
-              const dynamicSpeaker = getParticipantByAttendeeId?.(item.speakerId);
+              const dynamicSpeaker = item.speakerId ? getParticipantByAttendeeId?.(item.speakerId) : undefined;
               const speakerName = dynamicSpeaker?.name || item.speakerName;
               const speakerProfileImage = dynamicSpeaker?.profileImage || item.speakerProfileImage;
 

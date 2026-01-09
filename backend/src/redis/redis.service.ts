@@ -76,4 +76,132 @@ export class RedisService {
   async del(key: string): Promise<void> {
     await this.cacheManager.del(key);
   }
+
+
+  // ==========================================
+  // 트랜스크립션 버퍼 관리
+  // ==========================================
+
+  /**
+   * 트랜스크립션을 Redis 버퍼에 추가
+   * List 구조로 저장하여 순서 보장
+   */
+  async addTranscriptionToBuffer(
+    meetingId: string,
+    transcription: {
+      resultId: string;
+      isPartial: boolean;
+      transcript: string;
+      attendeeId: string;
+      externalUserId?: string;
+      startTimeMs: number;
+      endTimeMs: number;
+      languageCode?: string;
+      confidence?: number;
+      isStable?: boolean;
+    },
+  ): Promise<number> {
+    const key = `transcription:buffer:${meetingId}`;
+    const existingBuffer = await this.getTranscriptionBuffer(meetingId);
+
+    // 같은 resultId가 있으면 업데이트 (부분 결과 → 최종 결과)
+    const existingIndex = existingBuffer.findIndex(
+      (t) => t.resultId === transcription.resultId,
+    );
+
+    if (existingIndex >= 0) {
+      existingBuffer[existingIndex] = transcription;
+    } else {
+      existingBuffer.push(transcription);
+    }
+
+    // 버퍼 저장 (2시간 TTL)
+    await this.cacheManager.set(
+      key,
+      JSON.stringify(existingBuffer),
+      2 * 60 * 60 * 1000,
+    );
+
+    return existingBuffer.length;
+  }
+
+  /**
+   * 미팅의 트랜스크립션 버퍼 조회
+   */
+  async getTranscriptionBuffer(meetingId: string): Promise<
+    Array<{
+      resultId: string;
+      isPartial: boolean;
+      transcript: string;
+      attendeeId: string;
+      externalUserId?: string;
+      startTimeMs: number;
+      endTimeMs: number;
+      languageCode?: string;
+      confidence?: number;
+      isStable?: boolean;
+    }>
+  > {
+    const key = `transcription:buffer:${meetingId}`;
+    const data = await this.cacheManager.get<string>(key);
+    return data ? JSON.parse(data) : [];
+  }
+
+  /**
+   * 최종 결과만 필터링하여 조회 (isPartial = false)
+   */
+  async getFinalTranscriptionsFromBuffer(meetingId: string): Promise<
+    Array<{
+      resultId: string;
+      isPartial: boolean;
+      transcript: string;
+      attendeeId: string;
+      externalUserId?: string;
+      startTimeMs: number;
+      endTimeMs: number;
+      languageCode?: string;
+      confidence?: number;
+      isStable?: boolean;
+    }>
+  > {
+    const buffer = await this.getTranscriptionBuffer(meetingId);
+    return buffer.filter((t) => !t.isPartial);
+  }
+
+  /**
+   * 트랜스크립션 버퍼 삭제
+   */
+  async clearTranscriptionBuffer(meetingId: string): Promise<void> {
+    const key = `transcription:buffer:${meetingId}`;
+    await this.cacheManager.del(key);
+  }
+
+  /**
+   * 버퍼 크기 조회
+   */
+  async getTranscriptionBufferSize(meetingId: string): Promise<number> {
+    const buffer = await this.getTranscriptionBuffer(meetingId);
+    return buffer.length;
+  }
+
+  /**
+   * 마지막 플러시 타임스탬프 저장
+   */
+  async setLastFlushTime(meetingId: string): Promise<void> {
+    const key = `transcription:lastFlush:${meetingId}`;
+    await this.cacheManager.set(
+      key,
+      JSON.stringify(Date.now()),
+      2 * 60 * 60 * 1000,
+    );
+  }
+
+  /**
+   * 마지막 플러시 타임스탬프 조회
+   */
+  async getLastFlushTime(meetingId: string): Promise<number | null> {
+    const key = `transcription:lastFlush:${meetingId}`;
+    const data = await this.cacheManager.get<string>(key);
+    return data ? JSON.parse(data) : null;
+  }
 }

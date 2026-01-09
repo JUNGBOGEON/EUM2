@@ -3,40 +3,45 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Meeting } from './meeting.entity';
+import { MeetingSession } from './meeting-session.entity';
 
+/**
+ * Transcription Entity
+ *
+ * AI 요약 및 보고서 생성을 위해 최적화된 구조
+ * - MeetingSession에 귀속됨 (Workspace가 아님)
+ * - 발화자별 그룹화 가능 (speakerId, chimeAttendeeId)
+ * - 시간순 정렬 가능 (startTimeMs, endTimeMs)
+ * - 부분/최종 결과 구분 (isPartial, resultId)
+ * - 신뢰도 기반 필터링 (confidence)
+ * - 다국어 번역 지원 (translations)
+ */
 @Entity('transcriptions')
+@Index(['sessionId', 'startTimeMs']) // 세션별 시간순 조회 최적화
+@Index(['sessionId', 'speakerId']) // 세션별 발화자 조회 최적화
+@Index(['sessionId', 'resultId'], { unique: true }) // 중복 방지
 export class Transcription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // 원본 텍스트
-  @Column({ type: 'text' })
-  originalText: string;
-
-  // 원본 언어 코드 (ko, en, ja 등)
-  @Column({ nullable: true })
-  originalLanguage: string;
-
-  // 번역된 텍스트 (JSON 형태로 여러 언어 저장)
-  @Column({ type: 'jsonb', nullable: true })
-  translations: Record<string, string>;
-
-  // 미팅
-  @ManyToOne(() => Meeting, (meeting) => meeting.transcriptions, {
+  // ===== 미팅 세션 관계 =====
+  @ManyToOne(() => MeetingSession, (session) => session.transcriptions, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'meetingId' })
-  meeting: Meeting;
+  @JoinColumn({ name: 'sessionId' })
+  session: MeetingSession;
 
-  @Column({ nullable: true })
-  meetingId: string;
+  @Column()
+  @Index()
+  sessionId: string;
 
-  // 발화자
+  // ===== 발화자 정보 =====
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'speakerId' })
   speaker: User;
@@ -48,18 +53,68 @@ export class Transcription {
   @Column({ nullable: true })
   chimeAttendeeId?: string;
 
-  // 발화 시작 시간 (미팅 시작 기준 밀리초)
-  @Column({ type: 'bigint', nullable: true })
-  startTime?: number;
+  // Chime External User ID (백업 식별자)
+  @Column({ nullable: true })
+  externalUserId?: string;
 
-  // 발화 종료 시간
-  @Column({ type: 'bigint', nullable: true })
-  endTime?: number;
+  // ===== 텍스트 내용 =====
+  @Column({ type: 'text' })
+  originalText: string;
 
-  // 신뢰도 점수
+  @Column({ default: 'ko-KR' })
+  languageCode: string;
+
+  // 번역된 텍스트 (JSON)
+  @Column({ type: 'jsonb', nullable: true })
+  translations?: Record<string, string>;
+
+  // ===== 시간 정보 =====
+  @Column({ type: 'bigint' })
+  startTimeMs: number;
+
+  @Column({ type: 'bigint' })
+  endTimeMs: number;
+
+  // 세션 시작 기준 상대 시간 (초) - UI 표시용
+  @Column({ type: 'float', nullable: true })
+  relativeStartSec?: number;
+
+  // ===== AWS Transcribe 메타데이터 =====
+  @Column({ nullable: true })
+  resultId?: string;
+
+  @Column({ default: false })
+  isPartial: boolean;
+
   @Column({ type: 'float', nullable: true })
   confidence?: number;
 
+  @Column({ default: false })
+  isStable: boolean;
+
+  // ===== AI 분석용 메타데이터 =====
+  @Column({ nullable: true })
+  utteranceType?: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  sentiment?: {
+    label: string;
+    score: number;
+  };
+
+  @Column({ type: 'jsonb', nullable: true })
+  keywords?: string[];
+
+  @Column({ default: false })
+  isActionItem: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  actionItemContent?: string;
+
+  // ===== 시스템 필드 =====
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

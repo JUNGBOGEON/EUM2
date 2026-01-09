@@ -14,4 +14,12 @@ export class CreateWorkspaceDto {
   @IsOptional()
   @IsString()
   icon?: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnail?: string;
+
+  @IsOptional()
+  @IsString()
+  banner?: string;
 }

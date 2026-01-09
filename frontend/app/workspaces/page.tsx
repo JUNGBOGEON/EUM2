@@ -1,190 +1,182 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-interface Workspace {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  createdAt: string;
-}
-
-interface UserInfo {
-  id: string;
-  name: string;
-  email: string;
-  profileImage?: string;
-}
+import { useState, useCallback } from 'react';
+import { FolderOpen, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  SidebarInset,
+  SidebarProvider,
+} from '@/components/ui/sidebar';
+import {
+  AppSidebar,
+  WorkspaceCard,
+  EditDialog,
+  LeaveDialog,
+  DeleteDialog,
+  CreateWorkspaceModal,
+} from './_components';
+import { useWorkspaces } from './_hooks/use-workspaces';
+import { useInvitations } from './_hooks/use-invitations';
 
 export default function WorkspacesPage() {
-  const router = useRouter();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const userRes = await fetch(`${API_URL}/api/auth/me`, {
-          credentials: 'include',
-        });
-        if (!userRes.ok) {
-          router.push('/login');
-          return;
-        }
-        const userData = await userRes.json();
-        setUser(userData);
+  const {
+    workspaces,
+    user,
+    loading,
+    selectedWorkspace,
+    editDialogOpen,
+    setEditDialogOpen,
+    leaveDialogOpen,
+    setLeaveDialogOpen,
+    deleteDialogOpen,
+    setDeleteDialogOpen,
+    editName,
+    setEditName,
+    editDescription,
+    setEditDescription,
+    deleteConfirmName,
+    setDeleteConfirmName,
+    isSubmitting,
+    handleLogout,
+    openEditDialog,
+    openLeaveDialog,
+    openDeleteDialog,
+    handleEditSubmit,
+    handleLeave,
+    handleDelete,
+    refreshWorkspaces,
+  } = useWorkspaces();
 
-        const workspacesRes = await fetch(`${API_URL}/api/workspaces`, {
-          credentials: 'include',
-        });
-        if (workspacesRes.ok) {
-          const workspacesData = await workspacesRes.json();
-          setWorkspaces(workspacesData);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        router.push('/login');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const {
+    pendingInvitations,
+    acceptInvitation,
+    rejectInvitation,
+    isLoading: isLoadingInvitations,
+  } = useInvitations({ userId: user?.id });
 
-    fetchData();
-  }, [router]);
-
-  const handleLogout = async () => {
-    try {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        credentials: 'include',
-      });
-      router.push('/');
-    } catch (error) {
-      console.error('Failed to logout:', error);
-    }
-  };
+  // 초대 수락 후 워크스페이스 목록 갱신
+  const handleAcceptInvitation = useCallback(async (invitationId: string) => {
+    await acceptInvitation(invitationId);
+    await refreshWorkspaces();
+  }, [acceptInvitation, refreshWorkspaces]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#191919]">
-        <div className="h-5 w-5 border-2 border-[#37352f] border-t-transparent rounded-full animate-spin dark:border-[#ffffffcf] dark:border-t-transparent" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#191919]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-[#e3e2e0] bg-white dark:border-[#ffffff14] dark:bg-[#191919]">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-3">
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/logo/eum_black.svg"
-              alt="EUM"
-              width={36}
-              height={13}
-              className="dark:invert"
-            />
-          </Link>
+    <SidebarProvider>
+      <AppSidebar
+        user={user}
+        onLogout={handleLogout}
+        invitations={pendingInvitations}
+        isLoadingInvitations={isLoadingInvitations}
+        onAcceptInvitation={handleAcceptInvitation}
+        onRejectInvitation={rejectInvitation}
+      />
 
-          <div className="flex items-center gap-4">
-            {user && (
-              <div className="flex items-center gap-3">
-                {user.profileImage ? (
-                  <img
-                    src={user.profileImage}
-                    alt={user.name}
-                    className="h-7 w-7 rounded-full"
-                  />
-                ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f7f6f3] dark:bg-[#252525]">
-                    <span className="text-xs font-medium text-[#37352f] dark:text-[#ffffffcf]">
-                      {user.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-                <span className="text-sm text-[#37352f] dark:text-[#ffffffcf]">
-                  {user.name}
-                </span>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="px-4 py-1.5 text-sm text-[#37352fa6] hover:text-[#37352f] rounded-full hover:bg-[#f7f6f3] transition-colors dark:text-[#ffffff71] dark:hover:text-[#ffffffcf] dark:hover:bg-[#ffffff0e]"
-            >
-              로그아웃
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="mx-auto max-w-[1080px] px-4 py-12">
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <h1 className="text-[28px] font-bold text-[#37352f] dark:text-[#ffffffcf]">
-              워크스페이스
-            </h1>
-            <p className="mt-2 text-[15px] text-[#37352fa6] dark:text-[#ffffff71]">
-              팀과 함께 협업할 공간을 선택하세요
-            </p>
-          </div>
-          <Link
-            href="/workspaces/create"
-            className="px-5 py-2 text-[14px] font-medium text-white bg-[#37352f] hover:bg-[#2f2f2f] rounded-full transition-colors dark:bg-[#ffffffcf] dark:text-[#191919] dark:hover:bg-white"
-          >
-            + 새 워크스페이스
-          </Link>
-        </div>
-
-        {workspaces.length === 0 ? (
-          <div className="rounded-2xl border border-[#e3e2e0] bg-[#fafafa] p-16 text-center dark:border-[#ffffff14] dark:bg-[#252525]">
-            <p className="text-[15px] text-[#37352fa6] dark:text-[#ffffff71] mb-6">
-              아직 워크스페이스가 없습니다
-            </p>
-            <Link
-              href="/workspaces/create"
-              className="inline-flex px-5 py-2 text-[14px] font-medium text-white bg-[#37352f] hover:bg-[#2f2f2f] rounded-full transition-colors dark:bg-[#ffffffcf] dark:text-[#191919] dark:hover:bg-white"
-            >
-              첫 워크스페이스 만들기
-            </Link>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {workspaces.map((workspace) => (
-              <Link
-                key={workspace.id}
-                href={`/workspaces/${workspace.id}`}
-                className="group rounded-xl border border-[#e3e2e0] bg-white p-5 hover:bg-[#fafafa] transition-colors dark:border-[#ffffff14] dark:bg-[#252525] dark:hover:bg-[#2f2f2f]"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f7f6f3] text-lg dark:bg-[#191919]">
-                    <span className="text-[#37352f] dark:text-[#ffffffcf]">
-                      {workspace.icon || workspace.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-[#37352f] dark:text-[#ffffffcf] truncate">
-                      {workspace.name}
-                    </h3>
-                    {workspace.description && (
-                      <p className="mt-1 text-[14px] text-[#37352fa6] dark:text-[#ffffff71] line-clamp-2">
-                        {workspace.description}
-                      </p>
-                    )}
-                  </div>
+      <SidebarInset>
+        <div className="flex flex-1 flex-col">
+          <div className="flex-1 overflow-auto">
+            <div className="max-w-[1200px] mx-auto p-8 pt-14">
+              {/* Welcome Header */}
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-foreground">
+                    반가워요, <span className="text-primary">{user?.name}</span>님!
+                  </h1>
+                  <p className="text-muted-foreground mt-1">오늘도 좋은 하루 되세요</p>
                 </div>
-              </Link>
-            ))}
+                <Button
+                  onClick={() => setCreateModalOpen(true)}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  새 워크스페이스 만들기
+                </Button>
+              </div>
+
+              {/* Empty State or Workspace Grid */}
+              {workspaces.length === 0 ? (
+                <div className="border border-dashed border-border rounded-xl p-16 text-center bg-card/50">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <FolderOpen className="h-8 w-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    아직 워크스페이스가 없습니다
+                  </h3>
+                  <p className="text-muted-foreground mb-6">
+                    첫 번째 워크스페이스를 만들어 팀과 협업을 시작하세요
+                  </p>
+                  <Button
+                    onClick={() => setCreateModalOpen(true)}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    첫 워크스페이스 만들기
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {workspaces.map((workspace) => (
+                    <WorkspaceCard
+                      key={workspace.id}
+                      workspace={workspace}
+                      user={user}
+                      onEdit={openEditDialog}
+                      onDelete={openDeleteDialog}
+                      onLeave={openLeaveDialog}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </main>
-    </div>
+        </div>
+      </SidebarInset>
+
+      {/* Create Workspace Modal */}
+      <CreateWorkspaceModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={refreshWorkspaces}
+      />
+
+      {/* Dialogs */}
+      <EditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        editName={editName}
+        editDescription={editDescription}
+        onEditNameChange={setEditName}
+        onEditDescriptionChange={setEditDescription}
+        onSubmit={handleEditSubmit}
+        isSubmitting={isSubmitting}
+      />
+
+      <LeaveDialog
+        open={leaveDialogOpen}
+        onOpenChange={setLeaveDialogOpen}
+        workspace={selectedWorkspace}
+        onLeave={handleLeave}
+        isSubmitting={isSubmitting}
+      />
+
+      <DeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        workspace={selectedWorkspace}
+        deleteConfirmName={deleteConfirmName}
+        onDeleteConfirmNameChange={setDeleteConfirmName}
+        onDelete={handleDelete}
+        isSubmitting={isSubmitting}
+      />
+    </SidebarProvider>
   );
 }

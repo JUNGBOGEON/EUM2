@@ -1,0 +1,514 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+
+import { MeetingSession } from '../entities/meeting-session.entity';
+import { SessionParticipant } from '../entities/session-participant.entity';
+import { Transcription } from '../entities/transcription.entity';
+import {
+  SaveTranscriptionDto,
+  SaveTranscriptionBatchDto,
+} from '../dto/save-transcription.dto';
+import { RedisService } from '../../redis/redis.service';
+import { ChimeService } from './chime.service';
+
+@Injectable()
+export class TranscriptionService {
+  constructor(
+    @InjectRepository(MeetingSession)
+    private sessionRepository: Repository<MeetingSession>,
+    @InjectRepository(SessionParticipant)
+    private participantRepository: Repository<SessionParticipant>,
+    @InjectRepository(Transcription)
+    private transcriptionRepository: Repository<Transcription>,
+    private configService: ConfigService,
+    private redisService: RedisService,
+    @Inject(forwardRef(() => ChimeService))
+    private chimeService: ChimeService,
+  ) {}
+
+  // ==========================================
+  // 트랜스크립션 시작/중지
+  // ==========================================
+
+  async startTranscription(
+    sessionId: string,
+    languageCode: string = 'ko-KR',
+  ): Promise<{ success: boolean; sessionId: string }> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
+    }
+
+    if (!session.chimeMeetingId) {
+      throw new BadRequestException('Chime 세션이 아직 시작되지 않았습니다.');
+    }
+
+    await this.chimeService.startSessionTranscription(
+      session.chimeMeetingId,
+      languageCode,
+    );
+
+    return {
+      success: true,
+      sessionId: session.id,
+    };
+  }
+
+  async stopTranscription(sessionId: string): Promise<{ success: boolean }> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
+    }
+
+    if (!session.chimeMeetingId) {
+      throw new BadRequestException('Chime 세션이 아직 시작되지 않았습니다.');
+    }
+
+    await this.chimeService.stopSessionTranscription(session.chimeMeetingId);
+
+    return { success: true };
+  }
+
+  /**
+   * 트랜스크립션 언어 변경 (실시간)
+   * 현재 트랜스크립션을 중지하고 새 언어로 재시작
+   */
+  async changeLanguage(
+    sessionId: string,
+    newLanguageCode: string,
+  ): Promise<{ success: boolean; languageCode: string }> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
+    }
+
+    if (!session.chimeMeetingId) {
+      throw new BadRequestException('Chime 세션이 아직 시작되지 않았습니다.');
+    }
+
+    // 현재 트랜스크립션 중지
+    try {
+      await this.chimeService.stopSessionTranscription(session.chimeMeetingId);
+    } catch (error) {
+      console.log('[Transcription] Stop failed (may not be running):', error);
+    }
+
+    // 짧은 대기 (AWS Transcribe 상태 전환 대기)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // 새 언어로 재시작
+    await this.chimeService.startSessionTranscription(
+      session.chimeMeetingId,
+      newLanguageCode,
+    );
+
+    // Redis에 현재 언어 저장
+    await this.redisService.set(
+      `transcription:language:${sessionId}`,
+      newLanguageCode,
+      2 * 60 * 60 * 1000, // 2시간 TTL
+    );
+
+    console.log(`[Transcription] Language changed to ${newLanguageCode} for session ${sessionId}`);
+
+    return {
+      success: true,
+      languageCode: newLanguageCode,
+    };
+  }
+
+  /**
+   * 세션의 현재 트랜스크립션 언어 조회
+   */
+  async getCurrentLanguage(sessionId: string): Promise<string> {
+    const cached = await this.redisService.get<string>(`transcription:language:${sessionId}`);
+    return cached || 'ko-KR'; // 기본값
+  }
+
+  // ==========================================
+  // 트랜스크립션 저장
+  // ==========================================
+
+  async saveTranscription(
+    dto: SaveTranscriptionDto,
+  ): Promise<{ buffered: boolean; bufferSize: number; flushed?: boolean }> {
+    const sessionId = dto.sessionId;
+    if (!sessionId) {
+      throw new BadRequestException('sessionId is required');
+    }
+
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('세션을 찾을 수 없습니다.');
+    }
+
+    if (dto.isPartial) {
+      return { buffered: false, bufferSize: 0 };
+    }
+
+    const bufferSize = await this.redisService.addTranscriptionToBuffer(
+      sessionId,
+      {
+        resultId: dto.resultId,
+        isPartial: dto.isPartial,
+        transcript: dto.transcript,
+        attendeeId: dto.attendeeId,
+        externalUserId: dto.externalUserId,
+        startTimeMs: dto.startTimeMs,
+        endTimeMs: dto.endTimeMs,
+        languageCode: dto.languageCode,
+        confidence: dto.confidence,
+        isStable: dto.isStable,
+      },
+    );
+
+    const shouldFlush = await this.shouldAutoFlush(sessionId, bufferSize);
+
+    if (shouldFlush) {
+      await this.flushTranscriptionBuffer(sessionId);
+      return { buffered: true, bufferSize: 0, flushed: true };
+    }
+
+    return { buffered: true, bufferSize };
+  }
+
+  async saveTranscriptionBatch(dto: SaveTranscriptionBatchDto): Promise<{
+    buffered: number;
+    totalItems: number;
+    flushed: boolean;
+  }> {
+    let buffered = 0;
+    let flushed = false;
+
+    for (const item of dto.transcriptions) {
+      const result = await this.saveTranscription({
+        ...item,
+        sessionId: dto.sessionId,
+      });
+      if (result.buffered) buffered++;
+      if (result.flushed) flushed = true;
+    }
+
+    return { buffered, totalItems: dto.transcriptions.length, flushed };
+  }
+
+  // ==========================================
+  // 버퍼 플러시
+  // ==========================================
+
+  private async shouldAutoFlush(
+    sessionId: string,
+    bufferSize: number,
+  ): Promise<boolean> {
+    if (bufferSize >= 30) return true;
+
+    if (bufferSize > 0) {
+      const lastFlushTime = await this.redisService.getLastFlushTime(sessionId);
+      const now = Date.now();
+      if (!lastFlushTime || now - lastFlushTime >= 30000) return true;
+    }
+
+    return false;
+  }
+
+  async flushTranscriptionBuffer(sessionId: string): Promise<{
+    flushed: number;
+    success: boolean;
+  }> {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      return { flushed: 0, success: false };
+    }
+
+    const bufferedItems =
+      await this.redisService.getFinalTranscriptionsFromBuffer(sessionId);
+
+    if (bufferedItems.length === 0) {
+      return { flushed: 0, success: true };
+    }
+
+    const participants = await this.participantRepository.find({
+      where: { sessionId },
+    });
+    const attendeeToUserMap = new Map(
+      participants.map((p) => [p.chimeAttendeeId, p.userId]),
+    );
+
+    const sessionStartMs = session.startedAt?.getTime() || Date.now();
+
+    const transcriptions: Transcription[] = bufferedItems.map((item) => {
+      const transcription = new Transcription();
+      transcription.sessionId = sessionId;
+      transcription.resultId = item.resultId;
+      transcription.chimeAttendeeId = item.attendeeId;
+      transcription.externalUserId = item.externalUserId;
+      transcription.speakerId = attendeeToUserMap.get(item.attendeeId);
+      transcription.originalText = item.transcript;
+      transcription.languageCode = item.languageCode || 'ko-KR';
+      transcription.startTimeMs = item.startTimeMs;
+      transcription.endTimeMs = item.endTimeMs;
+      transcription.isPartial = false;
+      transcription.confidence = item.confidence;
+      transcription.isStable = item.isStable || false;
+      transcription.relativeStartSec =
+        (item.startTimeMs - sessionStartMs) / 1000;
+      return transcription;
+    });
+
+    try {
+      const chunkSize = 100;
+      for (let i = 0; i < transcriptions.length; i += chunkSize) {
+        const chunk = transcriptions.slice(i, i + chunkSize);
+        // upsert로 중복 시 업데이트 (sessionId + resultId unique)
+        await this.transcriptionRepository.upsert(chunk, ['sessionId', 'resultId']);
+      }
+
+      await this.redisService.clearTranscriptionBuffer(sessionId);
+      await this.redisService.setLastFlushTime(sessionId);
+
+      console.log(
+        `[Transcription] Flushed ${transcriptions.length} items for session ${sessionId}`,
+      );
+
+      return { flushed: transcriptions.length, success: true };
+    } catch (error) {
+      console.error('[Transcription] Failed to flush buffer:', error);
+      return { flushed: 0, success: false };
+    }
+  }
+
+  async flushAllTranscriptionsOnSessionEnd(sessionId: string): Promise<{
+    flushed: number;
+    success: boolean;
+  }> {
+    const result = await this.flushTranscriptionBuffer(sessionId);
+    await this.redisService.clearTranscriptionBuffer(sessionId);
+    return result;
+  }
+
+  // ==========================================
+  // 트랜스크립션 조회
+  // ==========================================
+
+  async getTranscriptionBufferStatus(sessionId: string): Promise<{
+    bufferSize: number;
+    lastFlushTime: number | null;
+    timeSinceLastFlush: number | null;
+  }> {
+    const bufferSize =
+      await this.redisService.getTranscriptionBufferSize(sessionId);
+    const lastFlushTime = await this.redisService.getLastFlushTime(sessionId);
+
+    return {
+      bufferSize,
+      lastFlushTime,
+      timeSinceLastFlush: lastFlushTime ? Date.now() - lastFlushTime : null,
+    };
+  }
+
+  async getTranscriptions(sessionId: string): Promise<Transcription[]> {
+    return this.transcriptionRepository.find({
+      where: { sessionId },
+      order: { startTimeMs: 'ASC' },
+      relations: ['speaker'],
+    });
+  }
+
+  async getFinalTranscriptions(sessionId: string): Promise<any[]> {
+    // DB에서 저장된 트랜스크립션 조회
+    const dbTranscriptions = await this.transcriptionRepository.find({
+      where: { sessionId, isPartial: false },
+      order: { startTimeMs: 'ASC' },
+      relations: ['speaker'],
+    });
+
+    // Redis 버퍼에서 아직 플러시되지 않은 트랜스크립션 조회
+    const bufferedItems = await this.redisService.getFinalTranscriptionsFromBuffer(sessionId);
+
+    // 세션 정보 조회 (시작 시간 계산용)
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
+    const sessionStartMs = session?.startedAt?.getTime() || Date.now();
+
+    // 참가자 정보 조회
+    const participants = await this.participantRepository.find({
+      where: { sessionId },
+      relations: ['user'],
+    });
+    const attendeeToUserMap = new Map(
+      participants.map((p) => [p.chimeAttendeeId, { id: p.userId, user: p.user }]),
+    );
+
+    // 버퍼 데이터를 DB 형식과 유사하게 변환
+    const bufferedTranscriptions = bufferedItems.map((item) => {
+      const userInfo = attendeeToUserMap.get(item.attendeeId);
+      return {
+        id: `buffer-${item.resultId}`,
+        resultId: item.resultId,
+        sessionId,
+        chimeAttendeeId: item.attendeeId,
+        externalUserId: item.externalUserId,
+        speakerId: userInfo?.id,
+        originalText: item.transcript,
+        languageCode: item.languageCode || 'ko-KR',
+        startTimeMs: item.startTimeMs,
+        endTimeMs: item.endTimeMs,
+        isPartial: false,
+        confidence: item.confidence,
+        isStable: item.isStable || false,
+        relativeStartSec: (item.startTimeMs - sessionStartMs) / 1000,
+        speaker: userInfo?.user || null,
+      };
+    });
+
+    // DB에 이미 있는 resultId는 제외 (중복 방지)
+    const dbResultIds = new Set(dbTranscriptions.map((t) => t.resultId));
+    const uniqueBufferedTranscriptions = bufferedTranscriptions.filter(
+      (t) => !dbResultIds.has(t.resultId),
+    );
+
+    // 합쳐서 시간순 정렬
+    const allTranscriptions = [...dbTranscriptions, ...uniqueBufferedTranscriptions];
+    allTranscriptions.sort((a, b) => Number(a.startTimeMs) - Number(b.startTimeMs));
+
+    return allTranscriptions;
+  }
+
+  async getTranscriptionsBySpeaker(
+    sessionId: string,
+  ): Promise<Record<string, Transcription[]>> {
+    const transcriptions = await this.getFinalTranscriptions(sessionId);
+    const grouped: Record<string, Transcription[]> = {};
+
+    for (const t of transcriptions) {
+      const speakerKey = t.speakerId || t.chimeAttendeeId || 'unknown';
+      if (!grouped[speakerKey]) grouped[speakerKey] = [];
+      grouped[speakerKey].push(t);
+    }
+
+    return grouped;
+  }
+
+  /**
+   * 중복 트랜스크립션 삭제 (sessionId + resultId 기준)
+   */
+  async cleanupDuplicateTranscriptions(): Promise<{
+    deletedCount: number;
+    success: boolean;
+  }> {
+    try {
+      // 중복 찾기: 같은 sessionId + resultId를 가진 레코드 중 첫 번째를 제외하고 삭제
+      const duplicates = await this.transcriptionRepository.query(`
+        DELETE FROM transcriptions
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id,
+              ROW_NUMBER() OVER (PARTITION BY "sessionId", "resultId" ORDER BY "createdAt" ASC) as rn
+            FROM transcriptions
+            WHERE "resultId" IS NOT NULL
+          ) t
+          WHERE t.rn > 1
+        )
+        RETURNING id
+      `);
+
+      const deletedCount = Array.isArray(duplicates) ? duplicates.length : 0;
+      console.log(`[Transcription] Cleaned up ${deletedCount} duplicate transcriptions`);
+
+      return { deletedCount, success: true };
+    } catch (error) {
+      console.error('[Transcription] Failed to cleanup duplicates:', error);
+      return { deletedCount: 0, success: false };
+    }
+  }
+
+  async getTranscriptForSummary(sessionId: string): Promise<{
+    sessionId: string;
+    totalDurationMs: number;
+    speakers: Array<{ id: string; name: string | null }>;
+    transcripts: Array<{
+      speakerId: string;
+      speakerName: string | null;
+      text: string;
+      startTimeMs: number;
+      endTimeMs: number;
+      confidence: number | null;
+    }>;
+    fullText: string;
+  }> {
+    const transcriptions = await this.getFinalTranscriptions(sessionId);
+
+    if (transcriptions.length === 0) {
+      return {
+        sessionId,
+        totalDurationMs: 0,
+        speakers: [],
+        transcripts: [],
+        fullText: '',
+      };
+    }
+
+    const speakersMap = new Map<string, string | null>();
+    for (const t of transcriptions) {
+      const speakerId = t.speakerId || t.chimeAttendeeId || 'unknown';
+      if (!speakersMap.has(speakerId)) {
+        speakersMap.set(speakerId, t.speaker?.name || null);
+      }
+    }
+
+    const speakers = Array.from(speakersMap.entries()).map(([id, name]) => ({
+      id,
+      name,
+    }));
+
+    const transcripts = transcriptions.map((t) => ({
+      speakerId: t.speakerId || t.chimeAttendeeId || 'unknown',
+      speakerName: t.speaker?.name || null,
+      text: t.originalText,
+      startTimeMs: Number(t.startTimeMs),
+      endTimeMs: Number(t.endTimeMs),
+      confidence: t.confidence ?? null,
+    }));
+
+    const fullText = transcriptions.map((t) => t.originalText).join(' ');
+
+    const startTime = Math.min(
+      ...transcriptions.map((t) => Number(t.startTimeMs)),
+    );
+    const endTime = Math.max(
+      ...transcriptions.map((t) => Number(t.endTimeMs)),
+    );
+
+    return {
+      sessionId,
+      totalDurationMs: endTime - startTime,
+      speakers,
+      transcripts,
+      fullText,
+    };
+  }
+}

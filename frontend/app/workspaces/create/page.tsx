@@ -1,19 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import { X } from 'lucide-react';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import { StepProfile, StepDescription, StepInvite } from './_components';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+interface InvitedUser {
+  id: string;
+  name: string;
+  email: string;
+  profileImage?: string;
+}
+
+// Animation transition
+const pageTransition = {
+  type: 'tween' as const,
+  ease: 'easeInOut' as const,
+  duration: 0.3,
+};
+
 export default function CreateWorkspacePage() {
   const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [direction, setDirection] = useState(1); // 1 for forward, -1 for backward
+
+  // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [invitedUsers, setInvitedUsers] = useState<InvitedUser[]>([]);
 
+  // Auth check
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -30,126 +54,199 @@ export default function CreateWorkspacePage() {
     checkAuth();
   }, [router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
 
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
     try {
+      // Create workspace
       const response = await fetch(`${API_URL}/api/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name, description: description || undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          thumbnail: profileImage || undefined,
+        }),
       });
 
-      if (response.ok) {
-        router.push('/workspaces');
-      } else {
+      if (!response.ok) {
         const data = await response.json();
-        setError(data.message || '워크스페이스 생성에 실패했습니다.');
+        throw new Error(data.message || '워크스페이스 생성에 실패했습니다.');
       }
-    } catch {
-      setError('서버와 통신 중 오류가 발생했습니다.');
+
+      const workspace = await response.json();
+
+      // Invite users if any
+      if (invitedUsers.length > 0) {
+        const invitePromises = invitedUsers.map((user) =>
+          fetch(`${API_URL}/api/workspaces/${workspace.id}/invite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ userId: user.id }),
+          })
+        );
+
+        await Promise.allSettled(invitePromises);
+      }
+
+      toast.success('워크스페이스가 생성되었습니다!');
+      router.push(`/workspaces/${workspace.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '오류가 발생했습니다.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
+  const goToStep = (step: number) => {
+    setDirection(step > currentStep ? 1 : -1);
+    setCurrentStep(step);
+  };
+
+  // Dynamic variants based on direction
+  const slideVariants = {
+    initial: (dir: number) => ({
+      opacity: 0,
+      y: dir > 0 ? 40 : -40,
+    }),
+    animate: {
+      opacity: 1,
+      y: 0,
+    },
+    exit: (dir: number) => ({
+      opacity: 0,
+      y: dir > 0 ? -40 : 40,
+    }),
+  };
+
   return (
-    <div className="min-h-screen bg-white dark:bg-[#191919]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-[#e3e2e0] bg-white dark:border-[#ffffff14] dark:bg-[#191919]">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-3">
-          <Link href="/workspaces" className="flex items-center">
-            <Image
-              src="/logo/eum_black.svg"
-              alt="EUM"
-              width={36}
-              height={13}
-              className="dark:invert"
-            />
-          </Link>
-          <Link
-            href="/workspaces"
-            className="text-[14px] text-[#37352fa6] hover:text-[#37352f] transition-colors dark:text-[#ffffff71] dark:hover:text-[#ffffffcf]"
-          >
-            취소
-          </Link>
-        </div>
-      </header>
+    <motion.div
+      initial={{ opacity: 0, y: '100%' }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: '100%' }}
+      transition={{
+        type: 'tween' as const,
+        ease: [0.16, 1, 0.3, 1],
+        duration: 0.5,
+      }}
+      className="min-h-screen bg-background flex"
+    >
+      {/* Left Side - Video (70%) */}
+      <div className="hidden lg:flex lg:w-[70%] relative bg-background overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          className="w-full h-full object-cover"
+        >
+          <source src="/video/idea_motion_graphics.MOV" type="video/mp4" />
+        </video>
+        {/* Gradient overlay for smooth transition */}
+        <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-r from-transparent to-background" />
+      </div>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-[480px] px-4 py-16">
-        <div className="mb-10">
-          <h1 className="text-[28px] font-bold text-[#37352f] dark:text-[#ffffffcf]">
-            새 워크스페이스
-          </h1>
-          <p className="mt-2 text-[15px] text-[#37352fa6] dark:text-[#ffffff71]">
-            팀과 함께할 공간을 만드세요
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[14px] text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-[14px] font-medium text-[#37352f] dark:text-[#ffffffcf] mb-2"
-            >
-              이름
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="워크스페이스 이름"
-              className="w-full rounded-lg border border-[#e3e2e0] bg-white px-4 py-3 text-[15px] text-[#37352f] placeholder-[#37352f80] focus:border-[#37352f] focus:outline-none dark:border-[#ffffff14] dark:bg-[#252525] dark:text-[#ffffffcf] dark:placeholder-[#ffffff40] dark:focus:border-[#ffffff40]"
-              required
-              maxLength={100}
-            />
+      {/* Right Side - Form (30%) */}
+      <div className="w-full lg:w-[30%] min-w-[420px] flex flex-col bg-background">
+        {/* Minimal Header */}
+        <header className="flex items-center justify-between px-8 py-6">
+          <div className="flex items-center gap-1.5">
+            {[1, 2, 3].map((step) => (
+              <motion.div
+                key={step}
+                initial={false}
+                animate={{
+                  width: step === currentStep ? 24 : 6,
+                  backgroundColor:
+                    step <= currentStep
+                      ? 'hsl(var(--foreground))'
+                      : 'hsl(var(--muted))',
+                }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="h-1.5 rounded-full"
+              />
+            ))}
           </div>
+          <Link href="/workspaces">
+            <button className="p-2 rounded-full hover:bg-muted transition-colors">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </Link>
+        </header>
 
-          <div>
-            <label
-              htmlFor="description"
-              className="block text-[14px] font-medium text-[#37352f] dark:text-[#ffffffcf] mb-2"
-            >
-              설명 <span className="font-normal text-[#37352f80] dark:text-[#ffffff40]">(선택)</span>
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="어떤 공간인가요?"
-              rows={3}
-              className="w-full rounded-lg border border-[#e3e2e0] bg-white px-4 py-3 text-[15px] text-[#37352f] placeholder-[#37352f80] focus:border-[#37352f] focus:outline-none resize-none dark:border-[#ffffff14] dark:bg-[#252525] dark:text-[#ffffffcf] dark:placeholder-[#ffffff40] dark:focus:border-[#ffffff40]"
-              maxLength={500}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading || !name.trim()}
-            className="w-full flex items-center justify-center gap-2 rounded-full bg-[#37352f] px-6 py-3 text-[15px] font-medium text-white hover:bg-[#2f2f2f] disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-[#ffffffcf] dark:text-[#191919] dark:hover:bg-white"
-          >
-            {isLoading ? (
-              <>
-                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin dark:border-[#191919] dark:border-t-transparent" />
-                생성 중...
-              </>
-            ) : (
-              '워크스페이스 생성'
+        {/* Form Content */}
+        <div className="flex-1 overflow-hidden px-8 pb-8">
+          <AnimatePresence mode="wait" custom={direction}>
+            {currentStep === 1 && (
+              <motion.div
+                key="step-1"
+                custom={direction}
+                variants={slideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+                className="h-full"
+              >
+                <StepProfile
+                  name={name}
+                  setName={setName}
+                  profileImage={profileImage}
+                  setProfileImage={setProfileImage}
+                  onNext={() => goToStep(2)}
+                />
+              </motion.div>
             )}
-          </button>
-        </form>
-      </main>
-    </div>
+
+            {currentStep === 2 && (
+              <motion.div
+                key="step-2"
+                custom={direction}
+                variants={slideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+                className="h-full"
+              >
+                <StepDescription
+                  description={description}
+                  setDescription={setDescription}
+                  onNext={() => goToStep(3)}
+                  onBack={() => goToStep(1)}
+                  onSkip={() => goToStep(3)}
+                />
+              </motion.div>
+            )}
+
+            {currentStep === 3 && (
+              <motion.div
+                key="step-3"
+                custom={direction}
+                variants={slideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+                className="h-full"
+              >
+                <StepInvite
+                  invitedUsers={invitedUsers}
+                  setInvitedUsers={setInvitedUsers}
+                  onSubmit={handleSubmit}
+                  onBack={() => goToStep(2)}
+                  onSkip={handleSubmit}
+                  isSubmitting={isSubmitting}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
   );
 }

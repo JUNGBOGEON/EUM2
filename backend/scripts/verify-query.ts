@@ -1,31 +1,20 @@
 import { DataSource } from 'typeorm';
-import * as fs from 'fs';
-import * as path from 'path';
+import { parseEnv } from './utils/env-parser';
 
 async function run() {
-    const envPath = path.join(__dirname, '..', '.env');
-    const envContent = fs.readFileSync(envPath, 'utf-8');
-    const env: any = {};
-    envContent.split('\n').forEach(line => {
-        const parts = line.split('=');
-        if (parts.length >= 2) {
-            env[parts[0].trim()] = parts.slice(1).join('=').trim();
-        }
-    });
-
-    const isRds = env.DB_HOST && env.DB_HOST.includes('rds.amazonaws.com');
+    const env = parseEnv();
     console.log('Connecting to:', env.DB_HOST);
 
     const dataSource = new DataSource({
         type: 'postgres',
-        host: env.DB_HOST || 'localhost',
-        port: parseInt(env.DB_PORT) || 5432,
+        host: env.DB_HOST,
+        port: parseInt(env.DB_PORT),
         username: env.DB_USERNAME,
         password: env.DB_PASSWORD,
         database: env.DB_DATABASE,
         synchronize: false,
         logging: false,
-        ssl: isRds ? { rejectUnauthorized: false } : false,
+        ssl: env.isRds ? { rejectUnauthorized: false } : false,
     });
 
     try {
@@ -40,7 +29,7 @@ async function run() {
             console.error('Test 1 Failed:', e.message);
         }
 
-        // 2. Aliased check (The failing one)
+        // 2. Aliased check
         console.log('Test 2: Aliased Select');
         try {
             const query = `
@@ -56,6 +45,7 @@ async function run() {
 
     } catch (e) {
         console.error('Connection failed:', e);
+        process.exit(1);
     } finally {
         if (dataSource.isInitialized) await dataSource.destroy();
     }

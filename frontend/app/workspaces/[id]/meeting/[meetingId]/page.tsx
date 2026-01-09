@@ -29,6 +29,7 @@ import {
   VideoGrid,
   TranscriptPanel,
   DeviceSettingsDialog,
+  FloatingSubtitle,
 } from './_components';
 
 // Legacy components for loading/error states
@@ -88,6 +89,7 @@ function MeetingRoomContent() {
     currentUserName: currentUser?.name,
     currentUserProfileImage: currentUser?.profileImage,
     currentAttendeeId,
+    userId,
   });
 
   // Translation hook
@@ -96,6 +98,7 @@ function MeetingRoomContent() {
     isTogglingTranslation,
     toggleTranslation,
     getTranslation,
+    recentTranslations,
   } = useTranslation({
     meetingId,
     userId,
@@ -173,13 +176,21 @@ function MeetingRoomContent() {
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
         {/* Video Area */}
-        <div className="flex-1">
+        <div className="flex-1 relative">
           <VideoGrid
             remoteVideoTiles={remoteVideoTiles}
             isVideoEnabled={isVideoEnabled}
             onToggleVideo={handleToggleVideo}
             currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
           />
+          
+          {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
+          {translationEnabled && recentTranslations.length > 0 && (
+            <FloatingSubtitle
+              translations={recentTranslations}
+              getParticipantByAttendeeId={getParticipantByAttendeeId}
+            />
+          )}
         </div>
 
         {/* Transcript Panel - Always visible on right */}

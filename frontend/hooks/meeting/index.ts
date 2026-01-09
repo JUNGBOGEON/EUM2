@@ -8,4 +8,4 @@ export type { UseDeviceManagerReturn } from './useDeviceManager';
 export type { UseTranscriptionReturn, UseTranscriptionOptions } from './useTranscription';
 export type { UseMeetingConnectionReturn, UseMeetingConnectionOptions } from './useMeetingConnection';
 export type { UseParticipantsReturn, UseParticipantsOptions, ParticipantDetails } from './useParticipants';
-export type { UseTranslationReturn, UseTranslationOptions } from './useTranslation';
+export type { UseTranslationReturn, UseTranslationOptions, RecentTranslation } from './useTranslation';

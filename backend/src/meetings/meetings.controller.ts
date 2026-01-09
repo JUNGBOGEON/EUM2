@@ -134,11 +134,14 @@ export class MeetingsController {
   }
 
   /**
-   * 현재 트랜스크립션 언어 조회
+   * 현재 트랜스크립션 언어 조회 (사용자별)
    */
   @Get(':sessionId/transcription/language')
-  getCurrentTranscriptionLanguage(@Param('sessionId') sessionId: string) {
-    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId);
+  getCurrentTranscriptionLanguage(
+    @Param('sessionId') sessionId: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId, req.user.id);
   }
 
   /**

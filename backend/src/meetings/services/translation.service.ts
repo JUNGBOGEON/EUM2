@@ -34,7 +34,8 @@ export interface TranslationRequest {
 export interface TranslatedTranscriptPayload {
   type: 'translated_transcript';
   resultId: string;
-  speakerId: string;
+  speakerId: string;        // attendeeId (프론트엔드 조회용)
+  speakerUserId: string;    // userId (본인 필터링용)
   speakerName: string;
   originalText: string;
   translatedText: string;
@@ -181,6 +182,7 @@ export class TranslationService {
     const {
       sessionId,
       speakerUserId,
+      speakerAttendeeId,
       originalText,
       sourceLanguage,
       resultId,
@@ -253,7 +255,8 @@ export class TranslationService {
           const payload: TranslatedTranscriptPayload = {
             type: 'translated_transcript',
             resultId,
-            speakerId: speakerUserId,
+            speakerId: speakerAttendeeId,   // attendeeId (프론트엔드 조회용)
+            speakerUserId,                   // userId (본인 필터링용)
             speakerName,
             originalText,
             translatedText,

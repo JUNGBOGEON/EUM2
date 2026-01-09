@@ -9,9 +9,22 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 // LRU 캐시 최대 크기 (메모리 무한 증가 방지)
 const MAX_TRANSLATIONS_CACHE_SIZE = 100;
 
+// 플로팅 자막 설정
+const SUBTITLE_DISPLAY_DURATION = 5000; // 5초 후 자동 숨김
+const SUBTITLE_EXIT_ANIMATION_DURATION = 300; // 퇴장 애니메이션 시간 (ms)
+const MAX_VISIBLE_SUBTITLES = 2; // 최대 2개 동시 표시
+
 export interface UseTranslationOptions {
   meetingId: string | undefined;
   userId: string | null | undefined;
+}
+
+/**
+ * 플로팅 자막용 최근 번역 (본인 발화 제외)
+ */
+export interface RecentTranslation extends TranslatedTranscript {
+  expiresAt: number; // 자동 숨김 타이머
+  isExiting?: boolean; // 퇴장 애니메이션 상태
 }
 
 export interface UseTranslationReturn {
@@ -20,6 +33,8 @@ export interface UseTranslationReturn {
   isTogglingTranslation: boolean;
   // 번역된 자막 (resultId -> translation)
   translations: Map<string, TranslatedTranscript>;
+  // 플로팅 자막용 최근 번역 (본인 제외)
+  recentTranslations: RecentTranslation[];
   // 액션
   toggleTranslation: () => Promise<void>;
   getTranslation: (resultId: string) => TranslatedTranscript | undefined;
@@ -41,6 +56,9 @@ export function useTranslation({
   const [translationEnabled, setTranslationEnabled] = useState(false);
   const [isTogglingTranslation, setIsTogglingTranslation] = useState(false);
   const [translations, setTranslations] = useState<Map<string, TranslatedTranscript>>(new Map());
+  
+  // 플로팅 자막용 최근 번역 (본인 발화 제외)
+  const [recentTranslations, setRecentTranslations] = useState<RecentTranslation[]>([]);
 
   const hasLoadedStatusRef = useRef(false);
   const hasAuthenticatedRef = useRef(false);
@@ -101,6 +119,7 @@ export function useTranslation({
     const unsubscribe = on<TranslatedTranscript>('translatedTranscript', (payload) => {
       console.log('[Translation] 📥 Received:', payload);
 
+      // 1. 기존 translations Map 업데이트 (LRU 캐시)
       setTranslations((prev) => {
         const next = new Map(prev);
 
@@ -116,10 +135,50 @@ export function useTranslation({
         next.set(payload.resultId, payload);
         return next;
       });
+
+      // 2. 플로팅 자막: 본인 발화가 아닌 경우만 추가
+      // speakerUserId로 본인 필터링 (speakerId는 attendeeId임)
+      if (payload.speakerUserId !== userId) {
+        const newSubtitle: RecentTranslation = {
+          ...payload,
+          expiresAt: Date.now() + SUBTITLE_DISPLAY_DURATION,
+          isExiting: false,
+        };
+
+        setRecentTranslations((prev) => {
+          // 중복 방지: 이미 같은 resultId가 있으면 추가하지 않음
+          if (prev.some((t) => t.resultId === payload.resultId)) {
+            console.log('[Translation] 🔄 Duplicate subtitle ignored:', payload.resultId);
+            return prev;
+          }
+          
+          // 최대 개수 초과 시 오래된 것 제거
+          const filtered = prev.slice(-(MAX_VISIBLE_SUBTITLES - 1));
+          return [...filtered, newSubtitle];
+        });
+
+        // 퇴장 애니메이션 시작 (표시 시간 - 애니메이션 시간 후)
+        setTimeout(() => {
+          setRecentTranslations((prev) =>
+            prev.map((t) =>
+              t.resultId === payload.resultId ? { ...t, isExiting: true } : t
+            )
+          );
+        }, SUBTITLE_DISPLAY_DURATION - SUBTITLE_EXIT_ANIMATION_DURATION);
+
+        // 실제 제거 (표시 시간 후)
+        setTimeout(() => {
+          setRecentTranslations((prev) =>
+            prev.filter((t) => t.resultId !== payload.resultId)
+          );
+        }, SUBTITLE_DISPLAY_DURATION);
+
+        console.log('[Translation] 🎬 Added to floating subtitle:', payload.translatedText);
+      }
     });
 
     return unsubscribe;
-  }, [isConnected, on]);
+  }, [isConnected, on, userId]);
 
   // 번역 토글
   const toggleTranslation = useCallback(async () => {
@@ -160,6 +219,7 @@ export function useTranslation({
     translationEnabled,
     isTogglingTranslation,
     translations,
+    recentTranslations,
     toggleTranslation,
     getTranslation,
   };

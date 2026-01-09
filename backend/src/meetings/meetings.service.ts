@@ -143,19 +143,19 @@ export class MeetingsService {
    * - 사용자별 번역 타겟 언어도 함께 업데이트
    */
   async changeTranscriptionLanguage(sessionId: string, languageCode: string, userId?: string) {
-    // 1. 세션 레벨 트랜스크립션 언어 변경
-    const result = await this.transcriptionService.changeLanguage(sessionId, languageCode);
-
-    // 2. 사용자별 번역 타겟 언어도 함께 업데이트 (userId가 있는 경우)
-    if (userId) {
-      await this.translationService.setUserLanguage(sessionId, userId, languageCode);
-      this.logger.log(`[Translation] User ${userId} language set to ${languageCode}`);
-    }
-
-    return result;
+    // 세션 레벨 트랜스크립션 언어 변경 + 사용자별 번역 언어 설정
+    // userId를 전달하여 사용자별 언어 설정도 함께 저장
+    return this.transcriptionService.changeLanguage(sessionId, languageCode, userId);
   }
 
-  async getCurrentTranscriptionLanguage(sessionId: string) {
+  async getCurrentTranscriptionLanguage(sessionId: string, userId?: string) {
+    // 사용자별 언어 설정이 있으면 반환, 없으면 세션 기본 언어 반환
+    if (userId) {
+      const userLanguage = await this.translationService.getUserLanguage(sessionId, userId);
+      if (userLanguage) {
+        return userLanguage;
+      }
+    }
     return this.transcriptionService.getCurrentLanguage(sessionId);
   }
 

@@ -96,6 +96,7 @@ export class TranscriptionService {
   async changeLanguage(
     sessionId: string,
     newLanguageCode: string,
+    userId?: string,
   ): Promise<{ success: boolean; languageCode: string }> {
     const session = await this.sessionRepository.findOne({
       where: { id: sessionId },
@@ -109,30 +110,22 @@ export class TranscriptionService {
       throw new BadRequestException('Chime 세션이 아직 시작되지 않았습니다.');
     }
 
-    // 현재 트랜스크립션 중지
-    try {
-      await this.chimeService.stopSessionTranscription(session.chimeMeetingId);
-    } catch (error) {
-      console.log('[Transcription] Stop failed (may not be running):', error);
+    // 사용자별 언어 설정 저장 (번역용)
+    // 이 설정은 개인의 "말하는 언어" 및 "받을 번역 언어"를 의미
+    if (userId) {
+      await this.translationService.setUserLanguage(sessionId, userId, newLanguageCode);
+      this.logger.log(`[Transcription] User ${userId} language set to ${newLanguageCode}`);
     }
 
-    // 짧은 대기 (AWS Transcribe 상태 전환 대기)
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // NOTE: Chime Transcription은 세션당 하나의 언어만 지원하므로
+    // 개인 언어 변경 시 세션 전체 Transcription을 재시작하지 않음
+    // (다른 참가자에게 영향을 주지 않기 위해)
+    // 
+    // 개인 언어 설정은 다음 용도로 사용됨:
+    // 1. 발화 시: 이 사용자가 말하는 언어 (sourceLanguage)
+    // 2. 수신 시: 이 사용자가 받을 번역 언어 (targetLanguage)
 
-    // 새 언어로 재시작
-    await this.chimeService.startSessionTranscription(
-      session.chimeMeetingId,
-      newLanguageCode,
-    );
-
-    // Redis에 현재 언어 저장
-    await this.redisService.set(
-      `transcription:language:${sessionId}`,
-      newLanguageCode,
-      2 * 60 * 60 * 1000, // 2시간 TTL
-    );
-
-    console.log(`[Transcription] Language changed to ${newLanguageCode} for session ${sessionId}`);
+    console.log(`[Transcription] User language set to ${newLanguageCode} for user ${userId} in session ${sessionId}`);
 
     return {
       success: true,
@@ -172,6 +165,12 @@ export class TranscriptionService {
       return { buffered: false, bufferSize: 0 };
     }
 
+    // 참가자 정보 조회 (발화자 userId와 이름을 버퍼에 저장하기 위해)
+    const participant = await this.participantRepository.findOne({
+      where: { sessionId, chimeAttendeeId: dto.attendeeId },
+      relations: ['user'],
+    });
+
     const bufferSize = await this.redisService.addTranscriptionToBuffer(
       sessionId,
       {
@@ -185,6 +184,9 @@ export class TranscriptionService {
         languageCode: dto.languageCode,
         confidence: dto.confidence,
         isStable: dto.isStable,
+        // 발화자 정보 추가 (히스토리 조회 시 사용)
+        userId: participant?.userId,
+        speakerName: participant?.user?.name || '참가자',
       },
     );
 
@@ -320,7 +322,8 @@ export class TranscriptionService {
       transcription.resultId = item.resultId;
       transcription.chimeAttendeeId = item.attendeeId;
       transcription.externalUserId = item.externalUserId;
-      transcription.speakerId = attendeeToUserMap.get(item.attendeeId);
+      // 버퍼에 저장된 userId 우선 사용, 없으면 attendeeId로 조회
+      transcription.speakerId = item.userId || attendeeToUserMap.get(item.attendeeId);
       transcription.originalText = item.transcript;
       transcription.languageCode = item.languageCode || 'ko-KR';
       transcription.startTimeMs = item.startTimeMs;
@@ -420,14 +423,23 @@ export class TranscriptionService {
 
     // 버퍼 데이터를 DB 형식과 유사하게 변환
     const bufferedTranscriptions = bufferedItems.map((item) => {
+      // attendeeId로 현재 참가자 조회 (재입장 시 새 attendeeId 발급됨)
       const userInfo = attendeeToUserMap.get(item.attendeeId);
+      
+      // userId로 직접 참가자 조회 (버퍼에 저장된 userId 사용)
+      let speakerUser = userInfo?.user;
+      if (!speakerUser && item.userId) {
+        const participantByUserId = participants.find(p => p.userId === item.userId);
+        speakerUser = participantByUserId?.user;
+      }
+
       return {
         id: `buffer-${item.resultId}`,
         resultId: item.resultId,
         sessionId,
         chimeAttendeeId: item.attendeeId,
         externalUserId: item.externalUserId,
-        speakerId: userInfo?.id,
+        speakerId: item.userId || userInfo?.id,
         originalText: item.transcript,
         languageCode: item.languageCode || 'ko-KR',
         startTimeMs: item.startTimeMs,
@@ -436,7 +448,8 @@ export class TranscriptionService {
         confidence: item.confidence,
         isStable: item.isStable || false,
         relativeStartSec: (item.startTimeMs - sessionStartMs) / 1000,
-        speaker: userInfo?.user || null,
+        // speaker 정보: user 객체 또는 저장된 이름으로 폴백 객체 생성
+        speaker: speakerUser || (item.speakerName ? { name: item.speakerName } : null),
       };
     });
 

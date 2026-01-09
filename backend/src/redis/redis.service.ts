@@ -99,6 +99,8 @@ export class RedisService {
       languageCode?: string;
       confidence?: number;
       isStable?: boolean;
+      userId?: string;        // 발화자 userId (히스토리 조회용)
+      speakerName?: string;   // 발화자 이름 (폴백용)
     },
   ): Promise<number> {
     const key = `transcription:buffer:${meetingId}`;
@@ -140,6 +142,8 @@ export class RedisService {
       languageCode?: string;
       confidence?: number;
       isStable?: boolean;
+      userId?: string;
+      speakerName?: string;
     }>
   > {
     const key = `transcription:buffer:${meetingId}`;
@@ -162,6 +166,8 @@ export class RedisService {
       languageCode?: string;
       confidence?: number;
       isStable?: boolean;
+      userId?: string;
+      speakerName?: string;
     }>
   > {
     const buffer = await this.getTranscriptionBuffer(meetingId);

@@ -70,7 +70,7 @@ export function useMeetingConnection({
         email: userData.email,
         profileImage: userData.profileImage,
       });
-      
+
       // 동기적으로 현재 사용자 정보 캐시 설정 (이름)
       setCurrentUserCache({
         name: userData.name,
@@ -131,14 +131,32 @@ export function useMeetingConnection({
 
       // attendeeId 먼저 저장 (트랜스크립션 이벤트보다 먼저 설정되어야 함)
       setCurrentAttendeeId(attendee.attendeeId);
-      
+
       // 동기적으로 현재 사용자 정보 캐시 설정 (attendeeId)
       setCurrentUserCache({ attendeeId: attendee.attendeeId });
-      
+
       await meetingManager.join(meetingSessionConfiguration);
       await meetingManager.start();
 
       setMeeting(sessionInfo);
+
+      // Debug Observer
+      const observer = {
+        audioVideoDidStart: () => {
+          console.log('[MeetingConnection] AudioVideo started');
+        },
+        videoTileDidAdd: (tileState: any) => {
+          console.log('[MeetingConnection] Video tile added:', tileState);
+        },
+        videoTileDidRemove: (tileState: any) => {
+          console.log('[MeetingConnection] Video tile removed:', tileState);
+        },
+        encodingSimulcastLayersDidChange: (bitrate: any) => {
+          console.log('[MeetingConnection] Encoding Simulcast Change:', bitrate);
+        }
+      };
+      meetingManager.audioVideo?.addObserver(observer);
+
       setIsJoining(false);
     } catch (err) {
       console.error('Failed to join session:', err);

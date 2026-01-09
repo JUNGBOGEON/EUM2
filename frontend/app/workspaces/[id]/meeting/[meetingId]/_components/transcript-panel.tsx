@@ -1,10 +1,9 @@
 'use client';
 
-import { RefObject } from 'react';
+import { RefObject, useEffect } from 'react';
 import Image from 'next/image';
 import { Languages, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -45,6 +44,13 @@ export function TranscriptPanel({
 }: TranscriptPanelProps) {
   const currentLang = TRANSCRIPTION_LANGUAGES.find((l) => l.code === selectedLanguage);
 
+  // 자막 추가 시 자동 스크롤
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [transcripts]);
+
   return (
     <div className="w-[360px] flex-shrink-0 flex flex-col bg-[#1f1f1f] border-l border-white/10">
       {/* Header */}
@@ -61,7 +67,10 @@ export function TranscriptPanel({
       </div>
 
       {/* Transcript Content */}
-      <ScrollArea className="flex-1" ref={containerRef as any}>
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+      >
         <div className="p-4 space-y-4">
           {isLoadingHistory ? (
             // Loading skeletons
@@ -146,7 +155,7 @@ export function TranscriptPanel({
             })
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer: Language Selector + Status */}
       <div className="p-4 border-t border-white/10 space-y-3">

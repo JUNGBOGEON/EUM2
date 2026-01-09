@@ -22,6 +22,8 @@ interface WhiteboardState {
     // Tools & UI
     tool: WhiteboardTool;
     color: string;
+    penColor: string;
+    magicPenColor: string;
     penSize: number;
     eraserSize: number;
     smoothness: number;
@@ -64,11 +66,29 @@ interface WhiteboardState {
 export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     tool: 'pen',
     color: '#000000',
+    penColor: '#000000',
+    magicPenColor: '#000000',
     penSize: 2,
     eraserSize: 20,
     smoothness: 7,
-    setTool: (tool) => set({ tool }),
-    setColor: (color) => set({ color }),
+    setTool: (tool) => set((state) => {
+        let newColor = state.color;
+        if (tool === 'pen') {
+            newColor = state.penColor;
+        } else if (tool === 'magic-pen') {
+            newColor = state.magicPenColor;
+        }
+        return { tool, color: newColor };
+    }),
+    setColor: (color) => set((state) => {
+        const updates: Partial<WhiteboardState> = { color };
+        if (state.tool === 'pen') {
+            updates.penColor = color;
+        } else if (state.tool === 'magic-pen') {
+            updates.magicPenColor = color;
+        }
+        return updates;
+    }),
     setPenSize: (size) => set({ penSize: size }),
     setEraserSize: (size) => set({ eraserSize: size }),
     setSmoothness: (smoothness) => set({ smoothness }),

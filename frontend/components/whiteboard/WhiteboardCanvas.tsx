@@ -209,25 +209,29 @@ export default function WhiteboardCanvas() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [undo, redo, setZoom, setPan, zoom]);
 
-    // Helper function to update cursor
     const updateCursorForTool = useCallback((canvas: HTMLCanvasElement, currentTool: string, pSize: number, eSize: number, col: string, z: number) => {
         const generatePenCursor = (size: number, color: string) => {
-            const r = Math.max(2, size / 2);
-            const svgSize = Math.max(16, r * 2 + 4);
+            // size is diameter (stroke width). Radius is size / 2.
+            // Requirement: Cursor size must be proportional. We interpret this as "visualize exact size".
+            const r = size / 2;
+            // Ensure canvas is large enough for the circle + border
+            const svgSize = Math.max(24, r * 2 + 4);
             const cx = svgSize / 2;
+
             const svg = `
                 <svg xmlns='http://www.w3.org/2000/svg' height='${svgSize}' width='${svgSize}'>
                     <circle cx='${cx}' cy='${cx}' r='${r}' fill='${color}' />
-                    <circle cx='${cx}' cy='${cx}' r='${r + 0.5}' stroke='white' stroke-width='1' fill='none' opacity='0.5'/>
+                    <circle cx='${cx}' cy='${cx}' r='${Math.max(r, 0.5) + 0.5}' stroke='white' stroke-width='1' fill='none' opacity='0.5'/>
                 </svg>
             `.trim().replace(/\s+/g, ' ');
             return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cx}, crosshair`;
         };
 
         const generateEraserCursor = (size: number) => {
-            const r = Math.max(4, size / 2);
-            const svgSize = Math.max(16, r * 2 + 4);
+            const r = size / 2;
+            const svgSize = Math.max(24, r * 2 + 4);
             const cx = svgSize / 2;
+
             const svg = `
                 <svg xmlns='http://www.w3.org/2000/svg' height='${svgSize}' width='${svgSize}'>
                     <circle cx='${cx}' cy='${cx}' r='${r}' stroke='black' stroke-width='1' fill='white' opacity='0.8'/>
@@ -236,10 +240,57 @@ export default function WhiteboardCanvas() {
             return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cx}, cell`;
         };
 
-        if (currentTool === 'pen' || currentTool === 'magic-pen') {
-            canvas.style.cursor = generatePenCursor(pSize * z, col);
+        const generateMagicPenCursor = (size: number, color: string) => {
+            const r = size / 2;
+            // Magic Wand Icon SVG path (simplified)
+            // A wand stick + a star at the tip? 
+            // We want the "hotspot" to be the circle center, corresponding to drawing stroke.
+            // The wand should be decorating it. 
+            // Let's place the wand to the bottom-right of the circle?
+
+            const svgSize = Math.max(32, r * 2 + 20);
+            const cx = svgSize / 2;
+            const cy = svgSize / 2;
+
+            // Wand icon path (roughly: handle + star)
+            const wandPath = "M2,18 L10,10 M10,10 L14,6 M14,6 L18,2"; // Diagonal stick
+            const starPath = "M14,6 L12,4 L14,2 L16,4 Z"; // Star tip? Simplified.
+
+            // Using a nicer SVG string for wand
+            // Let's assume the cursor hotspot is (cx, cy).
+            // We draw the brush circle at (cx, cy).
+            // We draw the wand icon offset, e.g. pointing at (cx, cy).
+
+            // Actually, let's use a simple unicode or path for Wand.
+            // Wand icon: 🪄 (might not render in all OS/Browsers inside SVG consistently without font)
+            // Let's draw a simple vector wand.
+
+            const svg = `
+                <svg xmlns='http://www.w3.org/2000/svg' height='${svgSize}' width='${svgSize}'>
+                    <!-- Brush Size Circle -->
+                    <circle cx='${cx}' cy='${cy}' r='${r}' fill='${color}' opacity="0.6" />
+                    <circle cx='${cx}' cy='${cy}' r='${Math.max(r, 0.5) + 0.5}' stroke='white' stroke-width='1' fill='none'/>
+
+                    <!-- Wand Icon (Overlay/Decoration) -->
+                    <!-- Positioned slightly offset so it looks like it's drawing -->
+                    <g transform="translate(${cx + r + 2}, ${cy - r - 10}) scale(0.8)">
+                         <path d="M14.5 2c-.8 0-1.5.7-1.5 1.5S13.7 5 14.5 5 16 4.3 16 3.5 15.3 2 14.5 2z" fill="#FFD700"/>
+                         <path d="M4.2 19.8l7.6-7.6c.4-.4.4-1 0-1.4l-2.8-2.8c-.4-.4-1-.4-1.4 0L0 15.6c-.4.4-.4 1 0 1.4l2.8 2.8c.4.4 1 .4 1.4 0z" fill="#8B4513"/>
+                         <path d="M12.4 9.6l1.4-1.4c.4-.4.4-1 0-1.4l-1.4-1.4c-.4-.4-1-.4-1.4 0L9.6 6.8 12.4 9.6z" fill="#CCCCCC"/>
+                         <path d="M19 1l-2 2M21 4l-2-2M15 6l1-3M19 9l-3-1" stroke="#FFD700" stroke-width="2" stroke-linecap="round"/>
+                    </g>
+                </svg>
+            `.trim().replace(/\s+/g, ' ');
+
+            return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cy}, auto`;
+        };
+
+        if (currentTool === 'pen') {
+            canvas.style.cursor = generatePenCursor(pSize, col);
+        } else if (currentTool === 'magic-pen') {
+            canvas.style.cursor = generateMagicPenCursor(pSize, col);
         } else if (currentTool === 'eraser') {
-            canvas.style.cursor = generateEraserCursor(eSize * z);
+            canvas.style.cursor = generateEraserCursor(eSize);
         } else if (currentTool === 'pan') {
             canvas.style.cursor = 'grab';
         } else if (currentTool === 'select') {
@@ -301,7 +352,7 @@ export default function WhiteboardCanvas() {
             <div
                 className="absolute inset-0 z-0 pointer-events-none"
                 style={{
-                    backgroundImage: `radial-gradient(${GRID_SETTINGS.dotColor} ${GRID_SETTINGS.dotSize / zoom}px, transparent ${GRID_SETTINGS.dotSize / zoom}px)`,
+                    backgroundImage: `radial-gradient(${GRID_SETTINGS.dotColor} ${GRID_SETTINGS.dotSize}px, transparent ${GRID_SETTINGS.dotSize}px)`,
                     backgroundSize: `${GRID_SETTINGS.baseSize * zoom}px ${GRID_SETTINGS.baseSize * zoom}px`,
                     backgroundPosition: `${pan.x}px ${pan.y}px`,
                     opacity: 0.15 + (zoom * 0.05) // Dynamic opacity based on zoom

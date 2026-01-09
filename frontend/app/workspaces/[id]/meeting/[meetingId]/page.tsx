@@ -131,7 +131,7 @@ function MeetingRoomContent() {
         participants={participants}
         meetingStartTime={meetingStartTime}
         workspaceId={workspaceId}
-        // onEndMeeting={handleEndMeeting} // 필요한 경우 추가
+      // onEndMeeting={handleEndMeeting} // 필요한 경우 추가
       />
       {/* Permission Banner */}
       {permissionError && (
@@ -140,8 +140,8 @@ function MeetingRoomContent() {
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden relative">
         {/* Video Area or Whiteboard */}
-        <div className="flex-1 relative">
-           {showWhiteboard ? (
+        <div className="flex-1 relative flex flex-col h-full">
+          {showWhiteboard ? (
             <div className="absolute inset-0 z-10 bg-white">
               <WhiteboardCanvas />
             </div>
@@ -149,8 +149,9 @@ function MeetingRoomContent() {
             <VideoGrid
               remoteVideoTiles={remoteVideoTiles}
               isVideoEnabled={isVideoEnabled}
-              onToggleVideo={handleToggleVideo}
               currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+              participants={participants}
+              currentAttendeeId={currentAttendeeId}
             />
           )}
         </div>
@@ -168,32 +169,32 @@ function MeetingRoomContent() {
       </main>
       {/* Controls */}
       <div className="relative">
-          <MeetingControls
-            muted={muted}
-            isVideoEnabled={isVideoEnabled}
-            isLocalUserSharing={isLocalUserSharing}
-            isHost={isHost}
-            onToggleMute={handleToggleMute}
-            onToggleVideo={handleToggleVideo}
-            onToggleScreenShare={() => toggleContentShare()}
-            onOpenSettings={() => setShowDeviceSettings(true)}
-            onLeave={handleLeave}
-            onEndMeeting={handleEndMeeting}
-          />
-          {/* Temporary Whiteboard Toggle Button Overlay */}
-          <button
-              onClick={() => setShowWhiteboard(!showWhiteboard)}
-              className={`absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full transition-colors ${showWhiteboard
-                  ? 'bg-blue-500 hover:bg-blue-600'
-                  : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
-                }`}
-              title={showWhiteboard ? '화이트보드 닫기' : '화이트보드 열기'}
-              style={{ right: '180px' }} // 적절한 위치 조정
-            >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-          </button>
+        <MeetingControls
+          muted={muted}
+          isVideoEnabled={isVideoEnabled}
+          isLocalUserSharing={isLocalUserSharing}
+          isHost={isHost}
+          onToggleMute={handleToggleMute}
+          onToggleVideo={handleToggleVideo}
+          onToggleScreenShare={() => toggleContentShare()}
+          onOpenSettings={() => setShowDeviceSettings(true)}
+          onLeave={handleLeave}
+          onEndMeeting={handleEndMeeting}
+        />
+        {/* Temporary Whiteboard Toggle Button Overlay */}
+        <button
+          onClick={() => setShowWhiteboard(!showWhiteboard)}
+          className={`absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full transition-colors ${showWhiteboard
+            ? 'bg-blue-500 hover:bg-blue-600'
+            : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
+            }`}
+          title={showWhiteboard ? '화이트보드 닫기' : '화이트보드 열기'}
+          style={{ right: '180px' }} // 적절한 위치 조정
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
       </div>
       {/* Device Settings Dialog */}
       <DeviceSettingsDialog

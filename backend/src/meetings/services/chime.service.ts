@@ -185,7 +185,7 @@ export class ChimeService {
       joinToken: string;
     };
   }> {
-    const session = await this.sessionRepository.findOne({
+    let session = await this.sessionRepository.findOne({
       where: { id: sessionId },
     });
 
@@ -216,7 +216,26 @@ export class ChimeService {
     const role = session.hostId === userId 
       ? ParticipantRole.HOST 
       : ParticipantRole.PARTICIPANT;
-    const attendee = await this.addAttendee(session, userId, role);
+    
+    let attendee: SessionParticipant;
+    
+    try {
+      attendee = await this.addAttendee(session, userId, role);
+    } catch (error: any) {
+      // AWS Chime Meeting이 만료되었거나 삭제된 경우 새로 생성
+      if (error?.Code === 'NotFound' || error?.name === 'NotFoundException' || 
+          (error?.$metadata?.httpStatusCode === 404)) {
+        console.log(`Chime meeting ${session.chimeMeetingId} not found, recreating...`);
+        
+        // 새 Chime Meeting 생성
+        session = await this.recreateChimeMeeting(session);
+        
+        // 재시도
+        attendee = await this.addAttendee(session, userId, role);
+      } else {
+        throw error;
+      }
+    }
 
     // Redis 세션 업데이트
     await this.redisService.addParticipant(sessionId, userId);
@@ -365,6 +384,62 @@ export class ChimeService {
   /**
    * 참가자 추가 (내부 메서드)
    */
+
+  /**
+   * Chime Meeting이 만료된 경우 새로 생성 (내부 메서드)
+   */
+  private async recreateChimeMeeting(session: MeetingSession): Promise<MeetingSession> {
+    const externalMeetingId = uuidv4();
+
+    // 새 AWS Chime Meeting 생성
+    const createMeetingCommand = new CreateMeetingCommand({
+      ClientRequestToken: externalMeetingId,
+      ExternalMeetingId: externalMeetingId,
+      MediaRegion: this.configService.get('AWS_REGION') || 'ap-northeast-2',
+      MeetingFeatures: {
+        Audio: { EchoReduction: 'AVAILABLE' },
+        Video: { MaxResolution: 'FHD' },
+        Content: { MaxResolution: 'FHD' },
+        Attendee: { MaxCount: 10 },
+      },
+    });
+
+    const chimeMeetingResponse = await this.chimeClient.send(createMeetingCommand);
+    const chimeMeeting = chimeMeetingResponse.Meeting;
+
+    if (!chimeMeeting) {
+      throw new BadRequestException('Chime 미팅 재생성에 실패했습니다.');
+    }
+
+    // 세션 업데이트
+    session.externalMeetingId = externalMeetingId;
+    session.chimeMeetingId = chimeMeeting.MeetingId;
+    session.mediaPlacement = chimeMeeting.MediaPlacement as Record<string, any>;
+    session.mediaRegion = chimeMeeting.MediaRegion;
+
+    await this.sessionRepository.save(session);
+
+    // Redis 캐시 업데이트
+    await this.redisService.setMeetingSession(session.id, {
+      chimeMeetingId: chimeMeeting.MeetingId!,
+      mediaPlacement: chimeMeeting.MediaPlacement,
+      participants: [],
+    });
+
+    // 자동으로 트랜스크립션 시작
+    try {
+      const savedLanguage = await this.redisService.get(`transcription:language:${session.id}`);
+      const languageCode = (typeof savedLanguage === 'string' ? savedLanguage : null) || 'ko-KR';
+      await this.startSessionTranscription(chimeMeeting.MeetingId!, languageCode);
+    } catch (err) {
+      console.error('Failed to restart transcription:', err);
+    }
+
+    console.log(`Recreated Chime meeting: ${chimeMeeting.MeetingId} for session ${session.id}`);
+
+    return session;
+  }
+
   private async addAttendee(
     session: MeetingSession,
     userId: string,

@@ -59,7 +59,7 @@ function MeetingRoomContent() {
     clearPermissionError,
   } = useDeviceManager();
 
-  const { meeting, isJoining, error, userId, currentUser, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
+  const { meeting, isJoining, error, userId, currentUser, currentAttendeeId, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
     meetingId,
     workspaceId,
   });
@@ -83,6 +83,7 @@ function MeetingRoomContent() {
     meetingStartTime,
     currentUserName: currentUser?.name,
     currentUserProfileImage: currentUser?.profileImage,
+    currentAttendeeId,
   });
 
   // Chime SDK hooks

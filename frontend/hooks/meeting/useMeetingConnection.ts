@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMeetingManager } from 'amazon-chime-sdk-component-library-react';
 import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
 import type { MeetingInfo } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
+import { setCurrentUserCache, clearCurrentUserCache } from '@/lib/meeting/current-user-cache';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -26,6 +27,7 @@ export interface UseMeetingConnectionReturn {
   error: string | null;
   userId: string | null;
   currentUser: UserInfo | null;
+  currentAttendeeId: string | null;  // 현재 사용자의 Chime attendeeId
   isHost: boolean;
   handleLeave: () => Promise<void>;
   handleEndMeeting: () => Promise<void>;
@@ -44,6 +46,7 @@ export function useMeetingConnection({
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
+  const [currentAttendeeId, setCurrentAttendeeId] = useState<string | null>(null);
 
   // 호스트 여부 체크
   const isHost = !!(userId && meeting?.hostId && userId === meeting.hostId);
@@ -65,6 +68,12 @@ export function useMeetingConnection({
         id: userData.id,
         name: userData.name,
         email: userData.email,
+        profileImage: userData.profileImage,
+      });
+      
+      // 동기적으로 현재 사용자 정보 캐시 설정 (이름)
+      setCurrentUserCache({
+        name: userData.name,
         profileImage: userData.profileImage,
       });
 
@@ -120,6 +129,12 @@ export function useMeetingConnection({
         }
       );
 
+      // attendeeId 먼저 저장 (트랜스크립션 이벤트보다 먼저 설정되어야 함)
+      setCurrentAttendeeId(attendee.attendeeId);
+      
+      // 동기적으로 현재 사용자 정보 캐시 설정 (attendeeId)
+      setCurrentUserCache({ attendeeId: attendee.attendeeId });
+      
       await meetingManager.join(meetingSessionConfiguration);
       await meetingManager.start();
 
@@ -144,6 +159,7 @@ export function useMeetingConnection({
   // 회의 나가기 (본인만)
   const handleLeave = useCallback(async () => {
     try {
+      clearCurrentUserCache();  // 캐시 초기화
       await fetch(`${API_URL}/api/meetings/sessions/${sessionId}/leave`, {
         method: 'POST',
         credentials: 'include',
@@ -177,6 +193,7 @@ export function useMeetingConnection({
     error,
     userId,
     currentUser,
+    currentAttendeeId,
     isHost,
     handleLeave,
     handleEndMeeting,

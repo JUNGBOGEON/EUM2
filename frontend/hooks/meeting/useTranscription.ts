@@ -14,6 +14,7 @@ export interface UseTranscriptionOptions {
   meetingStartTime: number | null;
   currentUserName?: string;
   currentUserProfileImage?: string;
+  currentAttendeeId?: string | null;  // 현재 사용자의 Chime attendeeId
 }
 
 export interface UseTranscriptionReturn {
@@ -52,12 +53,14 @@ export function useTranscription({
   meetingStartTime,
   currentUserName,
   currentUserProfileImage,
+  currentAttendeeId,
 }: UseTranscriptionOptions): UseTranscriptionReturn {
   const meetingManager = useMeetingManager();
   const { getParticipantByAttendeeId } = useParticipants({
     meetingId,
     currentUserName,
     currentUserProfileImage,
+    currentAttendeeId,
   });
 
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);

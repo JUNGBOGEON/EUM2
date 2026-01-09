@@ -209,6 +209,14 @@ export class MeetingsController {
     return this.meetingsService.getTranscriptionBufferStatus(sessionId);
   }
 
+  /**
+   * 중복 트랜스크립션 정리 (관리자용)
+   */
+  @Post('transcriptions/cleanup-duplicates')
+  cleanupDuplicateTranscriptions() {
+    return this.meetingsService.cleanupDuplicateTranscriptions();
+  }
+
   // ==========================================
   // 요약 API
   // ==========================================

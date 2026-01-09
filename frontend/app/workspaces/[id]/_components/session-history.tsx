@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Clock, FileText, Users, ChevronRight, Play, MoreHorizontal, Download, Eye, Calendar, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +23,32 @@ import {
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MeetingSession } from '../_lib/types';
+import { API_URL } from '../_lib/constants';
+
+interface TranscriptItem {
+  id: string;
+  originalText: string;
+  speakerId?: string;
+  speaker?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  relativeStartSec?: number;
+  startTimeMs: number;
+}
+
+interface SessionDetail extends MeetingSession {
+  participants?: {
+    id: string;
+    userId: string;
+    user?: {
+      id: string;
+      name: string;
+      profileImage?: string;
+    };
+  }[];
+}
 
 interface SessionHistoryProps {
   sessions: MeetingSession[];
@@ -38,6 +66,56 @@ export function SessionHistory({
   hasMore,
 }: SessionHistoryProps) {
   const [selectedSession, setSelectedSession] = useState<MeetingSession | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(false);
+
+  // Fetch session detail and transcripts when a session is selected
+  useEffect(() => {
+    if (!selectedSession) {
+      setSessionDetail(null);
+      setTranscripts([]);
+      return;
+    }
+
+    const fetchSessionDetail = async () => {
+      setIsLoadingDetail(true);
+      try {
+        const response = await fetch(`${API_URL}/api/meetings/sessions/${selectedSession.id}`, {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSessionDetail(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch session detail:', error);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    };
+
+    const fetchTranscripts = async () => {
+      setIsLoadingTranscripts(true);
+      try {
+        const response = await fetch(`${API_URL}/api/meetings/${selectedSession.id}/transcriptions/final`, {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setTranscripts(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch transcripts:', error);
+      } finally {
+        setIsLoadingTranscripts(false);
+      }
+    };
+
+    fetchSessionDetail();
+    fetchTranscripts();
+  }, [selectedSession]);
 
   const formatDuration = (start: string, end?: string) => {
     if (!end) return '-';
@@ -85,6 +163,22 @@ export function SessionHistory({
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatTranscriptTime = (startTimeMs: number, sessionStartTime?: string) => {
+    if (!sessionStartTime) {
+      const totalSeconds = Math.floor(startTimeMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    const sessionStart = new Date(sessionStartTime).getTime();
+    const elapsedMs = startTimeMs - sessionStart;
+    const totalSeconds = Math.floor(Math.max(0, elapsedMs) / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -264,12 +358,17 @@ export function SessionHistory({
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">
-                      {selectedSession.participantCount || 1}명 참가
+                      {sessionDetail?.participants?.length || selectedSession.participantCount || 1}명 참가
                     </span>
                   </div>
                   {selectedSession.summary && (
                     <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-none">
                       요약 완료
+                    </Badge>
+                  )}
+                  {transcripts.length > 0 && (
+                    <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
+                      자막 {transcripts.length}개
                     </Badge>
                   )}
                 </div>
@@ -287,10 +386,16 @@ export function SessionHistory({
 
                   <TabsContent value="summary" className="flex-1 overflow-hidden mt-0 px-6 pb-6">
                     <ScrollArea className="h-full max-h-[calc(100vh-380px)]">
-                      {selectedSession.summary ? (
+                      {isLoadingDetail ? (
+                        <div className="py-4 space-y-4">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                        </div>
+                      ) : (sessionDetail?.summary || selectedSession.summary) ? (
                         <div className="py-4 space-y-4">
                           <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                            {selectedSession.summary}
+                            {sessionDetail?.summary || selectedSession.summary}
                           </p>
                         </div>
                       ) : (
@@ -314,20 +419,67 @@ export function SessionHistory({
 
                   <TabsContent value="transcript" className="flex-1 overflow-hidden mt-0 px-6 pb-6">
                     <ScrollArea className="h-full max-h-[calc(100vh-380px)]">
-                      <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
-                          <FileText className="h-7 w-7 text-muted-foreground" />
+                      {isLoadingTranscripts ? (
+                        <div className="py-4 space-y-4">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Skeleton className="h-6 w-6 rounded-full" />
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-3 w-12" />
+                              </div>
+                              <Skeleton className="h-4 w-full ml-8" />
+                            </div>
+                          ))}
                         </div>
-                        <p className="text-muted-foreground font-medium">
-                          전체 내용 보기
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          회의 중 기록된 전체 내용을 확인하세요
-                        </p>
-                        <Button variant="outline" size="sm" className="mt-4">
-                          내용 불러오기
-                        </Button>
-                      </div>
+                      ) : transcripts.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                            <FileText className="h-7 w-7 text-muted-foreground" />
+                          </div>
+                          <p className="text-muted-foreground font-medium">
+                            기록된 내용이 없습니다
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            회의 중 자막이 기록되지 않았습니다
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="py-4 space-y-4">
+                          {transcripts.map((item) => (
+                            <div key={item.id}>
+                              <div className="flex items-center gap-2 mb-1">
+                                {item.speaker?.profileImage ? (
+                                  <Image
+                                    src={item.speaker.profileImage}
+                                    alt={item.speaker.name}
+                                    width={24}
+                                    height={24}
+                                    className="rounded-full"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center">
+                                    <span className="text-[10px] text-primary font-medium">
+                                      {(item.speaker?.name || '참').charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="text-sm font-medium text-primary">
+                                  {item.speaker?.name || '참가자'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {item.relativeStartSec !== undefined
+                                    ? `${Math.floor(item.relativeStartSec / 60)}:${Math.floor(item.relativeStartSec % 60).toString().padStart(2, '0')}`
+                                    : formatTranscriptTime(item.startTimeMs, selectedSession?.startedAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground leading-relaxed pl-8">
+                                {item.originalText}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </ScrollArea>
                   </TabsContent>
                 </Tabs>

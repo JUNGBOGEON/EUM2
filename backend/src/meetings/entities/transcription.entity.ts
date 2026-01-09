@@ -25,6 +25,7 @@ import { MeetingSession } from './meeting-session.entity';
 @Entity('transcriptions')
 @Index(['sessionId', 'startTimeMs']) // 세션별 시간순 조회 최적화
 @Index(['sessionId', 'speakerId']) // 세션별 발화자 조회 최적화
+@Index(['sessionId', 'resultId'], { unique: true }) // 중복 방지
 export class Transcription {
   @PrimaryGeneratedColumn('uuid')
   id: string;

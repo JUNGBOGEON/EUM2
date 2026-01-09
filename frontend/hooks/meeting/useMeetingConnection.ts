@@ -13,11 +13,19 @@ export interface UseMeetingConnectionOptions {
   workspaceId: string | undefined;
 }
 
+export interface UserInfo {
+  id: string;
+  name: string;
+  email?: string;
+  profileImage?: string;
+}
+
 export interface UseMeetingConnectionReturn {
   meeting: MeetingInfo | null;
   isJoining: boolean;
   error: string | null;
   userId: string | null;
+  currentUser: UserInfo | null;
   isHost: boolean;
   handleLeave: () => Promise<void>;
   handleEndMeeting: () => Promise<void>;
@@ -35,6 +43,7 @@ export function useMeetingConnection({
   const [isJoining, setIsJoining] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
 
   // 호스트 여부 체크
   const isHost = !!(userId && meeting?.hostId && userId === meeting.hostId);
@@ -52,6 +61,12 @@ export function useMeetingConnection({
       }
       const userData = await userRes.json();
       setUserId(userData.id);
+      setCurrentUser({
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        profileImage: userData.profileImage,
+      });
 
       // 세션 정보 가져오기 (존재하면)
       let sessionData = null;
@@ -161,6 +176,7 @@ export function useMeetingConnection({
     isJoining,
     error,
     userId,
+    currentUser,
     isHost,
     handleLeave,
     handleEndMeeting,

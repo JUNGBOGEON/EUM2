@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Users, Timer, Copy, Check } from 'lucide-react';
+import { ChevronLeft, Users, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -25,7 +25,6 @@ interface MeetingHeaderProps {
   participants?: Participant[];
   meetingStartTime?: number | null;
   workspaceId: string;
-  meetingId: string;
 }
 
 export function MeetingHeader({
@@ -34,11 +33,9 @@ export function MeetingHeader({
   participants = [],
   meetingStartTime,
   workspaceId,
-  meetingId,
 }: MeetingHeaderProps) {
   const router = useRouter();
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [copied, setCopied] = useState(false);
 
   // Timer
   useEffect(() => {
@@ -59,13 +56,6 @@ export function MeetingHeader({
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [meetingStartTime]);
-
-  const handleCopyLink = async () => {
-    const url = `${window.location.origin}/workspaces/${workspaceId}/meeting/${meetingId}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const displayParticipants = participants.slice(0, 3);
   const remainingCount = participants.length > 3 ? participants.length - 3 : 0;
@@ -107,65 +97,33 @@ export function MeetingHeader({
         <span className="text-sm font-mono text-white/70">{elapsedTime}</span>
       </div>
 
-      {/* Right: Participants + Copy Link */}
-      <div className="flex items-center gap-3">
-        {/* Participants */}
-        <div className="flex items-center gap-2">
-          <div className="flex -space-x-2">
-            {displayParticipants.map((p) => (
-              <Avatar key={p.id} className="h-7 w-7 border-2 border-[#1a1a1a]">
-                <AvatarImage src={p.profileImage} alt={p.name} />
-                <AvatarFallback className="text-xs bg-primary/20 text-primary-foreground">
-                  {p.name.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {remainingCount > 0 && (
-              <div className="h-7 w-7 rounded-full bg-white/10 border-2 border-[#1a1a1a] flex items-center justify-center">
-                <span className="text-[10px] text-white/70">+{remainingCount}</span>
-              </div>
-            )}
-          </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 text-sm text-white/60">
-                  <Users className="h-4 w-4" />
-                  <span>{participantCount}</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>{participantCount}명 참가 중</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+      {/* Right: Participants */}
+      <div className="flex items-center gap-2">
+        <div className="flex -space-x-2">
+          {displayParticipants.map((p) => (
+            <Avatar key={p.id} className="h-7 w-7 border-2 border-[#1a1a1a]">
+              <AvatarImage src={p.profileImage} alt={p.name} />
+              <AvatarFallback className="text-xs bg-primary/20 text-primary-foreground">
+                {p.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          ))}
+          {remainingCount > 0 && (
+            <div className="h-7 w-7 rounded-full bg-white/10 border-2 border-[#1a1a1a] flex items-center justify-center">
+              <span className="text-[10px] text-white/70">+{remainingCount}</span>
+            </div>
+          )}
         </div>
-
-        {/* Copy Link Button */}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-white/60 hover:text-white hover:bg-white/10"
-                onClick={handleCopyLink}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4 mr-1.5 text-green-400" />
-                    <span className="text-xs">복사됨</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-1.5" />
-                    <span className="text-xs">링크 복사</span>
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-1 text-sm text-white/60">
+                <Users className="h-4 w-4" />
+                <span>{participantCount}</span>
+              </div>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>회의 링크 복사</p>
+              <p>{participantCount}명 참가 중</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

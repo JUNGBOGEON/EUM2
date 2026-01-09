@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import {
@@ -9,8 +10,10 @@ import {
   FilesSection,
   MembersSection,
   SettingsSection,
+  WorkspaceNotifications,
 } from './_components';
 import { useWorkspaceDetail } from './_hooks/use-workspace-detail';
+import { useInvitations } from '../_hooks/use-invitations';
 
 export default function WorkspaceDetailPage() {
   const params = useParams();
@@ -67,6 +70,19 @@ export default function WorkspaceDetailPage() {
     isConnected,
   } = useWorkspaceDetail({ workspaceId });
 
+  // User's incoming invitations (from other workspaces)
+  const {
+    pendingInvitations: myInvitations,
+    acceptInvitation,
+    rejectInvitation,
+    isLoading: isLoadingInvitations,
+  } = useInvitations({ userId: user?.id });
+
+  // Handle accept with workspace list refresh (navigation will happen automatically)
+  const handleAcceptInvitation = useCallback(async (invitationId: string) => {
+    await acceptInvitation(invitationId);
+  }, [acceptInvitation]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -122,6 +138,14 @@ export default function WorkspaceDetailPage() {
                   {activeNav === 'members' && '멤버'}
                   {activeNav === 'settings' && '설정'}
                 </h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <WorkspaceNotifications
+                  invitations={myInvitations}
+                  isLoading={isLoadingInvitations}
+                  onAccept={handleAcceptInvitation}
+                  onReject={rejectInvitation}
+                />
               </div>
             </header>
 

@@ -8,7 +8,6 @@ import {
   VideoOff,
   Monitor,
   MonitorOff,
-  FileText,
   Settings,
   LogOut,
   PhoneOff,
@@ -36,12 +35,10 @@ interface MeetingControlsProps {
   muted: boolean;
   isVideoEnabled: boolean;
   isLocalUserSharing: boolean;
-  showTranscript: boolean;
   isHost?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
-  onToggleTranscript: () => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -51,12 +48,10 @@ export function MeetingControls({
   muted,
   isVideoEnabled,
   isLocalUserSharing,
-  showTranscript,
   isHost = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
-  onToggleTranscript,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -135,27 +130,6 @@ export function MeetingControls({
           </TooltipTrigger>
           <TooltipContent side="top">
             <p>{isLocalUserSharing ? '화면 공유 중지' : '화면 공유'}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Transcript Toggle */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleTranscript}
-              className={`h-12 w-12 rounded-full transition-colors ${
-                showTranscript
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              <FileText className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{showTranscript ? '자막 패널 닫기' : '자막 패널 열기'}</p>
           </TooltipContent>
         </Tooltip>
 

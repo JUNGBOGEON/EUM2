@@ -12,6 +12,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 export interface UseTranscriptionOptions {
   meetingId: string | undefined; // sessionId
   meetingStartTime: number | null;
+  currentUserName?: string;
+  currentUserProfileImage?: string;
 }
 
 export interface UseTranscriptionReturn {
@@ -25,6 +27,8 @@ export interface UseTranscriptionReturn {
   selectedLanguage: string;
   isChangingLanguage: boolean;
   changeLanguage: (languageCode: string) => Promise<void>;
+  // 참가자 조회
+  getParticipantByAttendeeId: (attendeeId: string) => { name: string; profileImage?: string };
 }
 
 interface TranscriptionHistoryItem {
@@ -46,9 +50,15 @@ interface TranscriptionHistoryItem {
 export function useTranscription({
   meetingId,
   meetingStartTime,
+  currentUserName,
+  currentUserProfileImage,
 }: UseTranscriptionOptions): UseTranscriptionReturn {
   const meetingManager = useMeetingManager();
-  const { getParticipantByAttendeeId } = useParticipants({ meetingId });
+  const { getParticipantByAttendeeId } = useParticipants({
+    meetingId,
+    currentUserName,
+    currentUserProfileImage,
+  });
 
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -320,5 +330,7 @@ export function useTranscription({
     selectedLanguage,
     isChangingLanguage,
     changeLanguage,
+    // 참가자 조회
+    getParticipantByAttendeeId,
   };
 }

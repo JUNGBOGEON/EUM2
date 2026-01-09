@@ -175,6 +175,10 @@ export class MeetingsService {
     return this.transcriptionService.getTranscriptForSummary(sessionId);
   }
 
+  async cleanupDuplicateTranscriptions() {
+    return this.transcriptionService.cleanupDuplicateTranscriptions();
+  }
+
   // ==========================================
   // 요약 기능 (SummaryService 위임)
   // ==========================================

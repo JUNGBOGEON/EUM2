@@ -282,7 +282,8 @@ export class TranscriptionService {
       const chunkSize = 100;
       for (let i = 0; i < transcriptions.length; i += chunkSize) {
         const chunk = transcriptions.slice(i, i + chunkSize);
-        await this.transcriptionRepository.insert(chunk);
+        // upsert로 중복 시 업데이트 (sessionId + resultId unique)
+        await this.transcriptionRepository.upsert(chunk, ['sessionId', 'resultId']);
       }
 
       await this.redisService.clearTranscriptionBuffer(sessionId);
@@ -410,6 +411,39 @@ export class TranscriptionService {
     }
 
     return grouped;
+  }
+
+  /**
+   * 중복 트랜스크립션 삭제 (sessionId + resultId 기준)
+   */
+  async cleanupDuplicateTranscriptions(): Promise<{
+    deletedCount: number;
+    success: boolean;
+  }> {
+    try {
+      // 중복 찾기: 같은 sessionId + resultId를 가진 레코드 중 첫 번째를 제외하고 삭제
+      const duplicates = await this.transcriptionRepository.query(`
+        DELETE FROM transcriptions
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id,
+              ROW_NUMBER() OVER (PARTITION BY "sessionId", "resultId" ORDER BY "createdAt" ASC) as rn
+            FROM transcriptions
+            WHERE "resultId" IS NOT NULL
+          ) t
+          WHERE t.rn > 1
+        )
+        RETURNING id
+      `);
+
+      const deletedCount = Array.isArray(duplicates) ? duplicates.length : 0;
+      console.log(`[Transcription] Cleaned up ${deletedCount} duplicate transcriptions`);
+
+      return { deletedCount, success: true };
+    } catch (error) {
+      console.error('[Transcription] Failed to cleanup duplicates:', error);
+      return { deletedCount: 0, success: false };
+    }
   }
 
   async getTranscriptForSummary(sessionId: string): Promise<{

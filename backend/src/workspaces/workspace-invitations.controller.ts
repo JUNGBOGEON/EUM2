@@ -67,7 +67,9 @@ export class WorkspaceInvitationsController {
         profileImage: invitation.invitee.profileImage,
       },
       status: invitation.status,
-      createdAt: invitation.createdAt,
+      createdAt: invitation.createdAt instanceof Date
+        ? invitation.createdAt.toISOString()
+        : invitation.createdAt,
     };
   }
 
@@ -93,7 +95,9 @@ export class WorkspaceInvitationsController {
         profileImage: inv.invitee.profileImage,
       },
       status: inv.status,
-      createdAt: inv.createdAt,
+      createdAt: inv.createdAt instanceof Date
+        ? inv.createdAt.toISOString()
+        : inv.createdAt,
     }));
   }
 
@@ -143,7 +147,9 @@ export class WorkspaceInvitationsController {
         profileImage: inv.inviter.profileImage,
       },
       message: inv.message,
-      createdAt: inv.createdAt,
+      createdAt: inv.createdAt instanceof Date
+        ? inv.createdAt.toISOString()
+        : inv.createdAt,
     }));
   }
 

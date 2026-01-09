@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { User } from './entities/user.entity';
 
 @Injectable()
@@ -9,6 +9,27 @@ export class UsersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
   ) {}
+
+  /**
+   * 사용자 검색 (이름 또는 이메일)
+   */
+  async search(query: string, limit: number = 10): Promise<User[]> {
+    if (!query || query.trim().length < 2) {
+      return [];
+    }
+
+    const searchQuery = `%${query.trim()}%`;
+
+    return this.usersRepository.find({
+      where: [
+        { name: ILike(searchQuery) },
+        { email: ILike(searchQuery) },
+      ],
+      take: limit,
+      order: { name: 'ASC' },
+      select: ['id', 'name', 'email', 'profileImage'],
+    });
+  }
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });

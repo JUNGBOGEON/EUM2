@@ -59,7 +59,7 @@ function MeetingRoomContent() {
     clearPermissionError,
   } = useDeviceManager();
 
-  const { meeting, isJoining, error, userId, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
+  const { meeting, isJoining, error, userId, currentUser, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
     meetingId,
     workspaceId,
   });
@@ -73,15 +73,16 @@ function MeetingRoomContent() {
     transcripts,
     isTranscribing,
     isLoadingHistory,
-    showTranscript,
-    setShowTranscript,
     transcriptContainerRef,
     selectedLanguage,
     isChangingLanguage,
     changeLanguage,
+    getParticipantByAttendeeId,
   } = useTranscription({
     meetingId,
     meetingStartTime,
+    currentUserName: currentUser?.name,
+    currentUserProfileImage: currentUser?.profileImage,
   });
 
   // Chime SDK hooks
@@ -143,7 +144,6 @@ function MeetingRoomContent() {
         participants={participants}
         meetingStartTime={meetingStartTime}
         workspaceId={workspaceId}
-        meetingId={meetingId}
       />
 
       {/* Permission Banner */}
@@ -153,10 +153,26 @@ function MeetingRoomContent() {
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
-        <VideoGrid
-          remoteVideoTiles={remoteVideoTiles}
-          isVideoEnabled={isVideoEnabled}
-          onToggleVideo={handleToggleVideo}
+        {/* Video Area */}
+        <div className="flex-1">
+          <VideoGrid
+            remoteVideoTiles={remoteVideoTiles}
+            isVideoEnabled={isVideoEnabled}
+            onToggleVideo={handleToggleVideo}
+            currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+          />
+        </div>
+
+        {/* Transcript Panel - Always visible on right */}
+        <TranscriptPanel
+          transcripts={transcripts}
+          isTranscribing={isTranscribing}
+          isLoadingHistory={isLoadingHistory}
+          selectedLanguage={selectedLanguage}
+          isChangingLanguage={isChangingLanguage}
+          onLanguageChange={changeLanguage}
+          containerRef={transcriptContainerRef}
+          getParticipantByAttendeeId={getParticipantByAttendeeId}
         />
       </main>
 
@@ -165,29 +181,15 @@ function MeetingRoomContent() {
         muted={muted}
         isVideoEnabled={isVideoEnabled}
         isLocalUserSharing={isLocalUserSharing}
-        showTranscript={showTranscript}
         isHost={isHost}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
-        onToggleTranscript={() => setShowTranscript(!showTranscript)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeeting}
       />
 
-      {/* Transcript Panel (Sheet) */}
-      <TranscriptPanel
-        isOpen={showTranscript}
-        onClose={() => setShowTranscript(false)}
-        transcripts={transcripts}
-        isTranscribing={isTranscribing}
-        isLoadingHistory={isLoadingHistory}
-        selectedLanguage={selectedLanguage}
-        isChangingLanguage={isChangingLanguage}
-        onLanguageChange={changeLanguage}
-        containerRef={transcriptContainerRef}
-      />
 
       {/* Device Settings Dialog */}
       <DeviceSettingsDialog

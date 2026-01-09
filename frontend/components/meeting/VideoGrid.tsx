@@ -16,22 +16,23 @@ export function VideoGrid({
   const hasRemoteVideos = remoteVideoTiles.length > 0;
 
   return (
-    <div className="flex-1 p-4 relative">
+    <div className="flex-1 p-4 relative flex items-center justify-center h-full">
       {hasRemoteVideos ? (
         // 다른 참가자가 있는 경우: 그리드 레이아웃
         <div
-          className={`grid gap-2 w-full h-full ${
-            remoteVideoTiles.length === 1
+          className={`grid gap-4 w-full max-w-7xl auto-rows-fr ${remoteVideoTiles.length <= 1
               ? 'grid-cols-1'
               : remoteVideoTiles.length <= 4
                 ? 'grid-cols-2'
-                : 'grid-cols-3'
-          }`}
+                : remoteVideoTiles.length <= 9
+                  ? 'grid-cols-3'
+                  : 'grid-cols-4'
+            }`}
         >
           {remoteVideoTiles.map((tileId) => (
             <div
               key={tileId}
-              className="relative bg-[#252525] rounded-lg overflow-hidden"
+              className="relative bg-[#252525] rounded-lg overflow-hidden shadow-lg border border-[#ffffff14]"
             >
               <RemoteVideo tileId={tileId} className="w-full h-full object-cover" />
             </div>

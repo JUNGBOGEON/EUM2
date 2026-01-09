@@ -38,7 +38,7 @@ function MeetingRoomContent() {
   const router = useRouter();
   const workspaceId = params.id as string;
   const meetingId = params.meetingId as string;
-  
+
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   // Custom hooks
@@ -86,7 +86,7 @@ function MeetingRoomContent() {
   const { roster } = useRosterState();
   const { tiles: remoteVideoTiles } = useRemoteVideoTileState(); // Main의 hook 사용
   const participantCount = Object.keys(roster).length;
-  
+
   // Convert roster to participants array
   const participants = Object.entries(roster).map(([attendeeId, attendee]) => ({
     id: attendeeId,

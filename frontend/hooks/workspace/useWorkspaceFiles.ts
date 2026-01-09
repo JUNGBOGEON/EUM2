@@ -1,13 +1,19 @@
 'use client';
 
+/**
+ * 워크스페이스 파일 관리 훅
+ * 
+ * 새 API 클라이언트와 에러 핸들링 유틸리티를 사용합니다.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
+import { filesApi } from '@/lib/api';
+import { handleError, getErrorMessage } from '@/lib/utils/error';
 import type {
   WorkspaceFile,
   WorkspaceFileType,
   FileListResponse,
-} from '@/components/workspace/types';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+} from '@/lib/types';
 
 export interface UseWorkspaceFilesReturn {
   files: WorkspaceFile[];
@@ -43,24 +49,10 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
       setError(null);
 
       try {
-        const params = new URLSearchParams();
-        if (selectedType !== 'all') {
-          params.append('type', selectedType);
-        }
-        if (!reset && cursor) {
-          params.append('cursor', cursor);
-        }
-
-        const response = await fetch(
-          `${API_URL}/api/workspaces/${workspaceId}/files?${params}`,
-          { credentials: 'include' }
-        );
-
-        if (!response.ok) {
-          throw new Error('파일 목록을 불러오는데 실패했습니다');
-        }
-
-        const data: FileListResponse = await response.json();
+        const data = await filesApi.list(workspaceId, {
+          type: selectedType !== 'all' ? selectedType : undefined,
+          cursor: !reset && cursor ? cursor : undefined,
+        });
 
         if (reset) {
           setFiles(data.files);
@@ -72,7 +64,9 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
         setHasMore(data.nextCursor !== null);
         setTotal(data.total);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '파일 목록을 불러오는데 실패했습니다');
+        const message = getErrorMessage(err);
+        setError(message);
+        handleError(err, { showToast: false, context: 'fetchFiles' });
       } finally {
         setIsLoading(false);
       }
@@ -84,6 +78,7 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
   useEffect(() => {
     setCursor(null);
     fetchFiles(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, selectedType]);
 
   const setSelectedType = useCallback((type: WorkspaceFileType | 'all') => {
@@ -107,31 +102,14 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
       setError(null);
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(
-          `${API_URL}/api/workspaces/${workspaceId}/files`,
-          {
-            method: 'POST',
-            credentials: 'include',
-            body: formData,
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || '파일 업로드에 실패했습니다');
-        }
-
-        const newFile: WorkspaceFile = await response.json();
+        const newFile = await filesApi.upload(workspaceId, file);
         setFiles((prev) => [newFile, ...prev]);
         setTotal((prev) => prev + 1);
-
         return newFile;
       } catch (err) {
-        const message = err instanceof Error ? err.message : '파일 업로드에 실패했습니다';
+        const message = getErrorMessage(err);
         setError(message);
+        handleError(err, { showToast: true, context: 'uploadFile' });
         throw err;
       } finally {
         setIsUploading(false);
@@ -143,22 +121,13 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
   const deleteFile = useCallback(
     async (fileId: string): Promise<void> => {
       try {
-        const response = await fetch(
-          `${API_URL}/api/workspaces/${workspaceId}/files/${fileId}`,
-          {
-            method: 'DELETE',
-            credentials: 'include',
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('파일 삭제에 실패했습니다');
-        }
-
+        await filesApi.delete(workspaceId, fileId);
         setFiles((prev) => prev.filter((f) => f.id !== fileId));
         setTotal((prev) => prev - 1);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '파일 삭제에 실패했습니다');
+        const message = getErrorMessage(err);
+        setError(message);
+        handleError(err, { showToast: true, context: 'deleteFile' });
         throw err;
       }
     },
@@ -167,17 +136,13 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
 
   const getDownloadUrl = useCallback(
     async (fileId: string): Promise<string> => {
-      const response = await fetch(
-        `${API_URL}/api/workspaces/${workspaceId}/files/${fileId}/download`,
-        { credentials: 'include' }
-      );
-
-      if (!response.ok) {
-        throw new Error('다운로드 URL을 가져오는데 실패했습니다');
+      try {
+        const data = await filesApi.getDownloadUrl(workspaceId, fileId);
+        return data.presignedUrl;
+      } catch (err) {
+        handleError(err, { showToast: true, context: 'getDownloadUrl' });
+        throw err;
       }
-
-      const data = await response.json();
-      return data.presignedUrl;
     },
     [workspaceId]
   );
@@ -198,3 +163,5 @@ export function useWorkspaceFiles(workspaceId: string): UseWorkspaceFilesReturn 
     isUploading,
   };
 }
+
+export default useWorkspaceFiles;

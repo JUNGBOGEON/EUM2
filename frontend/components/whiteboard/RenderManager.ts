@@ -52,6 +52,12 @@ export class RenderManager {
                 return;
             }
 
+            this.app.canvas.style.position = 'absolute';
+            this.app.canvas.style.top = '0';
+            this.app.canvas.style.left = '0';
+            this.app.canvas.style.zIndex = '1'; // Ensure canvas is above the grid (z-0)
+            this.app.canvas.style.outline = 'none'; // Remove default outline if any
+
             container.appendChild(this.app.canvas);
 
             this.app.stage.addChild(this.drawingLayer);
@@ -131,7 +137,7 @@ export class RenderManager {
 
                 // Handle Eraser items in store
                 if (itemColor === '#ffffff' || itemColor === 0xffffff) {
-                    g.blendMode = 'dst-out' as any;
+                    g.blendMode = 'erase';
                 }
 
                 if (points && points.length > 0) {

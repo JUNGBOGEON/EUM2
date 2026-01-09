@@ -17,12 +17,12 @@ cd /d "%~dp0"
 echo [Checking Dependencies...]
 if not exist "backend\node_modules" (
     echo [Backend] node_modules not found. Installing...
-    cd backend && npm install && cd ..
+    pushd backend && call npm install && popd
 )
 
 if not exist "frontend\node_modules" (
     echo [Frontend] node_modules not found. Installing...
-    cd frontend && npm install && cd ..
+    pushd frontend && call npm install && popd
 )
 
 echo.
@@ -30,7 +30,7 @@ echo [Starting Services...]
 echo.
 
 :: Use npx concurrently to run all commands in parallel in one terminal
-npx -y concurrently -n "BACK,FRONT,BROWSER" -c "cyan,magenta,yellow" ^
+call npx -y concurrently -n "BACK,FRONT,BROWSER" -c "cyan,magenta,yellow" ^
     "cd backend && npm run start:dev" ^
     "cd frontend && npm run dev" ^
     "ping 127.0.0.1 -n 6 > nul && start chrome http://localhost:3000"

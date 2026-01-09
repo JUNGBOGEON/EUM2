@@ -31,6 +31,7 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
     const isDrawing = useRef(false);
     const currentPath = useRef<Point[]>([]);
     const currentGraphics = useRef<PIXI.Graphics | null>(null);
+    const glowGraphics = useRef<PIXI.Graphics | null>(null); // For Magic Pen effect
     const lastRenderedIndex = useRef(0); // Track which points we've already rendered
 
     // Filters for Jitter Reduction
@@ -58,7 +59,7 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
 
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
-        const { tool: currentTool } = stateRef.current;
+        const { tool: currentTool, colorStr: currentColorStr } = stateRef.current;
         if (currentTool !== 'pen' && currentTool !== 'magic-pen' && currentTool !== 'eraser') return;
 
         isDrawing.current = true;
@@ -79,7 +80,18 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         currentGraphics.current = g;
 
         if (currentTool === 'eraser') {
-            g.blendMode = 'dst-out' as any;
+            g.blendMode = 'erase';
+        } else if (currentTool === 'magic-pen') {
+            // Magic Pen Effect: Create a secondary glow graphics layer
+            const glow = new PIXI.Graphics();
+            glow.filters = [new PIXI.BlurFilter(8)]; // Glow effect
+            // Insert glow behind the main stroke if possible, or just add it
+            // Adding it first to staticLayer makes it appear behind if we didn't add g yet, 
+            // but we added g. Let's add glow before g?
+            // renderManager.staticLayer.addChildAt(glow, renderManager.staticLayer.getChildIndex(g));
+            // Simply adding it to staticLayer works.
+            renderManager.staticLayer.addChild(glow);
+            glowGraphics.current = glow;
         }
     }, [renderManager, getLocalPoint]);
 
@@ -100,6 +112,8 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         throttledBroadcast(point.x, point.y, currentTool);
 
         const g = currentGraphics.current;
+        const glow = glowGraphics.current;
+
         const color = parseInt(currentColorStr.replace('#', ''), 16);
         const width = (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom;
 
@@ -110,23 +124,28 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         if (newPoints.length >= 2) {
             // Draw the new segment
             const p1 = newPoints[0];
-            g.moveTo(p1.x, p1.y);
 
+            // Draw Main Stroke
+            g.moveTo(p1.x, p1.y);
             for (let i = 1; i < newPoints.length; i++) {
-                const p = newPoints[i];
-                g.lineTo(p.x, p.y);
+                g.lineTo(newPoints[i].x, newPoints[i].y);
+            }
+            if (currentTool === 'eraser') {
+                g.stroke({ width, color: 0xffffff, cap: 'round', join: 'round' });
+            } else {
+                g.stroke({ width, color, cap: 'round', join: 'round' });
             }
 
-            if (currentTool === 'eraser') {
-                // Eraser: use white or actual dst-out color
-                g.stroke({ width, color: 0xffffff, cap: 'round', join: 'round' });
-            } else if (currentTool === 'magic-pen') {
-                // Magic pen with halo (but we draw incrementally)
-                // For real-time, we skip the halo to avoid overdraw artifacts
-                g.stroke({ width, color, cap: 'round', join: 'round' });
-            } else {
-                // Regular pen
-                g.stroke({ width, color, cap: 'round', join: 'round' });
+            // Draw Magic Pen Glow
+            if (currentTool === 'magic-pen' && glow) {
+                glow.moveTo(p1.x, p1.y);
+                for (let i = 1; i < newPoints.length; i++) {
+                    glow.lineTo(newPoints[i].x, newPoints[i].y);
+                }
+                // Glow uses same color but wider and possibly lighter/different? 
+                // Let's use the same color with blur filter applied to the graphics container.
+                // We just draw a thicker line here.
+                glow.stroke({ width: width + 10 / currentZoom, color, alpha: 0.6, cap: 'round', join: 'round' });
             }
 
             lastRenderedIndex.current = currentPath.current.length - 1;
@@ -140,17 +159,29 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         const { tool: currentTool, colorStr: currentColorStr, penSize: currentPenSize, eraserSize: currentEraserSize, zoom: currentZoom } = stateRef.current;
         const points = currentPath.current;
 
+        // Cleanup Glow immediately
+        if (glowGraphics.current) {
+            glowGraphics.current.destroy();
+            glowGraphics.current = null;
+        }
+
         if (points.length >= 1) {
             let finalPoints = points;
             let isRecognized = false;
 
-            if (currentTool === 'magic-pen' && points.length > 5) {
+            if (currentTool === 'magic-pen') {
+                // Magic Pen Logic
                 const result = detectShape(points);
+
+                // Requirements:
+                // 1. If shape detected -> Use corrected shape.
+                // 2. If NO shape detected -> Disappear immediately. Do NOT add to history.
+
                 if (result.type !== 'none' && result.correctedPoints) {
                     finalPoints = result.correctedPoints;
                     isRecognized = true;
 
-                    // If shape was recognized, clear the freehand stroke and redraw the perfect shape
+                    // Redraw with perfect shape (optional visual feedback before finalize)
                     if (currentGraphics.current) {
                         currentGraphics.current.clear();
                         const g = currentGraphics.current;
@@ -163,6 +194,16 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                         }
                         g.stroke({ width, color, cap: 'round', join: 'round' });
                     }
+                } else {
+                    // NO SHAPE DETECTED
+                    // Discard everything.
+                    if (currentGraphics.current) {
+                        currentGraphics.current.destroy();
+                        currentGraphics.current = null;
+                    }
+                    // Force re-render to clear the static layer junk from screen if any remains (though destroy should handle it)
+                    renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return; // EARLY RETURN - Do not add item, do not save.
                 }
             }
 

@@ -39,13 +39,62 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
     const filterY = useRef(new OneEuroFilter(1.0, 0.23));
 
     const broadcastCursorRef = useRef(broadcastCursor);
+    const broadcastEventRef = useRef(broadcastEvent);
+
     useEffect(() => {
         broadcastCursorRef.current = broadcastCursor;
-    }, [broadcastCursor]);
+        broadcastEventRef.current = broadcastEvent;
+    }, [broadcastCursor, broadcastEvent]);
 
-    const throttledBroadcast = useRef(throttle((x: number, y: number, t: string) => {
-        broadcastCursorRef.current(x, y, t);
-    }, 50)).current;
+    // BATCHING: Buffer for real-time drawing
+    const batchBuffer = useRef<Point[]>([]);
+    const batchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Batch Flusher (runs every 50ms if data exists)
+    useEffect(() => {
+        const flush = () => {
+            if (batchBuffer.current.length > 0) {
+                const points = [...batchBuffer.current];
+                batchBuffer.current = []; // Clear buffer immediately
+
+                // Get current tool state (approximate)
+                const { tool, colorStr, penSize, eraserSize, zoom } = stateRef.current;
+                const color = parseInt(colorStr.replace('#', ''), 16);
+                const width = (tool === 'eraser' ? eraserSize : penSize) / zoom;
+
+                // Send Batch
+                broadcastEventRef.current('draw_batch', {
+                    points,
+                    color,
+                    width,
+                    tool,
+                    isNewStroke: false // Can be improved to detect new stroke
+                });
+            }
+        };
+
+        const interval = setInterval(flush, 50);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Also flush when pointer up
+    const flushBatch = useCallback(() => {
+        if (batchBuffer.current.length > 0) {
+            const points = [...batchBuffer.current];
+            batchBuffer.current = [];
+            const { tool, colorStr, penSize, eraserSize, zoom } = stateRef.current;
+            const color = parseInt(colorStr.replace('#', ''), 16);
+            const width = (tool === 'eraser' ? eraserSize : penSize) / zoom;
+
+            broadcastEventRef.current('draw_batch', {
+                points,
+                color,
+                width,
+                tool,
+                isNewStroke: false
+            });
+        }
+    }, []);
 
     const getLocalPoint = useCallback((e: PointerEvent) => {
         if (!renderManager) return { x: 0, y: 0 };
@@ -95,13 +144,31 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         }
     }, [renderManager, getLocalPoint]);
 
+    const throttledBroadcast = useRef(throttle((x: number, y: number, t: string) => {
+        broadcastCursorRef.current(x, y, t);
+    }, 50)).current;
+
     const onPointerMove = useCallback((e: PointerEvent) => {
         if (!isDrawing.current || !renderManager || !currentGraphics.current) return;
 
         const { tool: currentTool, zoom: currentZoom, colorStr: currentColorStr, penSize: currentPenSize, eraserSize: currentEraserSize } = stateRef.current;
         const rawPoint = getLocalPoint(e);
-        const x = filterX.current.filter(rawPoint.x);
-        const y = filterY.current.filter(rawPoint.y);
+        let x = filterX.current.filter(rawPoint.x);
+        let y = filterY.current.filter(rawPoint.y);
+
+        // Shift Key Constraint: Straight Lines
+        if (e.shiftKey && currentPath.current.length > 0) {
+            const startPoint = currentPath.current[0];
+            const dx = x - startPoint.x;
+            const dy = y - startPoint.y;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                y = startPoint.y; // Lock Vertical, move Horizontal
+            } else {
+                x = startPoint.x; // Lock Horizontal, move Vertical
+            }
+        }
+
         const point = { x, y };
 
         const lastPoint = currentPath.current[currentPath.current.length - 1];
@@ -109,7 +176,12 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         if (dist < 1 / currentZoom) return;
 
         currentPath.current.push(point);
+
+        // 1. Broadcast Cursor Position (Throttled)
         throttledBroadcast(point.x, point.y, currentTool);
+
+        // 2. Add to Batch Buffer for Streaming Drawing
+        batchBuffer.current.push(point);
 
         const g = currentGraphics.current;
         const glow = glowGraphics.current;
@@ -156,8 +228,15 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         if (!isDrawing.current || !renderManager) return;
         isDrawing.current = false;
 
+        // CAPTURE AND CLEAR (Data Safety)
+        const capturedPoints = [...currentPath.current];
+        currentPath.current = []; // Immediate reset
+        lastRenderedIndex.current = 0;
+
+        // Flush any remaining batch data
+        flushBatch();
+
         const { tool: currentTool, colorStr: currentColorStr, penSize: currentPenSize, eraserSize: currentEraserSize, zoom: currentZoom } = stateRef.current;
-        const points = currentPath.current;
 
         // Cleanup Glow immediately
         if (glowGraphics.current) {
@@ -165,29 +244,54 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
             glowGraphics.current = null;
         }
 
-        if (points.length >= 1) {
-            let finalPoints = points;
+        if (capturedPoints.length >= 1) {
+            let finalPoints = capturedPoints;
+
+            // Handle single point (dot) by duplicating it slightly to ensure line rendering
+            if (finalPoints.length === 1) {
+                finalPoints.push({ x: finalPoints[0].x + 0.01, y: finalPoints[0].y });
+            }
+
             let isRecognized = false;
+
+            // GHOST FILTERING: Ignore tiny dots/strokes
+            const minDimension = 10 / currentZoom; // 10px visual threshold
+            const xs = finalPoints.map(p => p.x);
+            const ys = finalPoints.map(p => p.y);
+            const w = Math.max(...xs) - Math.min(...xs);
+            const h = Math.max(...ys) - Math.min(...ys);
+
+            // Filter out accidental clicks (dots) unless it's a deliberate dot (e.g. thick pen tap)
+            // For Magic Pen, be stricter.
+            if (currentTool === 'magic-pen') {
+                if (w < 20 / currentZoom && h < 20 / currentZoom) {
+                    // Too small for magic pen -> Discard
+                    if (currentGraphics.current) {
+                        currentGraphics.current.destroy();
+                        currentGraphics.current = null;
+                    }
+                    renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return;
+                }
+            } else {
+                // For regular pen, if only 1 point or super tiny, maybe ignore?
+                // Current logic handles point length >= 1 check below. 
+                // Leaving regular pen capable of dots.
+            }
 
             if (currentTool === 'magic-pen') {
                 // Magic Pen Logic
-                const result = detectShape(points);
-
-                // Requirements:
-                // 1. If shape detected -> Use corrected shape.
-                // 2. If NO shape detected -> Disappear immediately. Do NOT add to history.
-
+                const result = detectShape(capturedPoints);
+                // ... same magic pen logic ...
                 if (result.type !== 'none' && result.correctedPoints) {
                     finalPoints = result.correctedPoints;
                     isRecognized = true;
-
-                    // Redraw with perfect shape (optional visual feedback before finalize)
+                    // ... redraw if needed ...
                     if (currentGraphics.current) {
                         currentGraphics.current.clear();
                         const g = currentGraphics.current;
                         const color = parseInt(currentColorStr.replace('#', ''), 16);
                         const width = currentPenSize / currentZoom;
-
                         g.moveTo(finalPoints[0].x, finalPoints[0].y);
                         for (let i = 1; i < finalPoints.length; i++) {
                             g.lineTo(finalPoints[i].x, finalPoints[i].y);
@@ -195,15 +299,13 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                         g.stroke({ width, color, cap: 'round', join: 'round' });
                     }
                 } else {
-                    // NO SHAPE DETECTED
-                    // Discard everything.
+                    // UNRECOGNIZED MAGIC PEN STROKE -> DISCARD
                     if (currentGraphics.current) {
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
-                    // Force re-render to clear the static layer junk from screen if any remains (though destroy should handle it)
                     renderManager.renderItems(useWhiteboardStore.getState().items);
-                    return; // EARLY RETURN - Do not add item, do not save.
+                    return; // EARLY RETURN
                 }
             }
 
@@ -214,36 +316,51 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                 data: {
                     points: simplified,
                     color: currentTool === 'eraser' ? '#ffffff' : currentColorStr,
-                    brushSize: (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom  // Save world-space size
+                    brushSize: (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom
                 },
                 transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
                 zIndex: Date.now()
             };
 
             addItem(newItem);
-            // Disabled: Chime has 2KB limit, items can exceed this
-            // broadcastEvent('add_item', newItem);
 
-            fetch(`${API_URL}/api/whiteboard`, {
+            // Persist item first, then handle broadcast
+            const persistPromise = fetch(`${API_URL}/api/whiteboard`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...newItem, meetingId, userId: 'local-user' }),
                 credentials: 'include'
-            }).catch(err => console.error("Failed to persist item", err));
+            });
+
+            // Optimistic broadcast
+            const success = broadcastEvent('add_item', newItem);
+
+            if (!success) {
+                console.warn("Broadcast skipped (likely too large), waiting for persistence to send refetch");
+                persistPromise
+                    .then(() => {
+                        console.log("Persistence complete, sending refetch signal");
+                        broadcastEvent('refetch', {});
+                    })
+                    .catch(err => console.error("Failed to persist item", err));
+            } else {
+                // If broadcast succeeded, just handle persist error
+                persistPromise.catch(err => console.error("Failed to persist item", err));
+            }
         }
 
-        // Clean up: Remove the progressive graphics since it's now in the store and will be re-rendered
+        // Clean up: Remove the progressive graphics strictly
         if (currentGraphics.current) {
             currentGraphics.current.destroy();
             currentGraphics.current = null;
         }
 
-        // Force re-render from store to update with smoothed/final version
+        // Force re-render from store
         if (renderManager) {
             const items = useWhiteboardStore.getState().items;
             renderManager.renderItems(items);
         }
-    }, [renderManager, addItem, meetingId, broadcastEvent]);
+    }, [renderManager, addItem, meetingId, flushBatch]);
 
     useEffect(() => {
         if (!renderManager) return;

@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen';
+export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image';
+
+export interface PendingImage {
+    url: string;
+    width: number;
+    height: number;
+    file?: File; // The raw file to upload
+}
 
 export interface WhiteboardItem {
     id: string;
@@ -39,6 +46,10 @@ interface WhiteboardState {
     setZoom: (zoom: number) => void;
     setPan: (x: number, y: number) => void;
 
+    // Image Placement
+    pendingImage: PendingImage | null;
+    setPendingImage: (image: PendingImage | null) => void;
+
     // Data
     items: Map<string, WhiteboardItem>;
     addItem: (item: WhiteboardItem) => void;
@@ -51,6 +62,7 @@ interface WhiteboardState {
     selectItem: (id: string, multi?: boolean) => void;
     deselectItem: (id: string) => void;
     clearSelection: () => void;
+    setSelectedIds: (ids: Set<string>) => void;
 
     // History
     canUndo: boolean;
@@ -60,6 +72,8 @@ interface WhiteboardState {
     pushHistory: () => void;
     undo: () => void;
     redo: () => void;
+    syncHistoryForUndo: () => void;
+    syncHistoryForRedo: () => void;
     clearItems: () => void;
 }
 
@@ -78,7 +92,15 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
         } else if (tool === 'magic-pen') {
             newColor = state.magicPenColor;
         }
-        return { tool, color: newColor };
+
+        // Clear selection when switching away from select tool, or even to it (optional, but standard behavior is usually keep if switching TO select, lose if switching AWAY)
+        // User asked: "Select different tool -> Selection cancelled".
+        // So if I switch TO Pen, selection clears.
+        // If I switch TO Select, selection logic shouldn't inherently clear, but usually you switch TO Select to start fresh or modify existing.
+        // Let's safe bet: If newTool !== 'select', clear selection.
+        const newSelectedIds = (tool !== 'select') ? new Set<string>() : state.selectedIds;
+
+        return { tool, color: newColor, selectedIds: newSelectedIds };
     }),
     setColor: (color) => set((state) => {
         const updates: Partial<WhiteboardState> = { color };
@@ -97,6 +119,9 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     pan: { x: 0, y: 0 },
     setZoom: (zoom) => set({ zoom }),
     setPan: (x, y) => set({ pan: { x, y } }),
+
+    pendingImage: null,
+    setPendingImage: (image) => set({ pendingImage: image }),
 
     items: new Map(),
     addItem: (item) => {
@@ -144,6 +169,7 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
             return { selectedIds: newSelection };
         }),
     clearSelection: () => set({ selectedIds: new Set<string>() }),
+    setSelectedIds: (ids) => set({ selectedIds: ids }),
 
     canUndo: false,
     canRedo: false,
@@ -186,6 +212,31 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
 
         return {
             items: newItems,
+            undoStack: [...state.undoStack, currentItems],
+            redoStack: newRedoStack,
+            canUndo: true,
+            canRedo: newRedoStack.length > 0
+        };
+    }),
+    // Helper to sync history stacks when Server handles the Undo/Redo data logic
+    syncHistoryForUndo: () => set((state) => {
+        if (state.undoStack.length === 0) return state;
+        // Move current state to Redo, pop Undo, but DO NOT restore items (Server did it)
+        const currentItems = Array.from(state.items.values());
+        const newUndoStack = state.undoStack.slice(0, -1);
+        return {
+            undoStack: newUndoStack,
+            redoStack: [...state.redoStack, currentItems],
+            canUndo: newUndoStack.length > 0,
+            canRedo: true
+        };
+    }),
+    syncHistoryForRedo: () => set((state) => {
+        if (state.redoStack.length === 0) return state;
+        // Move current state to Undo, pop Redo
+        const currentItems = Array.from(state.items.values());
+        const newRedoStack = state.redoStack.slice(0, -1);
+        return {
             undoStack: [...state.undoStack, currentItems],
             redoStack: newRedoStack,
             canUndo: true,

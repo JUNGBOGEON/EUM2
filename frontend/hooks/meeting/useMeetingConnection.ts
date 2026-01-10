@@ -140,7 +140,7 @@ export function useMeetingConnection({
 
       // Debug Observer - Register BEFORE start
       // Store in ref for cleanup
-      observerRef.current = {
+      const observerObject = {
         audioVideoDidStart: () => {
           console.log('[MeetingConnection] AudioVideo started');
         },
@@ -156,7 +156,8 @@ export function useMeetingConnection({
           console.log('[MeetingConnection] Video tile removed:', tileState.tileId);
         }
       };
-      meetingManager.audioVideo?.addObserver(observerRef.current);
+      observerRef.current = observerObject as any;
+      meetingManager.audioVideo?.addObserver(observerRef.current!);
 
       await meetingManager.start();
 

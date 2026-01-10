@@ -41,174 +41,6 @@ export default function WhiteboardCanvas() {
     const clearItems = useWhiteboardStore((state) => state.clearItems);
     const setItems = useWhiteboardStore((state) => state.setItems);
 
-    useEffect(() => {
-        if (!meetingId) return;
-
-        const loadItems = async () => {
-            try {
-                const res = await fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
-                    credentials: 'include'
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setItems(data);
-                }
-            } catch (err) {
-                console.error("Failed to load whiteboard items", err);
-            }
-        };
-        loadItems();
-    }, [meetingId, setItems]);
-
-    useEffect(() => {
-        if (!containerRef.current) return;
-
-        let isMounted = true;
-        let rm: RenderManager | null = null;
-
-        const init = async () => {
-            const container = containerRef.current;
-            if (!container) return;
-
-            rm = new RenderManager(
-                container.clientWidth,
-                container.clientHeight
-            );
-
-            await rm.init(container);
-
-            if (isMounted) {
-                setRenderManager(rm);
-            } else {
-                rm.destroy();
-            }
-        };
-
-        init();
-
-        const handleResize = () => {
-            if (isMounted && containerRef.current && rm) {
-                rm.resize(
-                    containerRef.current.clientWidth,
-                    containerRef.current.clientHeight
-                );
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            isMounted = false;
-            window.removeEventListener('resize', handleResize);
-            if (rm) {
-                rm.destroy();
-                rm = null;
-            }
-        };
-    }, []);
-
-    // React to Store Changes: Items
-    const items = useWhiteboardStore((state) => state.items);
-    useEffect(() => {
-        if (!renderManager) return;
-        renderManager.renderItems(items);
-    }, [items, renderManager]);
-
-    // Force cursor update when renderManager first becomes available
-    useEffect(() => {
-        if (renderManager && renderManager.app && renderManager.app.canvas) {
-            updateCursorForTool(renderManager.app.canvas, tool, penSize, eraserSize, colorStr, zoom);
-        }
-    }, [renderManager]); // Only trigger when renderManager changes (i.e., initialized)
-
-    // React to Store Changes: Pan/Zoom
-    useEffect(() => {
-        if (!renderManager) return;
-        const stage = renderManager.app.stage;
-        stage.position.set(pan.x, pan.y);
-        stage.scale.set(zoom);
-        renderManager.setZoom(zoom);
-    }, [pan, zoom, renderManager]);
-
-    // React to Store Changes: Selection
-    const selectedIds = useWhiteboardStore((state) => state.selectedIds);
-    useEffect(() => {
-        if (!renderManager) return;
-        renderManager.renderSelection(selectedIds, items);
-    }, [selectedIds, items, renderManager]);
-
-    // Hook: Drawing Logic
-    useWhiteboardDrawing(renderManager);
-
-    // Hook: Interaction Logic (Select, Move)
-    useWhiteboardInteraction(renderManager);
-
-    // Hook: Panning & Zooming
-    useWhiteboardPanning(renderManager);
-
-    // Hook: Sync Logic
-    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager);
-
-    // Broadcast local cursor move (non-drawing)
-    const broadcastCursorRef = useRef(broadcastCursor);
-    useEffect(() => {
-        broadcastCursorRef.current = broadcastCursor;
-    }, [broadcastCursor]);
-
-    useEffect(() => {
-        if (!renderManager) return;
-        const canvas = renderManager.app.canvas;
-
-        const throttledBroadcast = throttle((x: number, y: number, t: string) => {
-            broadcastCursorRef.current(x, y, t);
-        }, 50);
-
-        const handleMouseMove = (e: PointerEvent) => {
-            const rect = canvas.getBoundingClientRect();
-            // Important: Use latest pan/zoom from store closure or ref
-            // In a throttle, we might have stale values if not careful.
-            // But since this effect depends on [pan, zoom, tool], it re-attaches.
-            const x = (e.clientX - rect.left - pan.x) / zoom;
-            const y = (e.clientY - rect.top - pan.y) / zoom;
-
-            throttledBroadcast(x, y, tool);
-        };
-
-        canvas.addEventListener('pointermove', handleMouseMove);
-        return () => canvas.removeEventListener('pointermove', handleMouseMove);
-    }, [renderManager, pan, zoom, tool]);
-
-    // Drop Handler
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'z') {
-                    e.preventDefault();
-                    if (e.shiftKey) redo();
-                    else undo();
-                } else if (e.key === 'y') {
-                    e.preventDefault();
-                    redo();
-                } else if (e.key === '0') {
-                    e.preventDefault();
-                    setZoom(1);
-                    setPan(0, 0);
-                } else if (e.key === '=') {
-                    e.preventDefault();
-                    zoomFunc(ZOOM_SETTINGS.step);
-                } else if (e.key === '-') {
-                    e.preventDefault();
-                    zoomFunc(-ZOOM_SETTINGS.step);
-                }
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [undo, redo, setZoom, setPan, zoom]);
-
     const updateCursorForTool = useCallback((canvas: HTMLCanvasElement, currentTool: string, pSize: number, eSize: number, col: string, z: number) => {
         const generatePenCursor = (size: number, color: string) => {
             // size is diameter (stroke width). Radius is size / 2.
@@ -299,6 +131,185 @@ export default function WhiteboardCanvas() {
             canvas.style.cursor = 'crosshair';
         }
     }, []);
+
+    useEffect(() => {
+        if (!meetingId) return;
+
+        const loadItems = async () => {
+            try {
+                const res = await fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setItems(data);
+                }
+            } catch (err) {
+                console.error("Failed to load whiteboard items", err);
+            }
+        };
+        loadItems();
+    }, [meetingId, setItems]);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+
+        let isMounted = true;
+        let rm: RenderManager | null = null;
+
+        const init = async () => {
+            const container = containerRef.current;
+            if (!container) return;
+
+            rm = new RenderManager(
+                container.clientWidth,
+                container.clientHeight
+            );
+
+            await rm.init(container);
+
+            if (isMounted) {
+                setRenderManager(rm);
+                // Force initial cursor update immediately after initialization
+                if (container) {
+                    // Use closure values or wait for state? Closure values are stale (initial default).
+                    // But store values (tool, etc.) are available via store hooks which might be current.
+                    // However, inside async init, we can't easily access updated store state unless we use refs or store.getState()
+                    // Let's rely on the effect for store updates, but we can trigger a cursor update here 
+                    // with the *current* state known to the component at this render cycle (which should be defaults or persisted state).
+                    // Actually, let's just let the effect handle it, BUT we must ensure the effect triggers.
+                    // The effect triggers on [..., renderManager]. setRenderManager(rm) will trigger it.
+                    // So why didn't it work?
+                    // Maybe the canvas styling wasn't ready?
+                    // Let's explicitly call it here just to be safe using the component scope variables.
+                    updateCursorForTool(rm.app.canvas, tool, penSize, eraserSize, colorStr, zoom);
+                }
+            } else {
+                if (rm) rm.destroy();
+            }
+        };
+
+        init();
+
+        const handleResize = () => {
+            if (isMounted && containerRef.current && rm) {
+                rm.resize(
+                    containerRef.current.clientWidth,
+                    containerRef.current.clientHeight
+                );
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener('resize', handleResize);
+            if (rm) {
+                rm.destroy();
+                rm = null;
+            }
+        };
+    }, []);
+
+    // React to Store Changes: Items
+    const items = useWhiteboardStore((state) => state.items);
+    useEffect(() => {
+        if (!renderManager) return;
+        renderManager.renderItems(items);
+    }, [items, renderManager]);
+
+
+
+    // React to Store Changes: Pan/Zoom
+    useEffect(() => {
+        if (!renderManager) return;
+        const stage = renderManager.app.stage;
+        stage.position.set(pan.x, pan.y);
+        stage.scale.set(zoom);
+        renderManager.setZoom(zoom);
+    }, [pan, zoom, renderManager]);
+
+    // React to Store Changes: Selection
+    const selectedIds = useWhiteboardStore((state) => state.selectedIds);
+    useEffect(() => {
+        if (!renderManager) return;
+        renderManager.renderSelection(selectedIds, items);
+    }, [selectedIds, items, renderManager]);
+
+    // Hook: Drawing Logic
+    useWhiteboardDrawing(renderManager);
+
+    // Hook: Interaction Logic (Select, Move)
+    useWhiteboardInteraction(renderManager);
+
+    // Hook: Panning & Zooming
+    useWhiteboardPanning(renderManager);
+
+    // Hook: Sync Logic
+    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager);
+
+    // Broadcast local cursor move (non-drawing)
+    const broadcastCursorRef = useRef(broadcastCursor);
+    useEffect(() => {
+        broadcastCursorRef.current = broadcastCursor;
+    }, [broadcastCursor]);
+
+    useEffect(() => {
+        if (!renderManager) return;
+        const canvas = renderManager.app.canvas;
+
+        const throttledBroadcast = throttle((x: number, y: number, t: string) => {
+            broadcastCursorRef.current(x, y, t);
+        }, 50);
+
+        const handleMouseMove = (e: PointerEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            // Important: Use latest pan/zoom from store closure or ref
+            // In a throttle, we might have stale values if not careful.
+            // But since this effect depends on [pan, zoom, tool], it re-attaches.
+            const x = (e.clientX - rect.left - pan.x) / zoom;
+            const y = (e.clientY - rect.top - pan.y) / zoom;
+
+            throttledBroadcast(x, y, tool);
+        };
+
+        canvas.addEventListener('pointermove', handleMouseMove);
+        return () => canvas.removeEventListener('pointermove', handleMouseMove);
+    }, [renderManager, pan, zoom, tool]);
+
+    // Drop Handler
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    if (e.shiftKey) redo();
+                    else undo();
+                } else if (e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                } else if (e.key === '0') {
+                    e.preventDefault();
+                    setZoom(1);
+                    setPan(0, 0);
+                } else if (e.key === '=') {
+                    e.preventDefault();
+                    zoomFunc(ZOOM_SETTINGS.step);
+                } else if (e.key === '-') {
+                    e.preventDefault();
+                    zoomFunc(-ZOOM_SETTINGS.step);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo, setZoom, setPan, zoom]);
+
+
 
     // Custom Cursor Logic
     useEffect(() => {

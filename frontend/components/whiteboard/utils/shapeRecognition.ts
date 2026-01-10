@@ -97,11 +97,11 @@ export const detectShape = (points: Point[]): ShapeResult => {
     if (hullArea < 50) return { type: 'none', score: 0 };
     const boxRatio = hullArea / boxArea;
 
-    if (boxRatio > 0.80) {
+    if (boxRatio > 0.85) {
         return { type: 'rectangle', score: boxRatio, correctedPoints: generatePerfectRectangle(box) };
-    } else if (boxRatio > 0.66) {
+    } else if (boxRatio > 0.72) {
         return { type: 'circle', score: boxRatio, correctedPoints: generatePerfectCircle(box) };
-    } else if (boxRatio > 0.35 && boxRatio <= 0.66) {
+    } else if (boxRatio > 0.35) {
         const trianglePoints = [
             { x: box.minX + box.width / 2, y: box.minY },
             { x: box.maxX, y: box.maxY },

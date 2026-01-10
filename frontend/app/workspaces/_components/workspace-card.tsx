@@ -63,6 +63,7 @@ export function WorkspaceCard({
                     width={64}
                     height={64}
                     className="opacity-50 group-hover:opacity-70 transition-opacity duration-300"
+                    style={{ width: "auto", height: "auto" }}
                   />
                 </div>
               )}

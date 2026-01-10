@@ -41,4 +41,34 @@ export class WhiteboardService {
             { isDeleted: true }
         );
     }
+
+    async undo(meetingId: string, userId: string) {
+        // Find the latest active item by this user
+        const lastItem = await this.whiteboardItemRepository.findOne({
+            where: { meetingId, userId, isDeleted: false },
+            order: { createdAt: 'DESC' } // Assuming zIndex or createdAt
+        });
+
+        if (lastItem) {
+            lastItem.isDeleted = true;
+            return this.whiteboardItemRepository.save(lastItem);
+        }
+        return null;
+    }
+
+    async redo(meetingId: string, userId: string) {
+        // Find the latest deleted item by this user
+        // Note: This is a simple implementation. Standard redo stack logic requires clearing redo on new action.
+        // For a stateless server, this LIFO restore is the best approximation without a dedicated history table.
+        const lastDeletedItem = await this.whiteboardItemRepository.findOne({
+            where: { meetingId, userId, isDeleted: true },
+            order: { updatedAt: 'DESC' } // Use updatedAt to find what was just deleted
+        });
+
+        if (lastDeletedItem) {
+            lastDeletedItem.isDeleted = false;
+            return this.whiteboardItemRepository.save(lastDeletedItem);
+        }
+        return null;
+    }
 }

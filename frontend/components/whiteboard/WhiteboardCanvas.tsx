@@ -132,24 +132,24 @@ export default function WhiteboardCanvas() {
         }
     }, []);
 
-    useEffect(() => {
+    const loadItems = useCallback(async () => {
         if (!meetingId) return;
-
-        const loadItems = async () => {
-            try {
-                const res = await fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
-                    credentials: 'include'
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setItems(data);
-                }
-            } catch (err) {
-                console.error("Failed to load whiteboard items", err);
+        try {
+            const res = await fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
+                credentials: 'include'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setItems(data);
             }
-        };
-        loadItems();
+        } catch (err) {
+            console.error("Failed to load whiteboard items", err);
+        }
     }, [meetingId, setItems]);
+
+    useEffect(() => {
+        loadItems();
+    }, [loadItems]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -247,7 +247,64 @@ export default function WhiteboardCanvas() {
     useWhiteboardPanning(renderManager);
 
     // Hook: Sync Logic
-    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager);
+    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager, loadItems);
+
+    // SERVER-SIDE SYNC LOGIC FOR UNDO/REDO
+    const syncStateChanges = useCallback(async (beforeItems: Map<string, any>, afterItems: Map<string, any>) => {
+        // 1. Detect Deleted Items (Present in Before, Missing in After)
+        beforeItems.forEach((item, id) => {
+            if (!afterItems.has(id)) {
+                // It was deleted locally by Undo/Redo. Sync this delete.
+                broadcastEvent('delete_item', { id });
+                fetch(`${API_URL}/api/whiteboard/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include'
+                }).catch(e => console.error("Sync delete failed", e));
+            }
+        });
+
+        // 2. Detect Created Items (Missing in Before, Present in After)
+        afterItems.forEach((item, id) => {
+            if (!beforeItems.has(id)) {
+                // It was created/restored locally. Sync this create.
+                broadcastEvent('add_item', item);
+                fetch(`${API_URL}/api/whiteboard`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...item, meetingId, userId: 'local-user' }),
+                    credentials: 'include'
+                }).catch(e => console.error("Sync create failed", e));
+            } else {
+                // 3. Detect Updated Items (Present in Both, but changed)
+                const beforeItem = beforeItems.get(id);
+                if (beforeItem !== item) {
+                    // Item changed (reference comparison works because store makes updates immutable)
+                    broadcastEvent('update_item', { id, changes: item });
+                    fetch(`${API_URL}/api/whiteboard/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(item),
+                        credentials: 'include'
+                    }).catch(e => console.error("Sync update failed", e));
+                }
+            }
+        });
+    }, [meetingId, broadcastEvent]);
+
+    const performUndo = useCallback(async () => {
+        const before = new Map(useWhiteboardStore.getState().items);
+        useWhiteboardStore.getState().undo();
+        const after = useWhiteboardStore.getState().items;
+        await syncStateChanges(before, after);
+    }, [syncStateChanges]);
+
+    const performRedo = useCallback(async () => {
+        const before = new Map(useWhiteboardStore.getState().items);
+        useWhiteboardStore.getState().redo();
+        const after = useWhiteboardStore.getState().items;
+        await syncStateChanges(before, after);
+    }, [syncStateChanges]);
 
     // Broadcast local cursor move (non-drawing)
     const broadcastCursorRef = useRef(broadcastCursor);
@@ -286,11 +343,11 @@ export default function WhiteboardCanvas() {
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'z') {
                     e.preventDefault();
-                    if (e.shiftKey) redo();
-                    else undo();
+                    if (e.shiftKey) performRedo();
+                    else performUndo();
                 } else if (e.key === 'y') {
                     e.preventDefault();
-                    redo();
+                    performRedo();
                 } else if (e.key === '0') {
                     e.preventDefault();
                     setZoom(1);
@@ -329,17 +386,46 @@ export default function WhiteboardCanvas() {
                 reader.onload = (event) => {
                     const dataUrl = event.target?.result as string;
                     if (dataUrl && renderManager) {
-                        const rect = renderManager.app.canvas.getBoundingClientRect();
-                        const x = (e.clientX - rect.left - pan.x) / zoom;
-                        const y = (e.clientY - rect.top - pan.y) / zoom;
+                        const img = new Image();
+                        img.onload = () => {
+                            const rect = renderManager.app.canvas.getBoundingClientRect();
+                            const x = (e.clientX - rect.left - pan.x) / zoom;
+                            const y = (e.clientY - rect.top - pan.y) / zoom;
 
-                        addItem({
-                            id: uuidv4(),
-                            type: 'image',
-                            data: { url: dataUrl }, // Store DataURL for local (should upload to server in real app)
-                            transform: { x, y, scaleX: 1, scaleY: 1, rotation: 0 },
-                            zIndex: Date.now()
-                        });
+                            // Limit Max Size (e.g., 500px)
+                            const MAX_SIZE = 500;
+                            let w = img.width;
+                            let h = img.height;
+
+                            if (w > MAX_SIZE || h > MAX_SIZE) {
+                                const ratio = w / h;
+                                if (w > h) {
+                                    w = MAX_SIZE;
+                                    h = MAX_SIZE / ratio;
+                                } else {
+                                    h = MAX_SIZE;
+                                    w = MAX_SIZE * ratio;
+                                }
+                            }
+
+                            addItem({
+                                id: uuidv4(),
+                                type: 'image',
+                                data: {
+                                    url: dataUrl,
+                                    width: w, // Use natural size or resized? 
+                                    // Better to store resized logic in Data or Transform?
+                                    // Let's store "Base Size" in data and 1.0 scale.
+                                    // Wait, if we change data.width, quality might be lost if we upscale later?
+                                    // No, data.width/height in `rendering` usually defines the sprite base size.
+                                    // Let's keep data as "content size" and transform as "manipulation".
+                                    // But to avoid huge default rect, we set data width/height to resized.
+                                },
+                                transform: { x: x - w / 2, y: y - h / 2, scaleX: 1, scaleY: 1, rotation: 0 }, // Center on mouse
+                                zIndex: Date.now()
+                            });
+                        }
+                        img.src = dataUrl;
                     }
                 };
                 reader.readAsDataURL(file);
@@ -383,8 +469,8 @@ export default function WhiteboardCanvas() {
 
             {/* Toolbar */}
             <WhiteboardToolbar
-                onUndo={() => undo()}
-                onRedo={() => redo()}
+                onUndo={performUndo}
+                onRedo={performRedo}
                 onClear={() => {
                     if (window.confirm("정말로 모든 내용을 지우시겠습니까?")) {
                         clearItems();
@@ -392,7 +478,7 @@ export default function WhiteboardCanvas() {
                         if (broadcastEvent) broadcastEvent('clear', {});
 
                         // Persist Clear to Backend
-                        fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
+                        fetch(`${API_URL}/api/whiteboard/meeting/${meetingId}`, {
                             method: 'DELETE',
                             credentials: 'include'
                         }).catch(err => console.error("Failed to clear backend", err));

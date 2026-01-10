@@ -9,9 +9,20 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { RedisModule } from './redis/redis.module';
 import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+      serveStaticOptions: {
+        setHeaders: (res) => {
+          res.set('Access-Control-Allow-Origin', '*');
+        },
+      },
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

@@ -1,4 +1,4 @@
-name: Deploy to Amazon ECS
+name: Amazon ECS 배포
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Deployment environment'
+        description: '배포 환경'
         required: true
         default: 'production'
         type: choice
@@ -18,7 +18,7 @@ on:
           - production
           - staging
       skip_tests:
-        description: 'Skip tests (use with caution)'
+        description: '테스트 건너뛰기 (주의해서 사용)'
         required: false
         default: false
         type: boolean
@@ -37,39 +37,39 @@ permissions:
 
 jobs:
   validate:
-    name: Validate & Test
+    name: 검증 및 테스트
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
 
     steps:
-      - name: Checkout repository
+      - name: 저장소 체크아웃
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Node.js 설정
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
-      - name: Install dependencies
+      - name: 의존성 설치
         run: npm ci
 
-      - name: Run linter
+      - name: 린터 실행
         run: npm run lint
 
-      - name: Run build
+      - name: 빌드 실행
         run: npm run build
 
-      - name: Run tests
+      - name: 테스트 실행
         if: ${{ github.event.inputs.skip_tests != 'true' }}
         run: npm test -- --passWithNoTests
         continue-on-error: true
 
   build:
-    name: Build & Push Image
+    name: 이미지 빌드 및 푸시
     runs-on: ubuntu-latest
     needs: validate
     outputs:
@@ -77,24 +77,24 @@ jobs:
       image_tag: ${{ steps.build-image.outputs.image_tag }}
 
     steps:
-      - name: Checkout repository
+      - name: 저장소 체크아웃
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: AWS 자격 증명 구성
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Amazon ECR 로그인
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
+      - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
 
-      - name: Generate image metadata
+      - name: 이미지 메타데이터 생성
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -104,7 +104,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ github.run_number }}
 
-      - name: Build and push Docker image
+      - name: Docker 이미지 빌드 및 푸시
         id: build-image
         uses: docker/build-push-action@v5
         with:
@@ -118,15 +118,16 @@ jobs:
           platforms: linux/amd64
           provenance: false
 
-      - name: Output image info
+      - name: 이미지 정보 출력
         id: output-image
         run: |
           IMAGE_TAG="${{ github.sha }}"
           IMAGE_TAG="${IMAGE_TAG:0:7}"
           echo "image=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
   deploy:
-    name: Deploy to ECS
+    name: ECS 배포
     runs-on: ubuntu-latest
     needs: build
     environment:
@@ -134,28 +135,28 @@ jobs:
       url: https://api.eum.com/health
 
     steps:
-      - name: Checkout repository
+      - name: 저장소 체크아웃
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: AWS 자격 증명 구성
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Amazon ECR 로그인
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Prepare task definition
+      - name: 태스크 정의 준비
         id: prepare-task-def
         run: |
-          # Replace placeholders in task definition
+          # 태스크 정의의 플레이스홀더 교체
           sed -i "s/YOUR_ACCOUNT_ID/${{ secrets.AWS_ACCOUNT_ID }}/g" ${{ env.ECS_TASK_DEFINITION }}
           cat ${{ env.ECS_TASK_DEFINITION }}
 
-      - name: Fill in the new image ID in the Amazon ECS task definition
+      - name: ECS 태스크 정의에 새 이미지 ID 적용
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -163,7 +164,7 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
-      - name: Deploy Amazon ECS task definition
+      - name: Amazon ECS 태스크 정의 배포
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
@@ -172,14 +173,15 @@ jobs:
           wait-for-service-stability: true
           wait-for-minutes: 10
 
-      - name: Verify deployment
+      - name: 배포 확인
         run: |
-          echo "Deployment completed successfully!"
-          echo "Service: ${{ env.ECS_SERVICE }}"
-          echo "Cluster: ${{ env.ECS_CLUSTER }}"
-          echo "Image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          echo "배포가 성공적으로 완료되었습니다!"
+          echo "서비스: ${{ env.ECS_SERVICE }}"
+          echo "클러스터: ${{ env.ECS_CLUSTER }}"
+          echo "이미지: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+
   notify:
-    name: Send Notification
+    name: 알림 전송
     runs-on: ubuntu-latest
     needs: [build, deploy]
     if: always()
@@ -187,19 +189,19 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
-      - name: Deployment Success Notification
+      - name: 배포 성공 알림
         if: ${{ needs.deploy.result == 'success' && env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
             {
-              "text": "EUM Backend Deployment Successful",
+              "text": "EUM 백엔드 배포 성공",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "Deployment Successful :white_check_mark:",
+                    "text": "배포 성공 :white_check_mark:",
                     "emoji": true
                   }
                 },
@@ -208,19 +210,19 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
+                      "text": "*저장소:*\n${{ github.repository }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
+                      "text": "*브랜치:*\n${{ github.ref_name }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Commit:*\n${{ github.sha }}"
+                      "text": "*커밋:*\n${{ github.sha }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Triggered by:*\n${{ github.actor }}"
+                      "text": "*실행자:*\n${{ github.actor }}"
                     }
                   ]
                 }
@@ -229,19 +231,19 @@ jobs:
         env:
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Deployment Failure Notification
+      - name: 배포 실패 알림
         if: ${{ needs.deploy.result == 'failure' && env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
             {
-              "text": "EUM Backend Deployment Failed",
+              "text": "EUM 백엔드 배포 실패",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "Deployment Failed :x:",
+                    "text": "배포 실패 :x:",
                     "emoji": true
                   }
                 },
@@ -250,19 +252,19 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
+                      "text": "*저장소:*\n${{ github.repository }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
+                      "text": "*브랜치:*\n${{ github.ref_name }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Commit:*\n${{ github.sha }}"
+                      "text": "*커밋:*\n${{ github.sha }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Logs>"
+                      "text": "*워크플로우:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|로그 보기>"
                     }
                   ]
                 }
@@ -271,15 +273,15 @@ jobs:
         env:
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Summary
+      - name: 요약
         run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 배포 요약" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ needs.deploy.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cluster | ${{ env.ECS_CLUSTER }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | ${{ env.ECS_SERVICE }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Actor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 상태 | ${{ needs.deploy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 환경 | production |" >> $GITHUB_STEP_SUMMARY
+          echo "| 클러스터 | ${{ env.ECS_CLUSTER }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 서비스 | ${{ env.ECS_SERVICE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 커밋 | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 실행자 | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY

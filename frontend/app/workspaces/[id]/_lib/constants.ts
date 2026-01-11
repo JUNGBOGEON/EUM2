@@ -1,9 +1,10 @@
-import { Video, FileText, History, Settings, Users } from 'lucide-react';
+import { Video, FileText, History, Settings, Users, Calendar } from 'lucide-react';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export const NAV_ITEMS = [
   { icon: Video, label: '회의', id: 'meeting' },
+  { icon: Calendar, label: '일정', id: 'calendar' },
   { icon: FileText, label: '파일', id: 'files' },
   { icon: History, label: '히스토리', id: 'history' },
   { icon: Users, label: '멤버', id: 'members' },

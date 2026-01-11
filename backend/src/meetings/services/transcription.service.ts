@@ -611,6 +611,7 @@ export class TranscriptionService {
     totalDurationMs: number;
     speakers: Array<{ id: string; name: string | null }>;
     transcripts: Array<{
+      resultId: string;
       speakerId: string;
       speakerName: string | null;
       text: string;
@@ -645,7 +646,8 @@ export class TranscriptionService {
       name,
     }));
 
-    const transcripts = transcriptions.map((t) => ({
+    const transcripts = transcriptions.map((t, idx) => ({
+      resultId: t.resultId || `t-${idx}`,
       speakerId: t.speakerId || t.chimeAttendeeId || 'unknown',
       speakerName: t.speaker?.name || null,
       text: t.originalText,

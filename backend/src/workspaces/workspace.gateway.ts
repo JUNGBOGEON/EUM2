@@ -88,6 +88,17 @@ export interface NewTranscriptPayload {
 }
 
 /**
+ * AI 요약 상태 업데이트 페이로드
+ */
+export interface SummaryStatusPayload {
+  type: 'summary_status_update';
+  workspaceId: string;
+  sessionId: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+  message?: string;
+}
+
+/**
  * 언어 변경 WebSocket 페이로드
  */
 export interface LanguageChangedPayload {
@@ -253,6 +264,18 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
       reason,
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * AI 요약 상태 업데이트 브로드캐스트
+   * - 요약 생성 시작/완료/실패 시 호출
+   */
+  broadcastSummaryStatus(payload: SummaryStatusPayload) {
+    const roomName = `workspace:${payload.workspaceId}`;
+    this.server.to(roomName).emit('summaryStatusUpdate', payload);
+    this.logger.log(
+      `Broadcasted summary status to ${roomName}: session=${payload.sessionId}, status=${payload.status}`,
+    );
   }
 
   /**

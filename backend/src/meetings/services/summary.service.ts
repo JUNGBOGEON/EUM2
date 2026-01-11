@@ -1,11 +1,15 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MeetingSession, SummaryStatus } from '../entities/meeting-session.entity';
 import { TranscriptionService } from './transcription.service';
-import { BedrockService } from '../../ai/bedrock.service';
+import { BedrockService, StructuredSummary, SummarySection } from '../../ai/bedrock.service';
 import { S3StorageService } from '../../storage/s3-storage.service';
 import { WorkspaceFilesService } from '../../workspaces/workspace-files.service';
+import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
+
+// Re-export types for use in other modules
+export type { StructuredSummary, SummarySection };
 
 @Injectable()
 export class SummaryService {
@@ -18,6 +22,8 @@ export class SummaryService {
     private bedrockService: BedrockService,
     private s3StorageService: S3StorageService,
     private workspaceFilesService: WorkspaceFilesService,
+    @Inject(forwardRef(() => WorkspaceGateway))
+    private workspaceGateway: WorkspaceGateway,
   ) {}
 
   /**
@@ -52,6 +58,14 @@ export class SummaryService {
       await this.sessionRepository.update(sessionId, {
         summaryStatus: SummaryStatus.SKIPPED,
       });
+      // WebSocket 알림
+      this.workspaceGateway.broadcastSummaryStatus({
+        type: 'summary_status_update',
+        workspaceId: session.workspaceId,
+        sessionId,
+        status: 'skipped',
+        message: '요약할 내용이 없습니다',
+      });
       return;
     }
 
@@ -64,24 +78,34 @@ export class SummaryService {
     await this.sessionRepository.update(sessionId, {
       summaryStatus: SummaryStatus.PROCESSING,
     });
+    // WebSocket 알림 - 처리 시작
+    this.workspaceGateway.broadcastSummaryStatus({
+      type: 'summary_status_update',
+      workspaceId: session.workspaceId,
+      sessionId,
+      status: 'processing',
+      message: `${transcriptData.transcripts.length}개의 발언을 분석하고 있습니다`,
+    });
 
     try {
-      // 3. 발화 스크립트 포맷팅
-      const formattedTranscript = this.formatTranscriptForAI(transcriptData);
+      // 3. 발화 스크립트 포맷팅 (resultId 포함)
+      const formattedTranscript = this.formatTranscriptWithIds(transcriptData);
 
-      // 4. Bedrock으로 요약 생성
-      const summaryMarkdown = await this.bedrockService.generateSummary(formattedTranscript);
+      // 4. Bedrock으로 구조화된 요약 생성
+      const structuredSummary = await this.bedrockService.generateSummaryWithRefs(formattedTranscript);
 
-      // 5. S3에 저장 (새로운 워크스페이스 중심 구조 사용)
+      // 5. S3에 JSON 형식으로 저장 (새로운 워크스페이스 중심 구조 사용)
       const s3Key = this.s3StorageService.generateSummaryKeyV2(
         session.workspaceId,
         sessionId,
-      );
+      ).replace('.md', '.json'); // JSON 확장자로 변경
+
+      const summaryJson = JSON.stringify(structuredSummary, null, 2);
 
       await this.s3StorageService.uploadFile(
         s3Key,
-        Buffer.from(summaryMarkdown, 'utf-8'),
-        'text/markdown; charset=utf-8',
+        Buffer.from(summaryJson, 'utf-8'),
+        'application/json; charset=utf-8',
       );
 
       // 6. WorkspaceFile 레코드 생성 (파일 저장소에 표시용)
@@ -89,7 +113,7 @@ export class SummaryService {
         session.workspaceId,
         sessionId,
         s3Key,
-        Buffer.byteLength(summaryMarkdown, 'utf-8'),
+        Buffer.byteLength(summaryJson, 'utf-8'),
         session.title,
       );
 
@@ -100,6 +124,15 @@ export class SummaryService {
       });
 
       this.logger.log(`[Summary] Summary completed for session ${sessionId}, S3 key: ${s3Key}`);
+
+      // WebSocket 알림 - 완료
+      this.workspaceGateway.broadcastSummaryStatus({
+        type: 'summary_status_update',
+        workspaceId: session.workspaceId,
+        sessionId,
+        status: 'completed',
+        message: '요약이 완료되었습니다',
+      });
     } catch (error) {
       this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, error);
 
@@ -107,31 +140,42 @@ export class SummaryService {
       await this.sessionRepository.update(sessionId, {
         summaryStatus: SummaryStatus.FAILED,
       });
+
+      // WebSocket 알림 - 실패
+      this.workspaceGateway.broadcastSummaryStatus({
+        type: 'summary_status_update',
+        workspaceId: session.workspaceId,
+        sessionId,
+        status: 'failed',
+        message: '요약 생성에 실패했습니다',
+      });
     }
   }
 
   /**
-   * AI용 발화 스크립트 포맷팅
+   * AI용 발화 스크립트 포맷팅 (resultId 포함)
    */
-  private formatTranscriptForAI(data: {
+  private formatTranscriptWithIds(data: {
     transcripts: Array<{
+      resultId?: string;
       speakerName: string | null;
       text: string;
     }>;
   }): string {
     return data.transcripts
-      .map((t) => `[${t.speakerName || '참가자'}]: ${t.text}`)
+      .map((t, idx) => `[ID:${t.resultId || `t-${idx}`}][${t.speakerName || '참가자'}]: ${t.text}`)
       .join('\n');
   }
 
   /**
    * 세션의 요약을 조회합니다.
    * @param sessionId 세션 ID
-   * @returns 요약 정보
+   * @returns 요약 정보 (구조화된 요약 포함)
    */
   async getSummary(sessionId: string): Promise<{
     status: SummaryStatus;
     content: string | null;
+    structuredSummary: StructuredSummary | null;
     presignedUrl: string | null;
   }> {
     const session = await this.sessionRepository.findOne({
@@ -146,18 +190,41 @@ export class SummaryService {
       return {
         status: session.summaryStatus,
         content: null,
+        structuredSummary: null,
         presignedUrl: null,
       };
     }
 
     try {
       // S3에서 콘텐츠 가져오기
-      const content = await this.s3StorageService.getSummaryContent(session.summaryS3Key);
+      const rawContent = await this.s3StorageService.getSummaryContent(session.summaryS3Key);
       const presignedUrl = await this.s3StorageService.getPresignedUrl(session.summaryS3Key);
+
+      // JSON 파싱 시도 (새 형식)
+      let structuredSummary: StructuredSummary | null = null;
+      let content: string | null = null;
+
+      try {
+        const parsed = JSON.parse(rawContent);
+        // 새 형식인지 확인 (sections 배열이 있어야 함)
+        if (parsed.sections && Array.isArray(parsed.sections)) {
+          structuredSummary = parsed;
+          content = parsed.markdown || null;
+        } else {
+          // JSON이지만 새 형식이 아님
+          content = rawContent;
+          structuredSummary = null;
+        }
+      } catch {
+        // 구 형식 (순수 마크다운)인 경우 - structuredSummary는 null로 유지
+        content = rawContent;
+        structuredSummary = null;
+      }
 
       return {
         status: session.summaryStatus,
         content,
+        structuredSummary,
         presignedUrl,
       };
     } catch (error) {
@@ -165,6 +232,7 @@ export class SummaryService {
       return {
         status: session.summaryStatus,
         content: null,
+        structuredSummary: null,
         presignedUrl: null,
       };
     }

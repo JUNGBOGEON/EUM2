@@ -24,11 +24,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { MeetingSession } from '../_lib/types';
+import type { MeetingSession, StructuredSummary, TranscriptItem } from '../_lib/types';
 import { API_URL } from '../_lib/constants';
+import { SummaryFullView } from './summary-full-view';
+import { SummaryLoadingAnimation } from './summary-loading-animation';
 
-interface TranscriptItem {
+// TranscriptItem with additional fields from API
+interface LocalTranscriptItem {
   id: string;
+  resultId?: string;
   originalText: string;
   speakerId?: string;
   speaker?: {
@@ -45,6 +49,7 @@ type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skippe
 interface SummaryData {
   status: SummaryStatus;
   content: string | null;
+  structuredSummary: StructuredSummary | null;
   presignedUrl: string | null;
 }
 
@@ -77,12 +82,13 @@ export function SessionHistory({
 }: SessionHistoryProps) {
   const [selectedSession, setSelectedSession] = useState<MeetingSession | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
-  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
+  const [transcripts, setTranscripts] = useState<LocalTranscriptItem[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [isFullViewOpen, setIsFullViewOpen] = useState(false);
 
   // Fetch summary data
   const fetchSummary = useCallback(async (sessionId: string) => {
@@ -116,7 +122,7 @@ export function SessionHistory({
       });
       if (response.ok) {
         // Set status to processing immediately
-        setSummaryData(prev => prev ? { ...prev, status: 'processing' } : { status: 'processing', content: null, presignedUrl: null });
+        setSummaryData(prev => prev ? { ...prev, status: 'processing' } : { status: 'processing', content: null, structuredSummary: null, presignedUrl: null });
       }
     } catch (error) {
       console.error('Failed to regenerate summary:', error);
@@ -480,10 +486,37 @@ export function SessionHistory({
                         </div>
                       ) : summaryData?.status === 'completed' && summaryData.content ? (
                         <div className="py-4 space-y-4">
-                          <div className="flex items-center gap-2 mb-4">
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            <span className="text-sm text-green-600 font-medium">AI 요약 완료</span>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              <span className="text-sm text-green-600 font-medium">AI 요약 완료</span>
+                            </div>
+                            {!summaryData.structuredSummary && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleRegenerateSummary}
+                                disabled={isRegeneratingSummary}
+                              >
+                                {isRegeneratingSummary ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    재생성 중...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    새 형식으로 다시 요약
+                                  </>
+                                )}
+                              </Button>
+                            )}
                           </div>
+                          {!summaryData.structuredSummary && (
+                            <div className="bg-muted/50 rounded-lg p-3 mb-4 text-sm text-muted-foreground">
+                              이전 형식의 요약입니다. "전체 보기" 기능을 사용하려면 새 형식으로 다시 요약해주세요.
+                            </div>
+                          )}
                           <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground prose-table:text-foreground prose-th:text-foreground prose-td:text-foreground prose-th:border prose-td:border prose-th:border-border prose-td:border-border prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-table:border-collapse">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {summaryData.content}
@@ -491,21 +524,7 @@ export function SessionHistory({
                           </div>
                         </div>
                       ) : summaryData?.status === 'processing' || summaryData?.status === 'pending' ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                            <Loader2 className="h-7 w-7 text-primary animate-spin" />
-                          </div>
-                          <p className="text-foreground font-medium">
-                            AI가 요약을 생성하고 있습니다
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            잠시만 기다려 주세요...
-                          </p>
-                          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>처리 중</span>
-                          </div>
-                        </div>
+                        <SummaryLoadingAnimation transcriptCount={transcripts.length} />
                       ) : summaryData?.status === 'failed' ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
@@ -659,7 +678,11 @@ export function SessionHistory({
                     <Download className="h-4 w-4 mr-2" />
                     다운로드
                   </Button>
-                  <Button className="flex-1">
+                  <Button
+                    className="flex-1"
+                    onClick={() => setIsFullViewOpen(true)}
+                    disabled={!summaryData?.structuredSummary}
+                  >
                     <Eye className="h-4 w-4 mr-2" />
                     전체 보기
                   </Button>
@@ -669,6 +692,23 @@ export function SessionHistory({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Summary Full View Modal */}
+      {isFullViewOpen && summaryData?.structuredSummary && selectedSession && (
+        <SummaryFullView
+          isOpen={isFullViewOpen}
+          onClose={() => setIsFullViewOpen(false)}
+          session={selectedSession}
+          structuredSummary={summaryData.structuredSummary}
+          transcripts={transcripts.map((t, idx) => ({
+            id: t.id,
+            resultId: t.resultId || `t-${idx}`,
+            originalText: t.originalText,
+            relativeStartSec: t.relativeStartSec,
+            speaker: t.speaker,
+          }))}
+        />
+      )}
     </>
   );
 }

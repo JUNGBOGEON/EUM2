@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { MeetingSession, SummaryStatus } from '../entities/meeting-session.entity';
 import { TranscriptionService } from './transcription.service';
 import { BedrockService, StructuredSummary, SummarySection } from '../../ai/bedrock.service';
+import { EventExtractionService } from '../../ai/event-extraction.service';
 import { S3StorageService } from '../../storage/s3-storage.service';
 import { WorkspaceFilesService } from '../../workspaces/workspace-files.service';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
@@ -20,6 +21,7 @@ export class SummaryService {
     private sessionRepository: Repository<MeetingSession>,
     private transcriptionService: TranscriptionService,
     private bedrockService: BedrockService,
+    private eventExtractionService: EventExtractionService,
     private s3StorageService: S3StorageService,
     private workspaceFilesService: WorkspaceFilesService,
     @Inject(forwardRef(() => WorkspaceGateway))
@@ -133,6 +135,14 @@ export class SummaryService {
         status: 'completed',
         message: '요약이 완료되었습니다',
       });
+
+      // 8. 이벤트 자동 추출 및 생성 (비동기, 요약 완료 후)
+      this.extractAndCreateEventsAsync(
+        sessionId,
+        session.workspaceId,
+        session.hostId,
+        formattedTranscript,
+      );
     } catch (error) {
       this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, error);
 
@@ -265,5 +275,52 @@ export class SummaryService {
       success: true,
       message: '요약 재생성이 시작되었습니다.',
     };
+  }
+
+  /**
+   * 녹취록에서 이벤트를 추출하고 캘린더에 자동 등록합니다.
+   * 이 메서드는 요약 생성 완료 후 비동기적으로 호출됩니다.
+   */
+  private async extractAndCreateEventsAsync(
+    sessionId: string,
+    workspaceId: string,
+    hostId: string,
+    formattedTranscript: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(`[EventExtraction] Starting event extraction for session: ${sessionId}`);
+
+      const result = await this.eventExtractionService.extractAndCreateEvents(
+        sessionId,
+        workspaceId,
+        hostId,
+        formattedTranscript,
+      );
+
+      if (result.created > 0 || result.pending > 0) {
+        // WebSocket 알림 - 자동 이벤트 생성
+        this.workspaceGateway.server
+          .to(`workspace:${workspaceId}`)
+          .emit('autoEventsCreated', {
+            sessionId,
+            createdCount: result.created,
+            pendingCount: result.pending,
+            createdEventIds: result.createdEventIds,
+          });
+
+        this.logger.log(
+          `[EventExtraction] Auto-created ${result.created} events, ` +
+          `${result.pending} pending for session ${sessionId}`,
+        );
+      } else {
+        this.logger.log(`[EventExtraction] No events extracted from session ${sessionId}`);
+      }
+    } catch (error) {
+      // 이벤트 추출 실패해도 요약은 성공으로 처리 (로그만 남김)
+      this.logger.warn(
+        `[EventExtraction] Event extraction failed for session ${sessionId}:`,
+        error,
+      );
+    }
   }
 }

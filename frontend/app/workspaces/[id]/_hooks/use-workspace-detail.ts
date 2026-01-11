@@ -825,6 +825,34 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       }
     });
 
+    // 회의에서 자동 추출된 이벤트 알림
+    socket.on('autoEventsCreated', (payload: {
+      sessionId: string;
+      createdCount: number;
+      pendingCount: number;
+      createdEventIds: string[];
+    }) => {
+      console.log('[WebSocket] Auto events created:', payload);
+
+      if (payload.createdCount > 0) {
+        toast.success(`회의에서 ${payload.createdCount}개 일정이 자동 추가되었습니다`, {
+          action: {
+            label: '캘린더 보기',
+            onClick: () => setActiveNav('calendar'),
+          },
+          duration: 8000,
+        });
+        // 이벤트 목록 새로고침
+        fetchEvents();
+      }
+
+      if (payload.pendingCount > 0) {
+        toast.info(`${payload.pendingCount}개 일정의 확인이 필요합니다`, {
+          duration: 10000,
+        });
+      }
+    });
+
     return () => {
       if (socket.connected) {
         socket.emit('leaveWorkspace', workspaceId);
@@ -833,10 +861,11 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       socket.off('disconnect');
       socket.off('connect_error');
       socket.off('sessionUpdate');
+      socket.off('autoEventsCreated');
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [workspaceId, fetchSessions, fetchActiveSessions]);
+  }, [workspaceId, fetchSessions, fetchActiveSessions, fetchEvents, setActiveNav]);
   
   // Initial data fetch
   useEffect(() => {

@@ -14,6 +14,7 @@ import {
   Languages,
   AudioLines,
   Loader2,
+  PenTool,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -45,11 +46,14 @@ interface MeetingControlsProps {
   isVoiceFocusSupported?: boolean;
   isVoiceFocusEnabled?: boolean;
   isVoiceFocusLoading?: boolean;
+  // 화이트보드
+  isWhiteboardEnabled?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleTranslation?: () => void;
   onToggleVoiceFocus?: () => void;
+  onToggleWhiteboard?: () => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -65,11 +69,13 @@ export function MeetingControls({
   isVoiceFocusSupported = false,
   isVoiceFocusEnabled = false,
   isVoiceFocusLoading = false,
+  isWhiteboardEnabled = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
   onToggleTranslation,
   onToggleVoiceFocus,
+  onToggleWhiteboard,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -209,6 +215,29 @@ export function MeetingControls({
                   ? '노이즈 제거 끄기'
                   : '노이즈 제거 켜기'}
               </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Whiteboard Toggle */}
+        {onToggleWhiteboard && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={onToggleWhiteboard}
+                className={`h-12 px-4 rounded-full transition-colors gap-2 ${
+                  isWhiteboardEnabled
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <PenTool className="h-5 w-5" />
+                <span className="text-sm font-medium">화이트보드</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{isWhiteboardEnabled ? '화이트보드 닫기' : '화이트보드 열기'}</p>
             </TooltipContent>
           </Tooltip>
         )}

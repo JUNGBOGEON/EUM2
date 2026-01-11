@@ -90,6 +90,7 @@ export interface TranscriptItem {
   timestamp: number; // 밀리초 (미팅 시작 기준 경과 시간)
   isPartial: boolean;
   attendeeId?: string;
+  languageCode?: string; // 발화자의 언어 코드 (예: 'ko-KR', 'en-US')
 }
 
 /**

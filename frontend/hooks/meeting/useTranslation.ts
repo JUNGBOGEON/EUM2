@@ -62,6 +62,10 @@ export function useTranslation({
 
   const hasLoadedStatusRef = useRef(false);
   const hasAuthenticatedRef = useRef(false);
+  // setTimeout ID 추적 (cleanup용)
+  const subtitleTimersRef = useRef<Map<string, NodeJS.Timeout[]>>(new Map());
+  // 컴포넌트 마운트 상태 추적
+  const isMountedRef = useRef(true);
 
   // 초기 번역 상태 로드
   const loadTranslationStatus = useCallback(async () => {
@@ -117,6 +121,12 @@ export function useTranslation({
     console.log('[Translation] 📡 Listener registered for translatedTranscript');
 
     const unsubscribe = on<TranslatedTranscript>('translatedTranscript', (payload) => {
+      // 컴포넌트 언마운트 시 상태 업데이트 방지
+      if (!isMountedRef.current) {
+        console.log('[Translation] 🛑 Ignoring payload - component unmounted');
+        return;
+      }
+
       console.log('[Translation] 📥 Received:', payload);
 
       // 1. 기존 translations Map 업데이트 (LRU 캐시)
@@ -151,27 +161,39 @@ export function useTranslation({
             console.log('[Translation] 🔄 Duplicate subtitle ignored:', payload.resultId);
             return prev;
           }
-          
+
           // 최대 개수 초과 시 오래된 것 제거
           const filtered = prev.slice(-(MAX_VISIBLE_SUBTITLES - 1));
           return [...filtered, newSubtitle];
         });
 
+        // 타이머 저장 배열 생성
+        const timers: NodeJS.Timeout[] = [];
+
         // 퇴장 애니메이션 시작 (표시 시간 - 애니메이션 시간 후)
-        setTimeout(() => {
+        const exitTimer = setTimeout(() => {
+          if (!isMountedRef.current) return;
           setRecentTranslations((prev) =>
             prev.map((t) =>
               t.resultId === payload.resultId ? { ...t, isExiting: true } : t
             )
           );
         }, SUBTITLE_DISPLAY_DURATION - SUBTITLE_EXIT_ANIMATION_DURATION);
+        timers.push(exitTimer);
 
         // 실제 제거 (표시 시간 후)
-        setTimeout(() => {
+        const removeTimer = setTimeout(() => {
+          if (!isMountedRef.current) return;
           setRecentTranslations((prev) =>
             prev.filter((t) => t.resultId !== payload.resultId)
           );
+          // 타이머 맵에서 제거
+          subtitleTimersRef.current.delete(payload.resultId);
         }, SUBTITLE_DISPLAY_DURATION);
+        timers.push(removeTimer);
+
+        // 타이머 저장 (cleanup용)
+        subtitleTimersRef.current.set(payload.resultId, timers);
 
         console.log('[Translation] 🎬 Added to floating subtitle:', payload.translatedText);
       }
@@ -179,6 +201,38 @@ export function useTranslation({
 
     return unsubscribe;
   }, [isConnected, on, userId]);
+
+  // meetingId 변경 시 상태 초기화
+  useEffect(() => {
+    return () => {
+      // 모든 타이머 정리
+      subtitleTimersRef.current.forEach((timers) => {
+        timers.forEach((timer) => clearTimeout(timer));
+      });
+      subtitleTimersRef.current.clear();
+
+      // 상태 초기화
+      setTranslations(new Map());
+      setRecentTranslations([]);
+      hasLoadedStatusRef.current = false;
+      hasAuthenticatedRef.current = false;
+    };
+  }, [meetingId]);
+
+  // 컴포넌트 언마운트 시 cleanup
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      // 모든 타이머 정리
+      subtitleTimersRef.current.forEach((timers) => {
+        timers.forEach((timer) => clearTimeout(timer));
+      });
+      subtitleTimersRef.current.clear();
+      console.log('[Translation] 🧹 Cleaned up on unmount');
+    };
+  }, []);
 
   // 번역 토글
   const toggleTranslation = useCallback(async () => {

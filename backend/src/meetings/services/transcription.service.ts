@@ -20,6 +20,7 @@ import {
 import { RedisService } from '../../redis/redis.service';
 import { ChimeService } from './chime.service';
 import { TranslationService } from './translation.service';
+import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
 
 @Injectable()
 export class TranscriptionService {
@@ -38,6 +39,8 @@ export class TranscriptionService {
     private chimeService: ChimeService,
     @Inject(forwardRef(() => TranslationService))
     private translationService: TranslationService,
+    @Inject(forwardRef(() => WorkspaceGateway))
+    private workspaceGateway: WorkspaceGateway,
   ) {}
 
   // ==========================================
@@ -115,6 +118,23 @@ export class TranscriptionService {
     if (userId) {
       await this.translationService.setUserLanguage(sessionId, userId, newLanguageCode);
       this.logger.log(`[Transcription] User ${userId} language set to ${newLanguageCode}`);
+
+      // 참가자 정보 조회 (attendeeId, userName)
+      const participant = await this.participantRepository.findOne({
+        where: { sessionId, userId },
+        relations: ['user'],
+      });
+
+      // 세션 참가자들에게 언어 변경 브로드캐스트
+      this.workspaceGateway.broadcastLanguageChange(sessionId, {
+        type: 'language_changed',
+        sessionId,
+        userId,
+        attendeeId: participant?.chimeAttendeeId,
+        userName: participant?.user?.name || 'Participant',
+        languageCode: newLanguageCode,
+        timestamp: Date.now(),
+      });
     }
 
     // NOTE: Chime Transcription은 세션당 하나의 언어만 지원하므로
@@ -147,29 +167,69 @@ export class TranscriptionService {
 
   async saveTranscription(
     dto: SaveTranscriptionDto,
-  ): Promise<{ buffered: boolean; bufferSize: number; flushed?: boolean }> {
+  ): Promise<{ buffered: boolean; bufferSize: number; flushed?: boolean; serverTimestamp?: number }> {
     const sessionId = dto.sessionId;
     if (!sessionId) {
       throw new BadRequestException('sessionId is required');
     }
 
-    const session = await this.sessionRepository.findOne({
-      where: { id: sessionId },
-    });
+    // 세션 정보 캐시에서 조회 (5분 TTL)
+    const sessionCacheKey = `session:info:${sessionId}`;
+    let session = await this.redisService.get<MeetingSession>(sessionCacheKey);
 
     if (!session) {
-      throw new NotFoundException('세션을 찾을 수 없습니다.');
+      session = await this.sessionRepository.findOne({
+        where: { id: sessionId },
+      });
+
+      if (!session) {
+        throw new NotFoundException('세션을 찾을 수 없습니다.');
+      }
+
+      // 캐시에 저장 (5분 TTL)
+      await this.redisService.set(sessionCacheKey, session, 5 * 60 * 1000);
     }
 
-    if (dto.isPartial) {
-      return { buffered: false, bufferSize: 0 };
+    // 서버 기준 상대 타임스탬프 계산 (모든 클라이언트 동기화용)
+    const sessionStartMs = session.startedAt ? new Date(session.startedAt).getTime() : Date.now();
+    const serverTimestamp = Math.max(0, dto.startTimeMs - sessionStartMs);
+
+    // 참가자 정보 캐시에서 조회 (1분 TTL - 참가자 변경 가능성 있음)
+    const participantCacheKey = `participant:info:${sessionId}:${dto.attendeeId}`;
+    let participant = await this.redisService.get<SessionParticipant & { user?: { id: string; name: string; profileImage?: string } }>(participantCacheKey);
+
+    if (!participant) {
+      participant = await this.participantRepository.findOne({
+        where: { sessionId, chimeAttendeeId: dto.attendeeId },
+        relations: ['user'],
+      });
+
+      if (participant) {
+        // 캐시에 저장 (1분 TTL)
+        await this.redisService.set(participantCacheKey, participant, 60 * 1000);
+      }
     }
 
-    // 참가자 정보 조회 (발화자 userId와 이름을 버퍼에 저장하기 위해)
-    const participant = await this.participantRepository.findOne({
-      where: { sessionId, chimeAttendeeId: dto.attendeeId },
-      relations: ['user'],
+    // 모든 세션 참가자에게 트랜스크립트 브로드캐스트 (실시간 동기화)
+    // Partial 트랜스크립트도 브로드캐스트하여 실시간 타이핑 효과 제공
+    this.workspaceGateway.broadcastNewTranscript(sessionId, {
+      type: 'new_transcript',
+      resultId: dto.resultId,
+      sessionId,
+      speakerId: dto.attendeeId,
+      speakerUserId: participant?.userId || '',
+      speakerName: participant?.user?.name || '참가자',
+      speakerProfileImage: participant?.user?.profileImage,
+      text: dto.transcript,
+      timestamp: serverTimestamp,  // 서버 계산 타임스탬프
+      isPartial: dto.isPartial,
+      languageCode: dto.languageCode || 'ko-KR',
     });
+
+    // Partial 결과는 버퍼에 저장하지 않음
+    if (dto.isPartial) {
+      return { buffered: false, bufferSize: 0, serverTimestamp };
+    }
 
     const bufferSize = await this.redisService.addTranscriptionToBuffer(
       sessionId,
@@ -191,7 +251,8 @@ export class TranscriptionService {
     );
 
     // 최종 결과에 대해 번역 트리거 (비동기)
-    this.triggerTranslation(sessionId, dto).catch((err) => {
+    // session과 participant를 전달하여 중복 쿼리 방지
+    this.triggerTranslation(sessionId, dto, session, participant).catch((err) => {
       this.logger.warn(`Translation trigger failed: ${err.message}`);
     });
 
@@ -199,41 +260,67 @@ export class TranscriptionService {
 
     if (shouldFlush) {
       await this.flushTranscriptionBuffer(sessionId);
-      return { buffered: true, bufferSize: 0, flushed: true };
+      return { buffered: true, bufferSize: 0, flushed: true, serverTimestamp };
     }
 
-    return { buffered: true, bufferSize };
+    return { buffered: true, bufferSize, serverTimestamp };
   }
 
   /**
    * 번역 트리거 (비동기)
    * Final 트랜스크립션이 저장될 때 호출됨
+   * @param session - 이미 조회된 세션 (중복 쿼리 방지)
+   * @param participant - 이미 조회된 참가자 (중복 쿼리 방지)
    */
   private async triggerTranslation(
     sessionId: string,
     dto: SaveTranscriptionDto,
+    session: MeetingSession,
+    participant: SessionParticipant | null,
   ): Promise<void> {
-    // 발화자 정보 조회
-    const participant = await this.participantRepository.findOne({
-      where: { sessionId, chimeAttendeeId: dto.attendeeId },
-      relations: ['user'],
-    });
+    this.logger.log(
+      `[Translation Trigger] 🎯 attendeeId=${dto.attendeeId}, dto.languageCode=${dto.languageCode}, transcript="${dto.transcript.substring(0, 30)}..."`,
+    );
 
     if (!participant) {
-      this.logger.debug(`Participant not found for attendeeId: ${dto.attendeeId}`);
+      this.logger.warn(`[Translation Trigger] ⚠️ Participant not found for attendeeId: ${dto.attendeeId}`);
       return;
     }
 
-    // 세션 시작 시간 조회
-    const session = await this.sessionRepository.findOne({
-      where: { id: sessionId },
-    });
-    const sessionStartMs = session?.startedAt?.getTime() || Date.now();
+    this.logger.log(
+      `[Translation Trigger] 👤 Participant found: userId=${participant.userId}, name=${participant.user?.name}`,
+    );
 
-    // 발화자의 언어 설정 조회 (발화자가 설정한 언어 = 발화자가 말하는 언어)
-    const speakerLanguage = await this.translationService.getUserLanguage(
-      sessionId,
-      participant.userId,
+    // 전달받은 세션에서 시작 시간 사용 (중복 쿼리 제거)
+    // Redis 캐시에서 가져온 경우 Date가 문자열로 역직렬화되어 있을 수 있음
+    let sessionStartMs: number;
+    if (session.startedAt) {
+      // Date 객체인 경우와 문자열인 경우 모두 처리
+      sessionStartMs = typeof session.startedAt === 'string'
+        ? new Date(session.startedAt).getTime()
+        : session.startedAt.getTime();
+    } else {
+      sessionStartMs = Date.now();
+    }
+
+    // 소스 언어 결정 (우선순위)
+    // 1. Chime Transcription이 자동 감지한 언어 (dto.languageCode)
+    // 2. 발화자의 개인 언어 설정 (폴백)
+    let sourceLanguage = dto.languageCode;
+    
+    if (!sourceLanguage) {
+      // 자동 감지 실패 시 발화자의 개인 설정 사용
+      sourceLanguage = await this.translationService.getUserLanguage(
+        sessionId,
+        participant.userId,
+      );
+      this.logger.log(`[Translation Trigger] 🌐 Using user language setting: ${sourceLanguage}`);
+    } else {
+      this.logger.log(`[Translation Trigger] 🌐 Using dto.languageCode: ${sourceLanguage}`);
+    }
+
+    this.logger.log(
+      `[Translation Trigger] ➡️ Calling processTranslation with sourceLanguage=${sourceLanguage}`,
     );
 
     // 번역 요청 생성
@@ -243,7 +330,7 @@ export class TranscriptionService {
       speakerAttendeeId: dto.attendeeId,
       speakerName: participant.user?.name || '참가자',
       originalText: dto.transcript,
-      sourceLanguage: speakerLanguage, // 발화자의 개인 언어 설정 사용
+      sourceLanguage, // 자동 감지된 언어 또는 개인 설정
       resultId: dto.resultId,
       timestamp: dto.startTimeMs - sessionStartMs,
     });
@@ -314,7 +401,12 @@ export class TranscriptionService {
       participants.map((p) => [p.chimeAttendeeId, p.userId]),
     );
 
-    const sessionStartMs = session.startedAt?.getTime() || Date.now();
+    // Redis 캐시에서 가져온 경우 Date가 문자열로 역직렬화되어 있을 수 있음
+    const sessionStartMs = session.startedAt
+      ? (typeof session.startedAt === 'string'
+          ? new Date(session.startedAt).getTime()
+          : session.startedAt.getTime())
+      : Date.now();
 
     const transcriptions: Transcription[] = bufferedItems.map((item) => {
       const transcription = new Transcription();

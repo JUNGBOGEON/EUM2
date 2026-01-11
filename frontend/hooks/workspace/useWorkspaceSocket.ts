@@ -109,8 +109,8 @@ export function useWorkspaceSocket({
   useEffect(() => {
     if (!workspaceId) return;
 
-    // 소켓 연결
-    const socket = io(`${config.socketUrl}/workspace`, {
+    // 소켓 연결 (config.socketUrl에 이미 /workspace 네임스페이스 포함)
+    const socket = io(config.socketUrl, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
       reconnection: true,

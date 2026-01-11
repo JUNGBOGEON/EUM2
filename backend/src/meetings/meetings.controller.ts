@@ -8,16 +8,21 @@ import {
   UseGuards,
   Req,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { StartSessionDto } from './dto/start-session.dto';
 import { SaveTranscriptionDto, SaveTranscriptionBatchDto } from './dto/save-transcription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { TranscribeUrlService, SupportedLanguage } from './services/transcribe-url.service';
 
 @Controller('meetings')
 @UseGuards(JwtAuthGuard)
 export class MeetingsController {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(
+    private readonly meetingsService: MeetingsService,
+    private readonly transcribeUrlService: TranscribeUrlService,
+  ) {}
 
   // ==========================================
   // 세션 관리 API
@@ -291,5 +296,40 @@ export class MeetingsController {
   @Get(':sessionId/translation/preferences')
   getLanguagePreferences(@Param('sessionId') sessionId: string) {
     return this.meetingsService.getSessionLanguagePreferences(sessionId);
+  }
+
+  // ==========================================
+  // 클라이언트 STT API (AWS Transcribe Streaming)
+  // ==========================================
+
+  /**
+   * AWS Transcribe Streaming Pre-signed URL 발급
+   *
+   * 클라이언트가 직접 AWS Transcribe Streaming에 연결하여
+   * 사용자가 선택한 언어로 음성 인식을 수행할 수 있도록
+   * AWS Signature V4로 서명된 WebSocket URL을 발급합니다.
+   *
+   * @param sessionId 세션 ID (참가자 권한 확인용)
+   * @param languageCode 음성 인식 언어 코드 (ko-KR, en-US, ja-JP, zh-CN)
+   * @returns Pre-signed WebSocket URL (유효기간: 5분)
+   */
+  @Get('sessions/:sessionId/transcribe-url')
+  async getTranscribePresignedUrl(
+    @Param('sessionId') sessionId: string,
+    @Query('languageCode') languageCode: string = 'ko-KR',
+    @Req() req: any,
+  ) {
+    // 언어 코드 유효성 검사
+    if (!this.transcribeUrlService.isLanguageSupported(languageCode)) {
+      throw new BadRequestException(
+        `Unsupported language code: ${languageCode}. Supported: ${TranscribeUrlService.SUPPORTED_LANGUAGES.join(', ')}`,
+      );
+    }
+
+    // 참가자 권한 확인
+    await this.meetingsService.verifyParticipant(sessionId, req.user.id);
+
+    // Pre-signed URL 생성
+    return this.transcribeUrlService.generatePresignedUrl(languageCode as SupportedLanguage);
   }
 }

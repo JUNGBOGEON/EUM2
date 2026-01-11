@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -123,6 +123,21 @@ export class MeetingsService {
    */
   async getSessionInfo(sessionId: string) {
     return this.chimeService.getSessionInfo(sessionId);
+  }
+
+  /**
+   * 세션 참가자 권한 확인
+   * - 사용자가 해당 세션의 참가자인지 확인
+   * @throws ForbiddenException 참가자가 아닌 경우
+   */
+  async verifyParticipant(sessionId: string, userId: string): Promise<void> {
+    const participant = await this.participantRepository.findOne({
+      where: { sessionId, userId },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('세션 참가자만 이 기능을 사용할 수 있습니다.');
+    }
   }
 
   // ==========================================

@@ -12,6 +12,8 @@ import {
   LogOut,
   PhoneOff,
   Languages,
+  AudioLines,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -39,10 +41,15 @@ interface MeetingControlsProps {
   isHost?: boolean;
   translationEnabled?: boolean;
   isTogglingTranslation?: boolean;
+  // Voice Focus (노이즈 억제)
+  isVoiceFocusSupported?: boolean;
+  isVoiceFocusEnabled?: boolean;
+  isVoiceFocusLoading?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleTranslation?: () => void;
+  onToggleVoiceFocus?: () => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -55,10 +62,14 @@ export function MeetingControls({
   isHost = false,
   translationEnabled = false,
   isTogglingTranslation = false,
+  isVoiceFocusSupported = false,
+  isVoiceFocusEnabled = false,
+  isVoiceFocusLoading = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
   onToggleTranslation,
+  onToggleVoiceFocus,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -160,6 +171,44 @@ export function MeetingControls({
             </TooltipTrigger>
             <TooltipContent side="top">
               <p>{translationEnabled ? '번역 끄기' : '번역 켜기'}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Voice Focus (Noise Suppression) - 항상 표시 */}
+        {onToggleVoiceFocus && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggleVoiceFocus}
+                disabled={isVoiceFocusLoading || !isVoiceFocusSupported}
+                className={`h-12 w-12 rounded-full transition-colors ${
+                  !isVoiceFocusSupported
+                    ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                    : isVoiceFocusEnabled
+                    ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                {isVoiceFocusLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <AudioLines className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>
+                {!isVoiceFocusSupported
+                  ? '이 브라우저에서 지원되지 않음'
+                  : isVoiceFocusLoading
+                  ? '처리 중...'
+                  : isVoiceFocusEnabled
+                  ? '노이즈 제거 끄기'
+                  : '노이즈 제거 켜기'}
+              </p>
             </TooltipContent>
           </Tooltip>
         )}

@@ -132,11 +132,17 @@ export function TranscriptPanel({
                     <span className="text-sm font-medium text-blue-400">
                       {speakerName}
                     </span>
-                    {currentLang && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-white/50">
-                        {currentLang.flag}
-                      </Badge>
-                    )}
+                    {(() => {
+                      // 발화자의 언어 표시 (트랜스크립트에 포함된 languageCode 사용)
+                      const speakerLang = item.languageCode 
+                        ? TRANSCRIPTION_LANGUAGES.find((l) => l.code === item.languageCode)
+                        : currentLang;
+                      return speakerLang && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-white/50">
+                          {speakerLang.flag}
+                        </Badge>
+                      );
+                    })()}
                     <span className="text-xs text-white/40">
                       {formatElapsedTime(item.timestamp)}
                     </span>

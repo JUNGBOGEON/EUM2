@@ -142,6 +142,7 @@ export function useInvitations({ userId }: UseInvitationsProps): UseInvitationsR
     const socket = io(`${API_URL}/workspace`, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
+      forceNew: true, // SocketContext와 별도의 소켓 인스턴스 생성
     });
 
     socketRef.current = socket;

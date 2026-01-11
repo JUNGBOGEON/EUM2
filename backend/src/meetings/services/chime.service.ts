@@ -546,19 +546,31 @@ export class ChimeService {
     chimeMeetingId: string,
     languageCode: string = 'ko-KR',
   ): Promise<void> {
+    // 지원하는 언어 목록 (AWS Transcribe 자동 언어 감지용)
+    const SUPPORTED_LANGUAGES = ['ko-KR', 'en-US', 'ja-JP', 'zh-CN'];
+    
     const command = new StartMeetingTranscriptionCommand({
       MeetingId: chimeMeetingId,
       TranscriptionConfiguration: {
         EngineTranscribeSettings: {
-          LanguageCode: languageCode as any,
-          Region: 'ap-southeast-2',
+          // 자동 언어 감지 활성화 (다국어 회의 지원)
+          IdentifyLanguage: true,
+          // 감지할 언어 목록 (4개 고정: 한국어, 영어, 일본어, 중국어)
+          LanguageOptions: SUPPORTED_LANGUAGES.join(','),
+          // 기본 언어 설정 (빠른 감지를 위한 힌트)
+          PreferredLanguage: languageCode as any,
+          // ✅ 최적화 1: 리전 자동 선택 (미팅 리전과 동일 - 지연시간 감소)
+          Region: 'auto',
+          // ✅ 최적화 2: 부분 결과 안정화 (실시간 자막 응답 개선)
+          EnablePartialResultsStabilization: true,
+          PartialResultsStability: 'medium',
         },
       },
     });
 
     try {
       await this.chimeClient.send(command);
-      console.log(`[Chime] Transcription started for session`);
+      console.log(`[Chime] Transcription started with auto language detection. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`);
     } catch (error) {
       console.error('[Chime] Failed to start transcription:', error);
       throw error;

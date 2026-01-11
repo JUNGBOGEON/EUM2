@@ -17,9 +17,11 @@ import { ThemeProvider } from 'styled-components';
 // Custom hooks
 import {
   useDeviceManager,
-  useTranscription,
+  useBrowserTranscription,
   useMeetingConnection,
   useTranslation,
+  useVoiceFocus,
+  useTranscriptSync,
 } from '@/hooks/meeting';
 
 // New modular components
@@ -64,7 +66,7 @@ function MeetingRoomContent() {
     clearPermissionError,
   } = useDeviceManager();
 
-  const { meeting, isJoining, error, userId, currentUser, currentAttendeeId, isHost, handleLeave, handleEndMeeting } = useMeetingConnection({
+  const { meeting, isJoining, error, userId, currentUser, currentAttendeeId, isHost, handleLeave: originalHandleLeave, handleEndMeeting: originalHandleEndMeeting } = useMeetingConnection({
     meetingId,
     workspaceId,
   });
@@ -74,22 +76,48 @@ function MeetingRoomContent() {
     ? new Date(meeting.startedAt).getTime()
     : null;
 
+  // 트랜스크립트 동기화 훅 (로컬 + 원격 트랜스크립트 통합)
   const {
-    transcripts,
-    isTranscribing,
+    transcripts: syncedTranscripts,
+    isRoomJoined,
+    addLocalTranscript,
+    updateLocalTranscript,
+    loadHistory,
+  } = useTranscriptSync({
+    sessionId: meetingId,
+    currentUserId: userId,
+    currentAttendeeId,
+  });
+
+  // Chime SDK hooks (음소거 상태 먼저 가져오기)
+  const { muted, toggleMute } = useToggleLocalMute();
+
+  // Browser Transcription (클라이언트 직접 AWS Transcribe 연결)
+  const {
+    isStreaming: isTranscribing,
     isLoadingHistory,
     transcriptContainerRef,
     selectedLanguage,
     isChangingLanguage,
-    changeLanguage,
+    setSelectedLanguage,
     getParticipantByAttendeeId,
-  } = useTranscription({
-    meetingId,
+    stopTranscription,
+  } = useBrowserTranscription({
+    sessionId: meetingId,
     meetingStartTime,
     currentUserName: currentUser?.name,
     currentUserProfileImage: currentUser?.profileImage,
     currentAttendeeId,
     userId,
+    enabled: true, // 항상 활성화
+    isMuted: muted, // Chime 음소거 상태 연동
+    isRoomJoined, // WebSocket 룸 참가 완료 후에만 트랜스크립션 시작
+    // 동기화 훅 콜백 연결
+    onLocalTranscript: addLocalTranscript,
+    onTimestampCorrection: (id, serverTimestamp) => {
+      updateLocalTranscript(id, { timestamp: serverTimestamp });
+    },
+    onHistoryLoaded: loadHistory,
   });
 
   // Translation hook
@@ -104,9 +132,17 @@ function MeetingRoomContent() {
     userId,
   });
 
+  // Voice Focus hook (노이즈 억제 - 기본 활성화)
+  const {
+    isVoiceFocusSupported,
+    isVoiceFocusEnabled,
+    isVoiceFocusLoading,
+    toggleVoiceFocus,
+  } = useVoiceFocus();
+
   // Chime SDK hooks
   const { isVideoEnabled, toggleVideo } = useLocalVideo();
-  const { muted, toggleMute } = useToggleLocalMute();
+  // muted, toggleMute는 위에서 useBrowserTranscription 전에 선언됨
   const { toggleContentShare } = useContentShareControls();
   const { isLocalUserSharing } = useContentShareState();
   const { roster } = useRosterState();
@@ -141,6 +177,28 @@ function MeetingRoomContent() {
     }
     toggleMute();
   }, [devicesInitialized, selectDevices, toggleMute]);
+
+  // 회의 나가기 (트랜스크립션 먼저 중지)
+  const handleLeave = useCallback(() => {
+    console.log('[MeetingPage] Stopping transcription before leaving...');
+    try {
+      stopTranscription();
+    } catch (error) {
+      console.error('[MeetingPage] Failed to stop transcription, proceeding with leave:', error);
+    }
+    originalHandleLeave();
+  }, [stopTranscription, originalHandleLeave]);
+
+  // 회의 종료 (트랜스크립션 먼저 중지)
+  const handleEndMeeting = useCallback(() => {
+    console.log('[MeetingPage] Stopping transcription before ending meeting...');
+    try {
+      stopTranscription();
+    } catch (error) {
+      console.error('[MeetingPage] Failed to stop transcription, proceeding with end meeting:', error);
+    }
+    originalHandleEndMeeting();
+  }, [stopTranscription, originalHandleEndMeeting]);
 
   // Loading state
   if (isJoining) {
@@ -195,12 +253,12 @@ function MeetingRoomContent() {
 
         {/* Transcript Panel - Always visible on right */}
         <TranscriptPanel
-          transcripts={transcripts}
+          transcripts={syncedTranscripts}
           isTranscribing={isTranscribing}
           isLoadingHistory={isLoadingHistory}
           selectedLanguage={selectedLanguage}
           isChangingLanguage={isChangingLanguage}
-          onLanguageChange={changeLanguage}
+          onLanguageChange={setSelectedLanguage}
           containerRef={transcriptContainerRef}
           getParticipantByAttendeeId={getParticipantByAttendeeId}
           translationEnabled={translationEnabled}
@@ -216,10 +274,14 @@ function MeetingRoomContent() {
         isHost={isHost}
         translationEnabled={translationEnabled}
         isTogglingTranslation={isTogglingTranslation}
+        isVoiceFocusSupported={isVoiceFocusSupported}
+        isVoiceFocusEnabled={isVoiceFocusEnabled}
+        isVoiceFocusLoading={isVoiceFocusLoading}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
         onToggleTranslation={toggleTranslation}
+        onToggleVoiceFocus={toggleVoiceFocus}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeeting}

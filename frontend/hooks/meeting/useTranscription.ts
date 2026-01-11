@@ -276,6 +276,8 @@ export function useTranscription({
               endTimeMs: result.endTimeMs,
               confidence: avgConfidence,
               isStable: true,
+              // 자동 언어 감지된 언어 코드 전달 (다국어 회의 지원)
+              languageCode: result.languageCode,
             }),
           }).catch((err) => logger.error('Failed to save transcription:', err));
         }

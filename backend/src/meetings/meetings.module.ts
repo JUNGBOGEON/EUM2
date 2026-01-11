@@ -14,6 +14,7 @@ import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
 import { SummaryService } from './services/summary.service';
 import { TranslationService } from './services/translation.service';
+import { TranscribeUrlService } from './services/transcribe-url.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TranslationService } from './services/translation.service';
     TranscriptionService,
     SummaryService,
     TranslationService,
+    TranscribeUrlService,
   ],
   exports: [
     MeetingsService,
@@ -37,6 +39,7 @@ import { TranslationService } from './services/translation.service';
     TranscriptionService,
     SummaryService,
     TranslationService,
+    TranscribeUrlService,
   ],
 })
 export class MeetingsModule {}

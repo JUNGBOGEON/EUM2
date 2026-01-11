@@ -37,6 +37,7 @@
     "@nestjs/platform-socket.io": "^11.1.11",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.1.11",
+    "aws-signature-v4": "^1.4.0",
     "body-parser": "^2.2.2",
     "cache-manager": "^7.2.7",
     "cache-manager-ioredis-yet": "^2.1.2",

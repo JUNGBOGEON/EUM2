@@ -67,7 +67,9 @@ export class WorkspaceFilesService {
     // Determine file type from MIME type
     const fileType = this.getFileType(file.mimetype);
     if (!fileType) {
-      throw new BadRequestException(`지원하지 않는 파일 형식입니다: ${file.mimetype}`);
+      throw new BadRequestException(
+        `지원하지 않는 파일 형식입니다: ${file.mimetype}`,
+      );
     }
 
     // Decode filename for proper Korean/Unicode support
@@ -115,7 +117,11 @@ export class WorkspaceFilesService {
     type?: FileType,
     limit: number = 50,
     cursor?: string,
-  ): Promise<{ files: WorkspaceFile[]; nextCursor: string | null; total: number }> {
+  ): Promise<{
+    files: WorkspaceFile[];
+    nextCursor: string | null;
+    total: number;
+  }> {
     const queryBuilder = this.fileRepository
       .createQueryBuilder('file')
       .leftJoinAndSelect('file.uploader', 'uploader')
@@ -159,7 +165,8 @@ export class WorkspaceFilesService {
 
     return {
       files,
-      nextCursor: hasMore && files.length > 0 ? files[files.length - 1].id : null,
+      nextCursor:
+        hasMore && files.length > 0 ? files[files.length - 1].id : null,
       total,
     };
   }
@@ -184,7 +191,9 @@ export class WorkspaceFilesService {
       throw new NotFoundException('파일을 찾을 수 없습니다');
     }
 
-    const presignedUrl = await this.s3StorageService.getPresignedUrl(file.s3Key);
+    const presignedUrl = await this.s3StorageService.getPresignedUrl(
+      file.s3Key,
+    );
 
     return {
       presignedUrl,

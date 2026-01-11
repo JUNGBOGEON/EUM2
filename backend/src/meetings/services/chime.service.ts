@@ -17,7 +17,10 @@ import {
   StopMeetingTranscriptionCommand,
 } from '@aws-sdk/client-chime-sdk-meetings';
 
-import { MeetingSession, SessionStatus } from '../entities/meeting-session.entity';
+import {
+  MeetingSession,
+  SessionStatus,
+} from '../entities/meeting-session.entity';
 import {
   SessionParticipant,
   ParticipantRole,
@@ -101,7 +104,8 @@ export class ChimeService {
       },
     });
 
-    const chimeMeetingResponse = await this.chimeClient.send(createMeetingCommand);
+    const chimeMeetingResponse =
+      await this.chimeClient.send(createMeetingCommand);
     const chimeMeeting = chimeMeetingResponse.Meeting;
 
     if (!chimeMeeting) {
@@ -123,7 +127,11 @@ export class ChimeService {
     await this.sessionRepository.save(session);
 
     // 호스트를 첫 번째 참가자로 추가
-    const attendee = await this.addAttendee(session, hostId, ParticipantRole.HOST);
+    const attendee = await this.addAttendee(
+      session,
+      hostId,
+      ParticipantRole.HOST,
+    );
 
     // Redis에 세션 정보 캐싱
     await this.redisService.setMeetingSession(session.id, {
@@ -135,14 +143,19 @@ export class ChimeService {
     // 자동으로 트랜스크립션 시작 (기본 언어: ko-KR)
     const defaultLanguage = 'ko-KR';
     try {
-      await this.startSessionTranscription(chimeMeeting.MeetingId!, defaultLanguage);
+      await this.startSessionTranscription(
+        chimeMeeting.MeetingId!,
+        defaultLanguage,
+      );
       // Redis에 현재 언어 저장
       await this.redisService.set(
         `transcription:language:${session.id}`,
         defaultLanguage,
         2 * 60 * 60 * 1000, // 2시간 TTL
       );
-      console.log(`[Chime] Auto-started transcription for session ${session.id}`);
+      console.log(
+        `[Chime] Auto-started transcription for session ${session.id}`,
+      );
     } catch (error) {
       console.error('[Chime] Failed to auto-start transcription:', error);
       // 트랜스크립션 시작 실패해도 세션은 정상 진행
@@ -157,7 +170,7 @@ export class ChimeService {
         title: session.title,
         status: session.status,
         hostId: session.hostId,
-        startedAt: session.startedAt!,
+        startedAt: session.startedAt,
         participantCount: 1,
         host,
       },
@@ -198,7 +211,7 @@ export class ChimeService {
     }
 
     // 이미 참가 중인지 확인
-    let participant = await this.participantRepository.findOne({
+    const participant = await this.participantRepository.findOne({
       where: { sessionId, userId },
     });
 
@@ -207,29 +220,35 @@ export class ChimeService {
         session,
         attendee: {
           attendeeId: participant.chimeAttendeeId!,
-          joinToken: participant.joinToken!,
+          joinToken: participant.joinToken,
         },
       };
     }
 
     // 새 참가자 추가
-    const role = session.hostId === userId 
-      ? ParticipantRole.HOST 
-      : ParticipantRole.PARTICIPANT;
-    
+    const role =
+      session.hostId === userId
+        ? ParticipantRole.HOST
+        : ParticipantRole.PARTICIPANT;
+
     let attendee: SessionParticipant;
-    
+
     try {
       attendee = await this.addAttendee(session, userId, role);
     } catch (error: any) {
       // AWS Chime Meeting이 만료되었거나 삭제된 경우 새로 생성
-      if (error?.Code === 'NotFound' || error?.name === 'NotFoundException' || 
-          (error?.$metadata?.httpStatusCode === 404)) {
-        console.log(`Chime meeting ${session.chimeMeetingId} not found, recreating...`);
-        
+      if (
+        error?.Code === 'NotFound' ||
+        error?.name === 'NotFoundException' ||
+        error?.$metadata?.httpStatusCode === 404
+      ) {
+        console.log(
+          `Chime meeting ${session.chimeMeetingId} not found, recreating...`,
+        );
+
         // 새 Chime Meeting 생성
         session = await this.recreateChimeMeeting(session);
-        
+
         // 재시도
         attendee = await this.addAttendee(session, userId, role);
       } else {
@@ -287,7 +306,7 @@ export class ChimeService {
     participant.leftAt = new Date();
     if (participant.joinedAt) {
       participant.durationSec = Math.floor(
-        (participant.leftAt.getTime() - participant.joinedAt.getTime()) / 1000
+        (participant.leftAt.getTime() - participant.joinedAt.getTime()) / 1000,
       );
     }
     await this.participantRepository.save(participant);
@@ -316,7 +335,9 @@ export class ChimeService {
       // 먼저 트랜스크립션 중지
       try {
         await this.stopSessionTranscription(session.chimeMeetingId);
-        console.log(`[Chime] Auto-stopped transcription for session ${sessionId}`);
+        console.log(
+          `[Chime] Auto-stopped transcription for session ${sessionId}`,
+        );
       } catch (error) {
         console.error('[Chime] Failed to auto-stop transcription:', error);
         // 트랜스크립션 중지 실패해도 세션 종료 진행
@@ -339,7 +360,7 @@ export class ChimeService {
     session.endedAt = new Date();
     if (session.startedAt) {
       session.durationSec = Math.floor(
-        (session.endedAt.getTime() - session.startedAt.getTime()) / 1000
+        (session.endedAt.getTime() - session.startedAt.getTime()) / 1000,
       );
     }
 
@@ -363,11 +384,14 @@ export class ChimeService {
   /**
    * 호스트 정보 조회 (내부 메서드)
    */
-  private async getHostInfo(hostId: string): Promise<{
-    id: string;
-    name: string;
-    profileImage?: string;
-  } | undefined> {
+  private async getHostInfo(hostId: string): Promise<
+    | {
+        id: string;
+        name: string;
+        profileImage?: string;
+      }
+    | undefined
+  > {
     const participant = await this.participantRepository.findOne({
       where: { userId: hostId },
       relations: ['user'],
@@ -391,7 +415,9 @@ export class ChimeService {
   /**
    * Chime Meeting이 만료된 경우 새로 생성 (내부 메서드)
    */
-  private async recreateChimeMeeting(session: MeetingSession): Promise<MeetingSession> {
+  private async recreateChimeMeeting(
+    session: MeetingSession,
+  ): Promise<MeetingSession> {
     const externalMeetingId = uuidv4();
 
     // 새 AWS Chime Meeting 생성
@@ -407,7 +433,8 @@ export class ChimeService {
       },
     });
 
-    const chimeMeetingResponse = await this.chimeClient.send(createMeetingCommand);
+    const chimeMeetingResponse =
+      await this.chimeClient.send(createMeetingCommand);
     const chimeMeeting = chimeMeetingResponse.Meeting;
 
     if (!chimeMeeting) {
@@ -431,14 +458,22 @@ export class ChimeService {
 
     // 자동으로 트랜스크립션 시작
     try {
-      const savedLanguage = await this.redisService.get(`transcription:language:${session.id}`);
-      const languageCode = (typeof savedLanguage === 'string' ? savedLanguage : null) || 'ko-KR';
-      await this.startSessionTranscription(chimeMeeting.MeetingId!, languageCode);
+      const savedLanguage = await this.redisService.get(
+        `transcription:language:${session.id}`,
+      );
+      const languageCode =
+        (typeof savedLanguage === 'string' ? savedLanguage : null) || 'ko-KR';
+      await this.startSessionTranscription(
+        chimeMeeting.MeetingId!,
+        languageCode,
+      );
     } catch (err) {
       console.error('Failed to restart transcription:', err);
     }
 
-    console.log(`Recreated Chime meeting: ${chimeMeeting.MeetingId} for session ${session.id}`);
+    console.log(
+      `Recreated Chime meeting: ${chimeMeeting.MeetingId} for session ${session.id}`,
+    );
 
     return session;
   }
@@ -551,7 +586,7 @@ export class ChimeService {
   ): Promise<void> {
     // 지원하는 언어 목록 (AWS Transcribe 자동 언어 감지용)
     const SUPPORTED_LANGUAGES = ['ko-KR', 'en-US', 'ja-JP', 'zh-CN'];
-    
+
     const command = new StartMeetingTranscriptionCommand({
       MeetingId: chimeMeetingId,
       TranscriptionConfiguration: {
@@ -573,7 +608,9 @@ export class ChimeService {
 
     try {
       await this.chimeClient.send(command);
-      console.log(`[Chime] Transcription started with auto language detection. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`);
+      console.log(
+        `[Chime] Transcription started with auto language detection. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
+      );
     } catch (error) {
       console.error('[Chime] Failed to start transcription:', error);
       throw error;

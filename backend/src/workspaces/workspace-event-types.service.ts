@@ -91,7 +91,10 @@ export class WorkspaceEventTypesService {
   /**
    * 워크스페이스의 모든 이벤트 타입 조회
    */
-  async findAll(workspaceId: string, userId: string): Promise<WorkspaceEventType[]> {
+  async findAll(
+    workspaceId: string,
+    userId: string,
+  ): Promise<WorkspaceEventType[]> {
     await this.validateWorkspaceAccess(workspaceId, userId);
 
     return this.eventTypesRepository.find({
@@ -141,7 +144,9 @@ export class WorkspaceEventTypesService {
       });
 
       if (existing) {
-        throw new ConflictException('같은 이름의 이벤트 유형이 이미 존재합니다.');
+        throw new ConflictException(
+          '같은 이름의 이벤트 유형이 이미 존재합니다.',
+        );
       }
     }
 

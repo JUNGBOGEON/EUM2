@@ -13,6 +13,7 @@ import {
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getAuthUser } from '../auth/interfaces';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)
@@ -21,12 +22,12 @@ export class WorkspacesController {
 
   @Post()
   create(@Body() createWorkspaceDto: CreateWorkspaceDto, @Req() req: any) {
-    return this.workspacesService.create(createWorkspaceDto, req.user.id);
+    return this.workspacesService.create(createWorkspaceDto, getAuthUser(req).id);
   }
 
   @Get()
   findAll(@Req() req: any) {
-    return this.workspacesService.findAllByUser(req.user.id);
+    return this.workspacesService.findAllByUser(getAuthUser(req).id);
   }
 
   @Get(':id')
@@ -64,7 +65,7 @@ export class WorkspacesController {
     @Param('memberId') memberId: string,
     @Req() req: any,
   ) {
-    await this.workspacesService.kickMember(workspaceId, memberId, req.user.id);
+    await this.workspacesService.kickMember(workspaceId, memberId, getAuthUser(req).id);
     return { success: true, message: '멤버를 내보냈습니다' };
   }
 
@@ -73,7 +74,7 @@ export class WorkspacesController {
    */
   @Post(':id/leave')
   async leaveWorkspace(@Param('id') workspaceId: string, @Req() req: any) {
-    await this.workspacesService.leaveWorkspace(workspaceId, req.user.id);
+    await this.workspacesService.leaveWorkspace(workspaceId, getAuthUser(req).id);
     return { success: true, message: '워크스페이스를 나갔습니다' };
   }
 }

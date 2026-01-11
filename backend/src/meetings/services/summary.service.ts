@@ -1,9 +1,22 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MeetingSession, SummaryStatus } from '../entities/meeting-session.entity';
+import {
+  MeetingSession,
+  SummaryStatus,
+} from '../entities/meeting-session.entity';
 import { TranscriptionService } from './transcription.service';
-import { BedrockService, StructuredSummary, SummarySection } from '../../ai/bedrock.service';
+import {
+  BedrockService,
+  StructuredSummary,
+  SummarySection,
+} from '../../ai/bedrock.service';
 import { EventExtractionService } from '../../ai/event-extraction.service';
 import { S3StorageService } from '../../storage/s3-storage.service';
 import { WorkspaceFilesService } from '../../workspaces/workspace-files.service';
@@ -33,7 +46,9 @@ export class SummaryService {
    * @param sessionId 세션 ID
    */
   async generateAndSaveSummary(sessionId: string): Promise<void> {
-    this.logger.log(`[Summary] Starting summary generation for session: ${sessionId}`);
+    this.logger.log(
+      `[Summary] Starting summary generation for session: ${sessionId}`,
+    );
 
     // 세션 조회
     const session = await this.sessionRepository.findOne({
@@ -47,16 +62,21 @@ export class SummaryService {
 
     // 이미 완료되었으면 스킵
     if (session.summaryStatus === SummaryStatus.COMPLETED) {
-      this.logger.log(`[Summary] Summary already completed for session: ${sessionId}`);
+      this.logger.log(
+        `[Summary] Summary already completed for session: ${sessionId}`,
+      );
       return;
     }
 
     // 1. 발화 스크립트 조회 (PROCESSING 전에 먼저 체크)
-    const transcriptData = await this.transcriptionService.getTranscriptForSummary(sessionId);
+    const transcriptData =
+      await this.transcriptionService.getTranscriptForSummary(sessionId);
 
     // 2. 발화 기록이 없으면 AI 요약 생성하지 않음
     if (!transcriptData.fullText || transcriptData.transcripts.length === 0) {
-      this.logger.log(`[Summary] No transcripts for session ${sessionId}, skipping AI summary`);
+      this.logger.log(
+        `[Summary] No transcripts for session ${sessionId}, skipping AI summary`,
+      );
       await this.sessionRepository.update(sessionId, {
         summaryStatus: SummaryStatus.SKIPPED,
       });
@@ -73,7 +93,7 @@ export class SummaryService {
 
     this.logger.log(
       `[Summary] Found ${transcriptData.transcripts.length} transcripts, ` +
-      `${transcriptData.speakers.length} speakers for session ${sessionId}`,
+        `${transcriptData.speakers.length} speakers for session ${sessionId}`,
     );
 
     // 상태 업데이트: PROCESSING (발화 기록이 있을 때만)
@@ -94,13 +114,13 @@ export class SummaryService {
       const formattedTranscript = this.formatTranscriptWithIds(transcriptData);
 
       // 4. Bedrock으로 구조화된 요약 생성
-      const structuredSummary = await this.bedrockService.generateSummaryWithRefs(formattedTranscript);
+      const structuredSummary =
+        await this.bedrockService.generateSummaryWithRefs(formattedTranscript);
 
       // 5. S3에 JSON 형식으로 저장 (새로운 워크스페이스 중심 구조 사용)
-      const s3Key = this.s3StorageService.generateSummaryKeyV2(
-        session.workspaceId,
-        sessionId,
-      ).replace('.md', '.json'); // JSON 확장자로 변경
+      const s3Key = this.s3StorageService
+        .generateSummaryKeyV2(session.workspaceId, sessionId)
+        .replace('.md', '.json'); // JSON 확장자로 변경
 
       const summaryJson = JSON.stringify(structuredSummary, null, 2);
 
@@ -125,7 +145,9 @@ export class SummaryService {
         summaryStatus: SummaryStatus.COMPLETED,
       });
 
-      this.logger.log(`[Summary] Summary completed for session ${sessionId}, S3 key: ${s3Key}`);
+      this.logger.log(
+        `[Summary] Summary completed for session ${sessionId}, S3 key: ${s3Key}`,
+      );
 
       // WebSocket 알림 - 완료
       this.workspaceGateway.broadcastSummaryStatus({
@@ -144,7 +166,10 @@ export class SummaryService {
         formattedTranscript,
       );
     } catch (error) {
-      this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, error);
+      this.logger.error(
+        `[Summary] Failed to generate summary for ${sessionId}:`,
+        error,
+      );
 
       // 상태 업데이트: FAILED
       await this.sessionRepository.update(sessionId, {
@@ -173,7 +198,10 @@ export class SummaryService {
     }>;
   }): string {
     return data.transcripts
-      .map((t, idx) => `[ID:${t.resultId || `t-${idx}`}][${t.speakerName || '참가자'}]: ${t.text}`)
+      .map(
+        (t, idx) =>
+          `[ID:${t.resultId || `t-${idx}`}][${t.speakerName || '참가자'}]: ${t.text}`,
+      )
       .join('\n');
   }
 
@@ -196,7 +224,10 @@ export class SummaryService {
       throw new NotFoundException('세션을 찾을 수 없습니다.');
     }
 
-    if (session.summaryStatus !== SummaryStatus.COMPLETED || !session.summaryS3Key) {
+    if (
+      session.summaryStatus !== SummaryStatus.COMPLETED ||
+      !session.summaryS3Key
+    ) {
       return {
         status: session.summaryStatus,
         content: null,
@@ -207,8 +238,12 @@ export class SummaryService {
 
     try {
       // S3에서 콘텐츠 가져오기
-      const rawContent = await this.s3StorageService.getSummaryContent(session.summaryS3Key);
-      const presignedUrl = await this.s3StorageService.getPresignedUrl(session.summaryS3Key);
+      const rawContent = await this.s3StorageService.getSummaryContent(
+        session.summaryS3Key,
+      );
+      const presignedUrl = await this.s3StorageService.getPresignedUrl(
+        session.summaryS3Key,
+      );
 
       // JSON 파싱 시도 (새 형식)
       let structuredSummary: StructuredSummary | null = null;
@@ -238,7 +273,10 @@ export class SummaryService {
         presignedUrl,
       };
     } catch (error) {
-      this.logger.error(`[Summary] Failed to get summary content for ${sessionId}:`, error);
+      this.logger.error(
+        `[Summary] Failed to get summary content for ${sessionId}:`,
+        error,
+      );
       return {
         status: session.summaryStatus,
         content: null,
@@ -252,7 +290,9 @@ export class SummaryService {
    * 요약을 재생성합니다.
    * @param sessionId 세션 ID
    */
-  async regenerateSummary(sessionId: string): Promise<{ success: boolean; message: string }> {
+  async regenerateSummary(
+    sessionId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const session = await this.sessionRepository.findOne({
       where: { id: sessionId },
     });
@@ -288,7 +328,9 @@ export class SummaryService {
     formattedTranscript: string,
   ): Promise<void> {
     try {
-      this.logger.log(`[EventExtraction] Starting event extraction for session: ${sessionId}`);
+      this.logger.log(
+        `[EventExtraction] Starting event extraction for session: ${sessionId}`,
+      );
 
       const result = await this.eventExtractionService.extractAndCreateEvents(
         sessionId,
@@ -310,10 +352,12 @@ export class SummaryService {
 
         this.logger.log(
           `[EventExtraction] Auto-created ${result.created} events, ` +
-          `${result.pending} pending for session ${sessionId}`,
+            `${result.pending} pending for session ${sessionId}`,
         );
       } else {
-        this.logger.log(`[EventExtraction] No events extracted from session ${sessionId}`);
+        this.logger.log(
+          `[EventExtraction] No events extracted from session ${sessionId}`,
+        );
       }
     } catch (error) {
       // 이벤트 추출 실패해도 요약은 성공으로 처리 (로그만 남김)

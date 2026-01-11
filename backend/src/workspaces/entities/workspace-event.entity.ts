@@ -15,10 +15,10 @@ import { WorkspaceEventType } from './workspace-event-type.entity';
  * 반복 타입
  */
 export enum RecurrenceType {
-  NONE = 'none',            // 반복 없음
-  DAILY = 'daily',          // 매일
-  WEEKLY = 'weekly',        // 매주
-  MONTHLY = 'monthly',      // 매월
+  NONE = 'none', // 반복 없음
+  DAILY = 'daily', // 매일
+  WEEKLY = 'weekly', // 매주
+  MONTHLY = 'monthly', // 매월
 }
 
 /**
@@ -50,7 +50,11 @@ export class WorkspaceEvent {
   description: string;
 
   // ===== 이벤트 유형 (커스텀 타입 참조) =====
-  @ManyToOne(() => WorkspaceEventType, { onDelete: 'SET NULL', nullable: true, eager: true })
+  @ManyToOne(() => WorkspaceEventType, {
+    onDelete: 'SET NULL',
+    nullable: true,
+    eager: true,
+  })
   @JoinColumn({ name: 'eventTypeId' })
   eventType: WorkspaceEventType;
 

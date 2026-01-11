@@ -21,10 +21,7 @@ export class UsersService {
     const searchQuery = `%${query.trim()}%`;
 
     return this.usersRepository.find({
-      where: [
-        { name: ILike(searchQuery) },
-        { email: ILike(searchQuery) },
-      ],
+      where: [{ name: ILike(searchQuery) }, { email: ILike(searchQuery) }],
       take: limit,
       order: { name: 'ASC' },
       select: ['id', 'name', 'email', 'profileImage'],

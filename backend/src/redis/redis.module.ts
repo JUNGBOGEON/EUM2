@@ -14,7 +14,10 @@ import { RedisService } from './redis.service';
         const redisPassword = configService.get('REDIS_PASSWORD');
 
         // ElastiCache가 설정되어 있으면 Redis 사용, 아니면 메모리 캐시
-        if (redisHost && redisHost !== 'your-elasticache-endpoint.cache.amazonaws.com') {
+        if (
+          redisHost &&
+          redisHost !== 'your-elasticache-endpoint.cache.amazonaws.com'
+        ) {
           return {
             store: redisStore,
             host: redisHost,

@@ -317,41 +317,27 @@ function MeetingRoomContent() {
         />
       </main>
       {/* Controls */}
-      <div className="relative">
-        <MeetingControls
-          muted={muted}
-          isVideoEnabled={isVideoEnabled}
-          isLocalUserSharing={isLocalUserSharing}
-          isHost={isHost}
-          translationEnabled={translationEnabled}
-          isTogglingTranslation={isTogglingTranslation}
-          isVoiceFocusSupported={isVoiceFocusSupported}
-          isVoiceFocusEnabled={isVoiceFocusEnabled}
-          isVoiceFocusLoading={isVoiceFocusLoading}
-          onToggleMute={handleToggleMute}
-          onToggleVideo={handleToggleVideo}
-          onToggleScreenShare={() => toggleContentShare()}
-          onToggleTranslation={toggleTranslation}
-          onToggleVoiceFocus={toggleVoiceFocus}
-          onOpenSettings={() => setShowDeviceSettings(true)}
-          onLeave={handleLeave}
-          onEndMeeting={handleEndMeetingClick}
-        />
-        {/* Temporary Whiteboard Toggle Button Overlay */}
-        <button
-          onClick={() => setShowWhiteboard(!showWhiteboard)}
-          className={`absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full transition-colors ${showWhiteboard
-            ? 'bg-blue-500 hover:bg-blue-600'
-            : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
-            }`}
-          title={showWhiteboard ? '화이트보드 닫기' : '화이트보드 열기'}
-          style={{ right: '180px' }}
-        >
-          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
-      </div>
+      <MeetingControls
+        muted={muted}
+        isVideoEnabled={isVideoEnabled}
+        isLocalUserSharing={isLocalUserSharing}
+        isHost={isHost}
+        translationEnabled={translationEnabled}
+        isTogglingTranslation={isTogglingTranslation}
+        isVoiceFocusSupported={isVoiceFocusSupported}
+        isVoiceFocusEnabled={isVoiceFocusEnabled}
+        isVoiceFocusLoading={isVoiceFocusLoading}
+        isWhiteboardEnabled={showWhiteboard}
+        onToggleMute={handleToggleMute}
+        onToggleVideo={handleToggleVideo}
+        onToggleScreenShare={() => toggleContentShare()}
+        onToggleTranslation={toggleTranslation}
+        onToggleVoiceFocus={toggleVoiceFocus}
+        onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
+        onOpenSettings={() => setShowDeviceSettings(true)}
+        onLeave={handleLeave}
+        onEndMeeting={handleEndMeetingClick}
+      />
       {/* Device Settings Dialog */}
       <DeviceSettingsDialog
         isOpen={showDeviceSettings}

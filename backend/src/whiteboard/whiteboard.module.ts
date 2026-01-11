@@ -5,9 +5,9 @@ import { WhiteboardController } from './whiteboard.controller';
 import { WhiteboardItem } from './entities/whiteboard-item.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([WhiteboardItem])],
-    controllers: [WhiteboardController],
-    providers: [WhiteboardService],
-    exports: [WhiteboardService],
+  imports: [TypeOrmModule.forFeature([WhiteboardItem])],
+  controllers: [WhiteboardController],
+  providers: [WhiteboardService],
+  exports: [WhiteboardService],
 })
-export class WhiteboardModule { }
+export class WhiteboardModule {}

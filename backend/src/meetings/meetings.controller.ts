@@ -12,9 +12,16 @@ import {
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { StartSessionDto } from './dto/start-session.dto';
-import { SaveTranscriptionDto, SaveTranscriptionBatchDto } from './dto/save-transcription.dto';
+import {
+  SaveTranscriptionDto,
+  SaveTranscriptionBatchDto,
+} from './dto/save-transcription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { TranscribeUrlService, SupportedLanguage } from './services/transcribe-url.service';
+import { getAuthUser } from '../auth/interfaces';
+import {
+  TranscribeUrlService,
+  SupportedLanguage,
+} from './services/transcribe-url.service';
 
 @Controller('meetings')
 @UseGuards(JwtAuthGuard)
@@ -35,7 +42,11 @@ export class MeetingsController {
    */
   @Post('sessions/start')
   startSession(@Body() dto: StartSessionDto, @Req() req: any) {
-    return this.meetingsService.startSession(dto.workspaceId, req.user.id, dto.title);
+    return this.meetingsService.startSession(
+      dto.workspaceId,
+      getAuthUser(req).id,
+      dto.title,
+    );
   }
 
   /**
@@ -43,7 +54,7 @@ export class MeetingsController {
    */
   @Post('sessions/:sessionId/join')
   joinSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.joinSession(sessionId, req.user.id);
+    return this.meetingsService.joinSession(sessionId, getAuthUser(req).id);
   }
 
   /**
@@ -51,7 +62,7 @@ export class MeetingsController {
    */
   @Post('sessions/:sessionId/leave')
   leaveSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.leaveSession(sessionId, req.user.id);
+    return this.meetingsService.leaveSession(sessionId, getAuthUser(req).id);
   }
 
   /**
@@ -66,7 +77,11 @@ export class MeetingsController {
   ) {
     // Query string은 문자열로 오므로 boolean으로 변환 (기본값: true)
     const shouldGenerateSummary = generateSummary !== 'false';
-    return this.meetingsService.endSession(sessionId, req.user.id, shouldGenerateSummary);
+    return this.meetingsService.endSession(
+      sessionId,
+      getAuthUser(req).id,
+      shouldGenerateSummary,
+    );
   }
 
   /**
@@ -142,7 +157,11 @@ export class MeetingsController {
     @Body('languageCode') languageCode: string,
     @Req() req: any,
   ) {
-    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode, req.user.id);
+    return this.meetingsService.changeTranscriptionLanguage(
+      sessionId,
+      languageCode,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -153,7 +172,10 @@ export class MeetingsController {
     @Param('sessionId') sessionId: string,
     @Req() req: any,
   ) {
-    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId, req.user.id);
+    return this.meetingsService.getCurrentTranscriptionLanguage(
+      sessionId,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -271,18 +293,19 @@ export class MeetingsController {
     @Body('enabled') enabled: boolean,
     @Req() req: any,
   ) {
-    return this.meetingsService.toggleTranslation(sessionId, req.user.id, enabled);
+    return this.meetingsService.toggleTranslation(
+      sessionId,
+      getAuthUser(req).id,
+      enabled,
+    );
   }
 
   /**
    * 번역 상태 조회 (활성화 여부 + 사용자 언어)
    */
   @Get(':sessionId/translation/status')
-  getTranslationStatus(
-    @Param('sessionId') sessionId: string,
-    @Req() req: any,
-  ) {
-    return this.meetingsService.getTranslationStatus(sessionId, req.user.id);
+  getTranslationStatus(@Param('sessionId') sessionId: string, @Req() req: any) {
+    return this.meetingsService.getTranslationStatus(sessionId, getAuthUser(req).id);
   }
 
   /**
@@ -294,7 +317,11 @@ export class MeetingsController {
     @Body('languageCode') languageCode: string,
     @Req() req: any,
   ) {
-    return this.meetingsService.setUserLanguage(sessionId, req.user.id, languageCode);
+    return this.meetingsService.setUserLanguage(
+      sessionId,
+      getAuthUser(req).id,
+      languageCode,
+    );
   }
 
   /**
@@ -334,9 +361,9 @@ export class MeetingsController {
     }
 
     // 참가자 권한 확인
-    await this.meetingsService.verifyParticipant(sessionId, req.user.id);
+    await this.meetingsService.verifyParticipant(sessionId, getAuthUser(req).id);
 
     // Pre-signed URL 생성
-    return this.transcribeUrlService.generatePresignedUrl(languageCode as SupportedLanguage);
+    return this.transcribeUrlService.generatePresignedUrl(languageCode);
   }
 }

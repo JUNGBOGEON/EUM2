@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { getAuthUser, getGoogleUser } from './interfaces';
 
 @Controller('auth')
 export class AuthController {
@@ -21,7 +22,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleAuthCallback(@Req() req: any, @Res() res: Response) {
-    const { accessToken } = await this.authService.googleLogin(req.user);
+    const { accessToken } = await this.authService.googleLogin(getGoogleUser(req));
 
     // HttpOnly 쿠키에 JWT 설정
     res.cookie('access_token', accessToken, {
@@ -39,8 +40,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Req() req: any) {
-    const { password, ...user } = req.user;
-    return user;
+    return getAuthUser(req);
   }
 
   @Get('logout')

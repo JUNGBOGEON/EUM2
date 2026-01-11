@@ -18,6 +18,7 @@ import {
   GetEventsQueryDto,
 } from './dto/workspace-event.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getAuthUser } from '../auth/interfaces';
 
 @Controller('workspaces/:workspaceId/events')
 @UseGuards(JwtAuthGuard)
@@ -33,7 +34,7 @@ export class WorkspaceEventsController {
     @Body() createDto: CreateWorkspaceEventDto,
     @Req() req: any,
   ) {
-    return this.eventsService.create(workspaceId, createDto, req.user.id);
+    return this.eventsService.create(workspaceId, createDto, getAuthUser(req).id);
   }
 
   /**
@@ -45,7 +46,7 @@ export class WorkspaceEventsController {
     @Query() query: GetEventsQueryDto,
     @Req() req: any,
   ) {
-    return this.eventsService.findAll(workspaceId, req.user.id, query);
+    return this.eventsService.findAll(workspaceId, getAuthUser(req).id, query);
   }
 
   /**
@@ -58,7 +59,12 @@ export class WorkspaceEventsController {
     @Param('month', ParseIntPipe) month: number,
     @Req() req: any,
   ) {
-    return this.eventsService.findByMonth(workspaceId, year, month, req.user.id);
+    return this.eventsService.findByMonth(
+      workspaceId,
+      year,
+      month,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -66,7 +72,7 @@ export class WorkspaceEventsController {
    */
   @Get('today')
   findToday(@Param('workspaceId') workspaceId: string, @Req() req: any) {
-    return this.eventsService.findToday(workspaceId, req.user.id);
+    return this.eventsService.findToday(workspaceId, getAuthUser(req).id);
   }
 
   /**
@@ -78,7 +84,7 @@ export class WorkspaceEventsController {
     @Param('eventId') eventId: string,
     @Req() req: any,
   ) {
-    return this.eventsService.findOne(workspaceId, eventId, req.user.id);
+    return this.eventsService.findOne(workspaceId, eventId, getAuthUser(req).id);
   }
 
   /**
@@ -95,7 +101,7 @@ export class WorkspaceEventsController {
       workspaceId,
       eventId,
       updateDto,
-      req.user.id,
+      getAuthUser(req).id,
     );
   }
 
@@ -108,7 +114,7 @@ export class WorkspaceEventsController {
     @Param('eventId') eventId: string,
     @Req() req: any,
   ) {
-    await this.eventsService.remove(workspaceId, eventId, req.user.id);
+    await this.eventsService.remove(workspaceId, eventId, getAuthUser(req).id);
     return { success: true, message: '이벤트가 삭제되었습니다' };
   }
 }

@@ -10,6 +10,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getAuthUser } from '../auth/interfaces';
 import { WorkspaceEventTypesService } from './workspace-event-types.service';
 import {
   CreateEventTypeDto,
@@ -19,9 +20,7 @@ import {
 @Controller('workspaces/:workspaceId/event-types')
 @UseGuards(JwtAuthGuard)
 export class WorkspaceEventTypesController {
-  constructor(
-    private readonly eventTypesService: WorkspaceEventTypesService,
-  ) {}
+  constructor(private readonly eventTypesService: WorkspaceEventTypesService) {}
 
   /**
    * 커스텀 이벤트 타입 생성
@@ -32,18 +31,15 @@ export class WorkspaceEventTypesController {
     @Body() createDto: CreateEventTypeDto,
     @Req() req: any,
   ) {
-    return this.eventTypesService.create(workspaceId, createDto, req.user.id);
+    return this.eventTypesService.create(workspaceId, createDto, getAuthUser(req).id);
   }
 
   /**
    * 워크스페이스의 모든 이벤트 타입 조회
    */
   @Get()
-  findAll(
-    @Param('workspaceId') workspaceId: string,
-    @Req() req: any,
-  ) {
-    return this.eventTypesService.findAll(workspaceId, req.user.id);
+  findAll(@Param('workspaceId') workspaceId: string, @Req() req: any) {
+    return this.eventTypesService.findAll(workspaceId, getAuthUser(req).id);
   }
 
   /**
@@ -55,7 +51,7 @@ export class WorkspaceEventTypesController {
     @Param('typeId') typeId: string,
     @Req() req: any,
   ) {
-    return this.eventTypesService.findOne(workspaceId, typeId, req.user.id);
+    return this.eventTypesService.findOne(workspaceId, typeId, getAuthUser(req).id);
   }
 
   /**
@@ -68,7 +64,12 @@ export class WorkspaceEventTypesController {
     @Body() updateDto: UpdateEventTypeDto,
     @Req() req: any,
   ) {
-    return this.eventTypesService.update(workspaceId, typeId, updateDto, req.user.id);
+    return this.eventTypesService.update(
+      workspaceId,
+      typeId,
+      updateDto,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -80,7 +81,7 @@ export class WorkspaceEventTypesController {
     @Param('typeId') typeId: string,
     @Req() req: any,
   ) {
-    await this.eventTypesService.remove(workspaceId, typeId, req.user.id);
+    await this.eventTypesService.remove(workspaceId, typeId, getAuthUser(req).id);
     return { message: '이벤트 유형이 삭제되었습니다.' };
   }
 }

@@ -38,7 +38,10 @@ export class RedisService {
   }
 
   // 참가자 추가
-  async addParticipant(meetingId: string, participantId: string): Promise<void> {
+  async addParticipant(
+    meetingId: string,
+    participantId: string,
+  ): Promise<void> {
     const session = await this.getMeetingSession(meetingId);
     if (session) {
       if (!session.participants.includes(participantId)) {
@@ -49,10 +52,15 @@ export class RedisService {
   }
 
   // 참가자 제거
-  async removeParticipant(meetingId: string, participantId: string): Promise<void> {
+  async removeParticipant(
+    meetingId: string,
+    participantId: string,
+  ): Promise<void> {
     const session = await this.getMeetingSession(meetingId);
     if (session) {
-      session.participants = session.participants.filter((p) => p !== participantId);
+      session.participants = session.participants.filter(
+        (p) => p !== participantId,
+      );
       await this.setMeetingSession(meetingId, session);
     }
   }
@@ -77,7 +85,6 @@ export class RedisService {
     await this.cacheManager.del(key);
   }
 
-
   // ==========================================
   // 트랜스크립션 버퍼 관리
   // ==========================================
@@ -99,8 +106,8 @@ export class RedisService {
       languageCode?: string;
       confidence?: number;
       isStable?: boolean;
-      userId?: string;        // 발화자 userId (히스토리 조회용)
-      speakerName?: string;   // 발화자 이름 (폴백용)
+      userId?: string; // 발화자 userId (히스토리 조회용)
+      speakerName?: string; // 발화자 이름 (폴백용)
     },
   ): Promise<number> {
     const key = `transcription:buffer:${meetingId}`;

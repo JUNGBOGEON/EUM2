@@ -72,15 +72,19 @@ export class TranscribeUrlService {
   private readonly secretAccessKey: string;
 
   // 지원 언어 목록 (const 배열에서 derive)
-  static readonly SUPPORTED_LANGUAGES: readonly SupportedLanguage[] = SUPPORTED_LANGUAGE_CODES;
+  static readonly SUPPORTED_LANGUAGES: readonly SupportedLanguage[] =
+    SUPPORTED_LANGUAGE_CODES;
 
   constructor(private configService: ConfigService) {
     this.region = this.configService.get('AWS_REGION') || 'ap-northeast-2';
     this.accessKeyId = this.configService.get('AWS_ACCESS_KEY_ID') || '';
-    this.secretAccessKey = this.configService.get('AWS_SECRET_ACCESS_KEY') || '';
+    this.secretAccessKey =
+      this.configService.get('AWS_SECRET_ACCESS_KEY') || '';
 
     if (!this.accessKeyId || !this.secretAccessKey) {
-      this.logger.warn('AWS credentials not configured for Transcribe URL service');
+      this.logger.warn(
+        'AWS credentials not configured for Transcribe URL service',
+      );
     }
   }
 
@@ -201,6 +205,8 @@ export class TranscribeUrlService {
    * 언어 코드가 지원되는지 확인
    */
   isLanguageSupported(languageCode: string): languageCode is SupportedLanguage {
-    return TranscribeUrlService.SUPPORTED_LANGUAGES.includes(languageCode as SupportedLanguage);
+    return TranscribeUrlService.SUPPORTED_LANGUAGES.includes(
+      languageCode as SupportedLanguage,
+    );
   }
 }

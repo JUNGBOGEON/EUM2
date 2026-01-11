@@ -1,13 +1,11 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
+import {
+  TranslateClient,
+  TranslateTextCommand,
+} from '@aws-sdk/client-translate';
 import { createHash } from 'crypto';
 
 import { RedisService } from '../../redis/redis.service';
@@ -34,8 +32,8 @@ export interface TranslationRequest {
 export interface TranslatedTranscriptPayload {
   type: 'translated_transcript';
   resultId: string;
-  speakerId: string;        // attendeeId (프론트엔드 조회용)
-  speakerUserId: string;    // userId (본인 필터링용)
+  speakerId: string; // attendeeId (프론트엔드 조회용)
+  speakerUserId: string; // userId (본인 필터링용)
   speakerName: string;
   originalText: string;
   translatedText: string;
@@ -59,10 +57,10 @@ export class TranslationService {
 
   // AWS Translate → 원본 언어 코드 역매핑
   private readonly REVERSE_LANGUAGE_MAP: Record<string, string> = {
-    'ko': 'ko-KR',
-    'en': 'en-US',
-    'zh': 'zh-CN',
-    'ja': 'ja-JP',
+    ko: 'ko-KR',
+    en: 'en-US',
+    zh: 'zh-CN',
+    ja: 'ja-JP',
   };
 
   constructor(
@@ -83,9 +81,10 @@ export class TranslationService {
 
     this.translateClient = new TranslateClient({
       region,
-      credentials: accessKeyId && secretAccessKey
-        ? { accessKeyId, secretAccessKey }
-        : undefined,
+      credentials:
+        accessKeyId && secretAccessKey
+          ? { accessKeyId, secretAccessKey }
+          : undefined,
     });
   }
 
@@ -96,9 +95,12 @@ export class TranslationService {
   /**
    * 사용자의 번역 활성화 여부 확인
    */
-  async isTranslationEnabled(sessionId: string, userId: string): Promise<boolean> {
+  async isTranslationEnabled(
+    sessionId: string,
+    userId: string,
+  ): Promise<boolean> {
     const enabled = await this.redisService.get<boolean>(
-      `translation:enabled:${sessionId}:${userId}`
+      `translation:enabled:${sessionId}:${userId}`,
     );
     return enabled === true;
   }
@@ -142,7 +144,7 @@ export class TranslationService {
    */
   async getUserLanguage(sessionId: string, userId: string): Promise<string> {
     const language = await this.redisService.get<string>(
-      `transcription:language:${sessionId}:${userId}`
+      `transcription:language:${sessionId}:${userId}`,
     );
     return language || 'ko-KR'; // 기본값
   }
@@ -197,7 +199,8 @@ export class TranslationService {
     try {
       // 1. 세션의 모든 참가자 조회 (캐시에서 조회, 30초 TTL)
       const participantsCacheKey = `participants:all:${sessionId}`;
-      let participants = await this.redisService.get<SessionParticipant[]>(participantsCacheKey);
+      let participants =
+        await this.redisService.get<SessionParticipant[]>(participantsCacheKey);
 
       if (!participants) {
         participants = await this.participantRepository.find({
@@ -207,7 +210,11 @@ export class TranslationService {
 
         if (participants.length > 0) {
           // 캐시에 저장 (30초 TTL - 참가자가 자주 변경될 수 있음)
-          await this.redisService.set(participantsCacheKey, participants, 30 * 1000);
+          await this.redisService.set(
+            participantsCacheKey,
+            participants,
+            30 * 1000,
+          );
         }
       }
 
@@ -221,12 +228,14 @@ export class TranslationService {
       );
 
       if (otherParticipants.length === 0) {
-        this.logger.log('[Translation] ⚠️ No other participants in session, skipping translation');
+        this.logger.log(
+          '[Translation] ⚠️ No other participants in session, skipping translation',
+        );
         return; // 다른 참가자 없음
       }
 
       this.logger.log(
-        `[Translation] 👥 Other participants: ${otherParticipants.map(p => p.user?.name || p.userId).join(', ')}`,
+        `[Translation] 👥 Other participants: ${otherParticipants.map((p) => p.user?.name || p.userId).join(', ')}`,
       );
 
       // 2. 배치로 모든 참가자의 번역 설정 조회 (N+1 쿼리 문제 해결)
@@ -237,29 +246,40 @@ export class TranslationService {
 
       // 디버그: 각 참가자의 설정 로깅
       for (const pref of participantPreferences) {
-        const participant = otherParticipants.find(p => p.userId === pref.userId);
+        const participant = otherParticipants.find(
+          (p) => p.userId === pref.userId,
+        );
         this.logger.log(
           `[Translation] 🔧 Participant ${participant?.user?.name || pref.userId}: translationEnabled=${pref.translationEnabled}, language=${pref.language}, sourceLanguage=${sourceLanguage}`,
         );
       }
 
       // 3. 번역 활성화 + 다른 언어 사용자만 필터링
-      const translationTargets: Array<{ userId: string; targetLanguage: string }> = [];
+      const translationTargets: Array<{
+        userId: string;
+        targetLanguage: string;
+      }> = [];
 
       for (const pref of participantPreferences) {
         // 번역 비활성화면 스킵
         if (!pref.translationEnabled) {
-          this.logger.log(`[Translation] ⏭️ Skipping ${pref.userId}: translation disabled`);
+          this.logger.log(
+            `[Translation] ⏭️ Skipping ${pref.userId}: translation disabled`,
+          );
           continue;
         }
 
         // 소스 언어와 타겟 언어가 같으면 번역 불필요
         if (pref.language === sourceLanguage) {
-          this.logger.log(`[Translation] ⏭️ Skipping ${pref.userId}: same language (${pref.language})`);
+          this.logger.log(
+            `[Translation] ⏭️ Skipping ${pref.userId}: same language (${pref.language})`,
+          );
           continue;
         }
 
-        this.logger.log(`[Translation] ✅ Will translate for ${pref.userId}: ${sourceLanguage} → ${pref.language}`);
+        this.logger.log(
+          `[Translation] ✅ Will translate for ${pref.userId}: ${sourceLanguage} → ${pref.language}`,
+        );
         translationTargets.push({
           userId: pref.userId,
           targetLanguage: pref.language,
@@ -284,22 +304,26 @@ export class TranslationService {
       // 4. 언어별로 번역 수행 및 전송
       for (const [targetLanguage, userIds] of languageGroups) {
         try {
-          this.logger.log(`[Translation] 🔄 Translating to ${targetLanguage} for users: ${userIds.join(', ')}`);
-          
+          this.logger.log(
+            `[Translation] 🔄 Translating to ${targetLanguage} for users: ${userIds.join(', ')}`,
+          );
+
           const translatedText = await this.translateWithCache(
             originalText,
             sourceLanguage,
             targetLanguage,
           );
 
-          this.logger.log(`[Translation] ✅ Translated: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`);
+          this.logger.log(
+            `[Translation] ✅ Translated: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
+          );
 
           // 5. 해당 언어 사용자들에게 WebSocket으로 전송
           const payload: TranslatedTranscriptPayload = {
             type: 'translated_transcript',
             resultId,
-            speakerId: speakerAttendeeId,   // attendeeId (프론트엔드 조회용)
-            speakerUserId,                   // userId (본인 필터링용)
+            speakerId: speakerAttendeeId, // attendeeId (프론트엔드 조회용)
+            speakerUserId, // userId (본인 필터링용)
             speakerName,
             originalText,
             translatedText,
@@ -309,7 +333,9 @@ export class TranslationService {
           };
 
           for (const userId of userIds) {
-            this.logger.log(`[Translation] 📤 Sending translated transcript to user: ${userId}`);
+            this.logger.log(
+              `[Translation] 📤 Sending translated transcript to user: ${userId}`,
+            );
             this.workspaceGateway.sendTranslatedTranscript(userId, payload);
           }
 
@@ -325,7 +351,9 @@ export class TranslationService {
       }
     } catch (error) {
       // 조용히 실패 - 전체 프로세스 실패해도 원본 자막은 정상 표시됨
-      this.logger.error(`[Translation] ❌ Translation processing failed: ${error.message}`);
+      this.logger.error(
+        `[Translation] ❌ Translation processing failed: ${error.message}`,
+      );
     }
   }
 
@@ -385,7 +413,9 @@ export class TranslationService {
   private async getParticipantPreferencesBatch(
     sessionId: string,
     userIds: string[],
-  ): Promise<Array<{ userId: string; language: string; translationEnabled: boolean }>> {
+  ): Promise<
+    Array<{ userId: string; language: string; translationEnabled: boolean }>
+  > {
     const preferences = await Promise.all(
       userIds.map(async (userId) => {
         const [language, translationEnabled] = await Promise.all([
@@ -420,7 +450,10 @@ export class TranslationService {
         userId: p.userId,
         userName: p.user?.name || 'Unknown',
         language: await this.getUserLanguage(sessionId, p.userId),
-        translationEnabled: await this.isTranslationEnabled(sessionId, p.userId),
+        translationEnabled: await this.isTranslationEnabled(
+          sessionId,
+          p.userId,
+        ),
       })),
     );
 

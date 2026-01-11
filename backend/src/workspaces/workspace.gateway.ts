@@ -28,7 +28,11 @@ export interface SessionUpdatePayload {
 }
 
 export interface InvitationNotificationPayload {
-  type: 'invitation_received' | 'invitation_cancelled' | 'invitation_accepted' | 'invitation_rejected';
+  type:
+    | 'invitation_received'
+    | 'invitation_cancelled'
+    | 'invitation_accepted'
+    | 'invitation_rejected';
   invitation?: {
     id: string;
     workspace: {
@@ -77,12 +81,12 @@ export interface NewTranscriptPayload {
   type: 'new_transcript';
   resultId: string;
   sessionId: string;
-  speakerId: string;          // attendeeId (for roster lookup)
-  speakerUserId: string;      // userId (for self-filtering)
+  speakerId: string; // attendeeId (for roster lookup)
+  speakerUserId: string; // userId (for self-filtering)
   speakerName: string;
   speakerProfileImage?: string;
   text: string;
-  timestamp: number;          // 서버 계산 상대 타임스탬프 (ms)
+  timestamp: number; // 서버 계산 상대 타임스탬프 (ms)
   isPartial: boolean;
   languageCode: string;
 }
@@ -121,7 +125,9 @@ export interface LanguageChangedPayload {
     credentials: true,
   },
 })
-export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class WorkspaceGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -134,12 +140,16 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   private userSockets = new Map<string, Set<string>>();
 
   handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}, namespace: ${client.nsp.name}`);
+    this.logger.log(
+      `Client connected: ${client.id}, namespace: ${client.nsp.name}`,
+    );
     this.clientWorkspaces.set(client.id, new Set());
 
     // Debug: log all incoming events
     client.onAny((event, ...args) => {
-      this.logger.log(`[DEBUG] Received event '${event}' from ${client.id}: ${JSON.stringify(args).substring(0, 100)}`);
+      this.logger.log(
+        `[DEBUG] Received event '${event}' from ${client.id}: ${JSON.stringify(args).substring(0, 100)}`,
+      );
     });
   }
 
@@ -253,7 +263,8 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
    */
   broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
     const roomName = `session:${sessionId}`;
-    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+    const clientCount =
+      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
 
     this.logger.log(
       `[Session Ended] Broadcasting to ${roomName}: ${clientCount} clients, reason: ${reason}`,
@@ -281,10 +292,15 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   /**
    * 특정 사용자에게 초대 알림 전송
    */
-  sendInvitationNotification(userId: string, payload: InvitationNotificationPayload) {
+  sendInvitationNotification(
+    userId: string,
+    payload: InvitationNotificationPayload,
+  ) {
     const roomName = `user:${userId}`;
     this.server.to(roomName).emit('invitationNotification', payload);
-    this.logger.log(`Sent invitation notification to user ${userId}: ${payload.type}`);
+    this.logger.log(
+      `Sent invitation notification to user ${userId}: ${payload.type}`,
+    );
   }
 
   /**
@@ -307,22 +323,26 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   /**
    * 특정 사용자에게 번역된 자막 전송
    */
-  sendTranslatedTranscript(userId: string, payload: TranslatedTranscriptPayload) {
+  sendTranslatedTranscript(
+    userId: string,
+    payload: TranslatedTranscriptPayload,
+  ) {
     const roomName = `user:${userId}`;
-    
+
     // 룸에 있는 클라이언트 수 확인
-    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
-    
+    const clientCount =
+      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+
     this.logger.log(
       `[Translated Transcript] 📤 Room: ${roomName}, Clients: ${clientCount}, ${payload.sourceLanguage} → ${payload.targetLanguage}`,
     );
-    
+
     if (clientCount === 0) {
       this.logger.warn(
         `[Translated Transcript] ⚠️ No clients in room ${roomName}! Translation will not be delivered.`,
       );
     }
-    
+
     this.server.to(roomName).emit('translatedTranscript', payload);
   }
 
@@ -330,11 +350,10 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
    * 디버그용 ping 핸들러
    */
   @SubscribeMessage('ping')
-  handlePing(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: unknown,
-  ) {
-    this.logger.log(`[PING] Received ping from ${client.id}: ${JSON.stringify(data)}`);
+  handlePing(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
+    this.logger.log(
+      `[PING] Received ping from ${client.id}: ${JSON.stringify(data)}`,
+    );
     return { success: true, pong: true, clientId: client.id };
   }
 
@@ -356,9 +375,12 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
     await client.join(roomName);
 
     // 참가 후 룸 상태 확인 (adapter가 없을 수 있으므로 안전하게 접근)
-    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+    const clientCount =
+      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
 
-    this.logger.log(`[Session Join] Client ${client.id} joined room ${roomName}. Total clients in room: ${clientCount}`);
+    this.logger.log(
+      `[Session Join] Client ${client.id} joined room ${roomName}. Total clients in room: ${clientCount}`,
+    );
 
     return { success: true, sessionId };
   }
@@ -390,14 +412,17 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
     const roomName = `session:${sessionId}`;
 
     // 룸에 있는 클라이언트 수 확인 (adapter가 없을 수 있으므로 안전하게 접근)
-    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+    const clientCount =
+      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
 
     this.logger.log(
       `[Transcript Broadcast] Room: ${roomName}, Clients: ${clientCount}, Speaker: ${payload.speakerName}, Text: "${payload.text.substring(0, 30)}..."`,
     );
 
     if (clientCount === 0) {
-      this.logger.warn(`[Transcript Broadcast] No clients in room ${roomName}! Broadcast will have no recipients.`);
+      this.logger.warn(
+        `[Transcript Broadcast] No clients in room ${roomName}! Broadcast will have no recipients.`,
+      );
     }
 
     this.server.to(roomName).emit('newTranscript', payload);
@@ -409,7 +434,8 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   broadcastLanguageChange(sessionId: string, payload: LanguageChangedPayload) {
     const roomName = `session:${sessionId}`;
 
-    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+    const clientCount =
+      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
 
     this.logger.log(
       `[Language Change] Room: ${roomName}, Clients: ${clientCount}, User: ${payload.userName}, Language: ${payload.languageCode}`,

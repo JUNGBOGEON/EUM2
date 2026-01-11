@@ -6,7 +6,9 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 
 // Dynamic prompt function - injects current date (Legacy markdown-only output)
-const getSummarySystemPrompt = (currentDate: string) => `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
+const getSummarySystemPrompt = (
+  currentDate: string,
+) => `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
 당신의 임무는 회의 녹취록(Transcript)을 분석하여 팀원들이 즉시 업무에 착수할 수 있도록 명확하고 구조화된 회의록(Minutes)을 작성하는 것입니다.
 
 [현재 날짜]
@@ -45,7 +47,9 @@ ${currentDate}
 - (개발 스택, 마케팅 예산 등 구체적인 수치나 기술 용어가 나왔을 경우 기록)`;
 
 // New structured prompt with transcript references - Enhanced detailed version
-const getSummarySystemPromptWithRefs = (currentDate: string) => `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
+const getSummarySystemPromptWithRefs = (
+  currentDate: string,
+) => `당신은 기업용 협업 툴 'EUM'의 전문 AI 프로젝트 매니저입니다.
 당신의 임무는 회의 녹취록(Transcript)을 분석하여 팀원들이 즉시 업무에 착수할 수 있도록 **상세하고 포괄적인** 회의록을 작성하는 것입니다.
 
 [현재 날짜]
@@ -143,7 +147,15 @@ export interface StructuredSummary {
 
 export interface SummarySection {
   id: string;
-  type: 'title' | 'summary' | 'agenda' | 'decision' | 'action_item' | 'note' | 'unresolved' | 'data';
+  type:
+    | 'title'
+    | 'summary'
+    | 'agenda'
+    | 'decision'
+    | 'action_item'
+    | 'note'
+    | 'unresolved'
+    | 'data';
   content: string;
   transcriptRefs: string[];
 }
@@ -160,7 +172,9 @@ export class BedrockService {
     const region =
       this.configService.get<string>('AWS_BEDROCK_REGION') || 'ap-northeast-2';
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const secretAccessKey = this.configService.get<string>(
+      'AWS_SECRET_ACCESS_KEY',
+    );
 
     if (!accessKeyId || !secretAccessKey) {
       this.logger.warn('AWS credentials not configured for Bedrock');
@@ -212,8 +226,7 @@ export class BedrockService {
 
       const response = await this.bedrockClient.send(command);
 
-      const outputText =
-        response.output?.message?.content?.[0]?.text || '';
+      const outputText = response.output?.message?.content?.[0]?.text || '';
 
       if (!outputText) {
         throw new Error('Bedrock returned empty response');
@@ -233,9 +246,13 @@ export class BedrockService {
    * @param transcript 포맷팅된 발화 스크립트 (ID 포함)
    * @returns 구조화된 요약 (JSON)
    */
-  async generateSummaryWithRefs(transcript: string): Promise<StructuredSummary> {
+  async generateSummaryWithRefs(
+    transcript: string,
+  ): Promise<StructuredSummary> {
     try {
-      this.logger.log('Generating structured meeting summary with transcript references...');
+      this.logger.log(
+        'Generating structured meeting summary with transcript references...',
+      );
 
       // Generate current date in Korean format
       const now = new Date();
@@ -263,8 +280,7 @@ export class BedrockService {
 
       const response = await this.bedrockClient.send(command);
 
-      const outputText =
-        response.output?.message?.content?.[0]?.text || '';
+      const outputText = response.output?.message?.content?.[0]?.text || '';
 
       if (!outputText) {
         throw new Error('Bedrock returned empty response');
@@ -276,7 +292,10 @@ export class BedrockService {
       this.logger.log('Structured meeting summary generated successfully');
       return structuredSummary;
     } catch (error) {
-      this.logger.error('Failed to generate structured summary with Bedrock', error);
+      this.logger.error(
+        'Failed to generate structured summary with Bedrock',
+        error,
+      );
       throw error;
     }
   }
@@ -315,26 +334,35 @@ export class BedrockService {
         .join('\n\n');
 
       // Ensure each section has required fields
-      const sections: SummarySection[] = parsed.sections.map((s: any, idx: number) => ({
-        id: s.id || `section-${idx}`,
-        type: s.type || 'note',
-        content: s.content || '',
-        transcriptRefs: Array.isArray(s.transcriptRefs) ? s.transcriptRefs : [],
-      }));
+      const sections: SummarySection[] = parsed.sections.map(
+        (s: any, idx: number) => ({
+          id: s.id || `section-${idx}`,
+          type: s.type || 'note',
+          content: s.content || '',
+          transcriptRefs: Array.isArray(s.transcriptRefs)
+            ? s.transcriptRefs
+            : [],
+        }),
+      );
 
       return { markdown, sections };
     } catch (parseError) {
-      this.logger.warn('Failed to parse JSON response, falling back to markdown', parseError);
+      this.logger.warn(
+        'Failed to parse JSON response, falling back to markdown',
+        parseError,
+      );
 
       // Fallback: treat entire response as markdown with no references
       return {
         markdown: response,
-        sections: [{
-          id: 'full-content',
-          type: 'note',
-          content: response,
-          transcriptRefs: [],
-        }],
+        sections: [
+          {
+            id: 'full-content',
+            type: 'note',
+            content: response,
+            transcriptRefs: [],
+          },
+        ],
       };
     }
   }

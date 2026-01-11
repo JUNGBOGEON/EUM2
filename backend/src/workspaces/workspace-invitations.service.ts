@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { WorkspaceInvitation, InvitationStatus } from './entities/workspace-invitation.entity';
+import {
+  WorkspaceInvitation,
+  InvitationStatus,
+} from './entities/workspace-invitation.entity';
 import { Workspace } from './entities/workspace.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -46,7 +49,9 @@ export class WorkspaceInvitationsService {
 
     // 초대 권한 확인 (오너만 초대 가능)
     if (workspace.ownerId !== inviterId) {
-      throw new ForbiddenException('워크스페이스 오너만 멤버를 초대할 수 있습니다');
+      throw new ForbiddenException(
+        '워크스페이스 오너만 멤버를 초대할 수 있습니다',
+      );
     }
 
     // 초대받을 유저 확인
@@ -66,7 +71,9 @@ export class WorkspaceInvitationsService {
     // 이미 멤버인지 확인
     const existingMember = await this.workspaceRepository
       .createQueryBuilder('workspace')
-      .innerJoin('workspace.members', 'member', 'member.id = :inviteeId', { inviteeId })
+      .innerJoin('workspace.members', 'member', 'member.id = :inviteeId', {
+        inviteeId,
+      })
       .where('workspace.id = :workspaceId', { workspaceId })
       .getOne();
 
@@ -124,7 +131,10 @@ export class WorkspaceInvitationsService {
       throw new NotFoundException('초대를 찾을 수 없습니다');
     }
 
-    if (invitation.inviterId !== userId && invitation.workspace.ownerId !== userId) {
+    if (
+      invitation.inviterId !== userId &&
+      invitation.workspace.ownerId !== userId
+    ) {
       throw new ForbiddenException('초대를 취소할 권한이 없습니다');
     }
 
@@ -188,7 +198,9 @@ export class WorkspaceInvitationsService {
     invitation.status = InvitationStatus.ACCEPTED;
     await this.invitationRepository.save(invitation);
 
-    this.logger.log(`Invitation accepted: ${invitationId}, user ${userId} joined workspace ${invitation.workspaceId}`);
+    this.logger.log(
+      `Invitation accepted: ${invitationId}, user ${userId} joined workspace ${invitation.workspaceId}`,
+    );
 
     return { workspace };
   }
@@ -222,7 +234,9 @@ export class WorkspaceInvitationsService {
   /**
    * 사용자의 대기 중인 초대 목록 조회
    */
-  async getPendingInvitationsForUser(userId: string): Promise<WorkspaceInvitation[]> {
+  async getPendingInvitationsForUser(
+    userId: string,
+  ): Promise<WorkspaceInvitation[]> {
     return this.invitationRepository.find({
       where: {
         inviteeId: userId,
@@ -250,7 +264,9 @@ export class WorkspaceInvitationsService {
     }
 
     if (workspace.ownerId !== userId) {
-      throw new ForbiddenException('워크스페이스 오너만 초대 목록을 볼 수 있습니다');
+      throw new ForbiddenException(
+        '워크스페이스 오너만 초대 목록을 볼 수 있습니다',
+      );
     }
 
     return this.invitationRepository.find({

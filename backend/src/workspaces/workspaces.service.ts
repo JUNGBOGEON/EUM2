@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from './entities/workspace.entity';
@@ -50,7 +56,9 @@ export class WorkspacesService {
       .createQueryBuilder('workspace')
       .leftJoinAndSelect('workspace.owner', 'owner')
       .leftJoinAndSelect('workspace.members', 'members')
-      .innerJoin('workspace.members', 'member', 'member.id = :userId', { userId })
+      .innerJoin('workspace.members', 'member', 'member.id = :userId', {
+        userId,
+      })
       .orderBy('workspace.createdAt', 'DESC')
       .getMany();
 
@@ -63,7 +71,8 @@ export class WorkspacesService {
     });
 
     return Array.from(workspaceMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }
 
@@ -112,7 +121,9 @@ export class WorkspacesService {
 
     // 오너만 추방 가능
     if (workspace.ownerId !== requesterId) {
-      throw new ForbiddenException('워크스페이스 오너만 멤버를 추방할 수 있습니다');
+      throw new ForbiddenException(
+        '워크스페이스 오너만 멤버를 추방할 수 있습니다',
+      );
     }
 
     // 자기 자신을 추방할 수 없음
@@ -140,7 +151,9 @@ export class WorkspacesService {
 
     // 오너는 나갈 수 없음
     if (workspace.ownerId === userId) {
-      throw new ForbiddenException('워크스페이스 오너는 나갈 수 없습니다. 워크스페이스를 삭제하세요.');
+      throw new ForbiddenException(
+        '워크스페이스 오너는 나갈 수 없습니다. 워크스페이스를 삭제하세요.',
+      );
     }
 
     // 멤버 목록에서 제거

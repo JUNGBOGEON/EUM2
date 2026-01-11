@@ -31,7 +31,11 @@ export class WorkspaceEventTypesController {
     @Body() createDto: CreateEventTypeDto,
     @Req() req: any,
   ) {
-    return this.eventTypesService.create(workspaceId, createDto, getAuthUser(req).id);
+    return this.eventTypesService.create(
+      workspaceId,
+      createDto,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -51,7 +55,11 @@ export class WorkspaceEventTypesController {
     @Param('typeId') typeId: string,
     @Req() req: any,
   ) {
-    return this.eventTypesService.findOne(workspaceId, typeId, getAuthUser(req).id);
+    return this.eventTypesService.findOne(
+      workspaceId,
+      typeId,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -81,7 +89,11 @@ export class WorkspaceEventTypesController {
     @Param('typeId') typeId: string,
     @Req() req: any,
   ) {
-    await this.eventTypesService.remove(workspaceId, typeId, getAuthUser(req).id);
+    await this.eventTypesService.remove(
+      workspaceId,
+      typeId,
+      getAuthUser(req).id,
+    );
     return { message: '이벤트 유형이 삭제되었습니다.' };
   }
 }

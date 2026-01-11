@@ -400,7 +400,10 @@ export class ChimeService {
       );
       const languageCode =
         (typeof savedLanguage === 'string' ? savedLanguage : null) || 'ko-KR';
-      await this.startSessionTranscription(chimeMeeting.meetingId, languageCode);
+      await this.startSessionTranscription(
+        chimeMeeting.meetingId,
+        languageCode,
+      );
     } catch (err) {
       this.logger.error('Failed to restart transcription:', err);
     }

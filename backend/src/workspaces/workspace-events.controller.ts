@@ -34,7 +34,11 @@ export class WorkspaceEventsController {
     @Body() createDto: CreateWorkspaceEventDto,
     @Req() req: any,
   ) {
-    return this.eventsService.create(workspaceId, createDto, getAuthUser(req).id);
+    return this.eventsService.create(
+      workspaceId,
+      createDto,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -84,7 +88,11 @@ export class WorkspaceEventsController {
     @Param('eventId') eventId: string,
     @Req() req: any,
   ) {
-    return this.eventsService.findOne(workspaceId, eventId, getAuthUser(req).id);
+    return this.eventsService.findOne(
+      workspaceId,
+      eventId,
+      getAuthUser(req).id,
+    );
   }
 
   /**

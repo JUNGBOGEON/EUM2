@@ -22,7 +22,9 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleAuthCallback(@Req() req: any, @Res() res: Response) {
-    const { accessToken } = await this.authService.googleLogin(getGoogleUser(req));
+    const { accessToken } = await this.authService.googleLogin(
+      getGoogleUser(req),
+    );
 
     // HttpOnly 쿠키에 JWT 설정
     res.cookie('access_token', accessToken, {

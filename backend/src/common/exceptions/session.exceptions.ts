@@ -1,4 +1,8 @@
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 /**
  * Session Not Found Exception
@@ -6,7 +10,11 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
  */
 export class SessionNotFoundException extends NotFoundException {
   constructor(sessionId?: string) {
-    super(sessionId ? `세션을 찾을 수 없습니다: ${sessionId}` : '세션을 찾을 수 없습니다.');
+    super(
+      sessionId
+        ? `세션을 찾을 수 없습니다: ${sessionId}`
+        : '세션을 찾을 수 없습니다.',
+    );
   }
 }
 
@@ -46,6 +54,10 @@ export class NotSessionHostException extends ForbiddenException {
  */
 export class ParticipantNotFoundException extends NotFoundException {
   constructor(userId?: string) {
-    super(userId ? `참가자를 찾을 수 없습니다: ${userId}` : '참가자를 찾을 수 없습니다.');
+    super(
+      userId
+        ? `참가자를 찾을 수 없습니다: ${userId}`
+        : '참가자를 찾을 수 없습니다.',
+    );
   }
 }

@@ -43,7 +43,8 @@ export class ChimeSdkService {
     const createMeetingCommand = new CreateMeetingCommand({
       ClientRequestToken: externalMeetingId,
       ExternalMeetingId: externalMeetingId,
-      MediaRegion: mediaRegion || this.configService.get('AWS_REGION') || 'ap-northeast-2',
+      MediaRegion:
+        mediaRegion || this.configService.get('AWS_REGION') || 'ap-northeast-2',
       MeetingFeatures: {
         Audio: { EchoReduction: 'AVAILABLE' },
         Video: { MaxResolution: 'FHD' },
@@ -52,7 +53,8 @@ export class ChimeSdkService {
       },
     });
 
-    const chimeMeetingResponse = await this.chimeClient.send(createMeetingCommand);
+    const chimeMeetingResponse =
+      await this.chimeClient.send(createMeetingCommand);
     const chimeMeeting = chimeMeetingResponse.Meeting;
 
     if (!chimeMeeting) {

@@ -305,7 +305,10 @@ export class MeetingsController {
    */
   @Get(':sessionId/translation/status')
   getTranslationStatus(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.getTranslationStatus(sessionId, getAuthUser(req).id);
+    return this.meetingsService.getTranslationStatus(
+      sessionId,
+      getAuthUser(req).id,
+    );
   }
 
   /**
@@ -361,7 +364,10 @@ export class MeetingsController {
     }
 
     // 참가자 권한 확인
-    await this.meetingsService.verifyParticipant(sessionId, getAuthUser(req).id);
+    await this.meetingsService.verifyParticipant(
+      sessionId,
+      getAuthUser(req).id,
+    );
 
     // Pre-signed URL 생성
     return this.transcribeUrlService.generatePresignedUrl(languageCode);

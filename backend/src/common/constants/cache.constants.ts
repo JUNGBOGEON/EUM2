@@ -52,4 +52,5 @@ export const CACHE_KEY_PREFIX = {
 
 export type CacheTTL = (typeof CACHE_TTL)[keyof typeof CACHE_TTL];
 export type BufferConfig = (typeof BUFFER_CONFIG)[keyof typeof BUFFER_CONFIG];
-export type CacheKeyPrefix = (typeof CACHE_KEY_PREFIX)[keyof typeof CACHE_KEY_PREFIX];
+export type CacheKeyPrefix =
+  (typeof CACHE_KEY_PREFIX)[keyof typeof CACHE_KEY_PREFIX];

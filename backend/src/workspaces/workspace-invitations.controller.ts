@@ -121,7 +121,10 @@ export class WorkspaceInvitationsController {
     const invitation =
       await this.invitationsService.getInvitation(invitationId);
 
-    await this.invitationsService.cancelInvitation(invitationId, getAuthUser(req).id);
+    await this.invitationsService.cancelInvitation(
+      invitationId,
+      getAuthUser(req).id,
+    );
 
     // WebSocket으로 초대받은 사용자에게 취소 알림
     this.workspaceGateway.sendInvitationNotification(invitation.inviteeId, {
@@ -138,7 +141,9 @@ export class WorkspaceInvitationsController {
   @Get('invitations/pending')
   async getMyPendingInvitations(@Req() req: any) {
     const invitations =
-      await this.invitationsService.getPendingInvitationsForUser(getAuthUser(req).id);
+      await this.invitationsService.getPendingInvitationsForUser(
+        getAuthUser(req).id,
+      );
 
     return invitations.map((inv) => ({
       id: inv.id,
@@ -201,7 +206,10 @@ export class WorkspaceInvitationsController {
         },
       };
     } else {
-      await this.invitationsService.rejectInvitation(invitationId, getAuthUser(req).id);
+      await this.invitationsService.rejectInvitation(
+        invitationId,
+        getAuthUser(req).id,
+      );
 
       // WebSocket으로 워크스페이스 오너에게 거절 알림
       this.workspaceGateway.sendInvitationNotification(invitation.inviterId, {

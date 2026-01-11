@@ -205,7 +205,11 @@ export class TranscriptionService {
       }
 
       // 캐시에 저장 (5분 TTL)
-      await this.redisService.set(sessionCacheKey, session, CACHE_TTL.SESSION_INFO);
+      await this.redisService.set(
+        sessionCacheKey,
+        session,
+        CACHE_TTL.SESSION_INFO,
+      );
     }
 
     // 서버 기준 상대 타임스탬프 계산 (모든 클라이언트 동기화용)
@@ -286,11 +290,10 @@ export class TranscriptionService {
       },
     );
 
-    const shouldFlush =
-      await this.transcriptionBufferService.shouldAutoFlush(
-        sessionId,
-        bufferSize,
-      );
+    const shouldFlush = await this.transcriptionBufferService.shouldAutoFlush(
+      sessionId,
+      bufferSize,
+    );
 
     if (shouldFlush) {
       await this.transcriptionBufferService.flushTranscriptionBuffer(sessionId);

@@ -1,4 +1,8 @@
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 
 /**
  * Workspace Not Found Exception
@@ -6,7 +10,11 @@ import { NotFoundException, ForbiddenException, BadRequestException } from '@nes
  */
 export class WorkspaceNotFoundException extends NotFoundException {
   constructor(workspaceId?: string) {
-    super(workspaceId ? `워크스페이스를 찾을 수 없습니다: ${workspaceId}` : '워크스페이스를 찾을 수 없습니다.');
+    super(
+      workspaceId
+        ? `워크스페이스를 찾을 수 없습니다: ${workspaceId}`
+        : '워크스페이스를 찾을 수 없습니다.',
+    );
   }
 }
 
@@ -36,7 +44,11 @@ export class NotWorkspaceMemberException extends ForbiddenException {
  */
 export class WorkspaceFileNotFoundException extends NotFoundException {
   constructor(fileId?: string) {
-    super(fileId ? `파일을 찾을 수 없습니다: ${fileId}` : '파일을 찾을 수 없습니다.');
+    super(
+      fileId
+        ? `파일을 찾을 수 없습니다: ${fileId}`
+        : '파일을 찾을 수 없습니다.',
+    );
   }
 }
 
@@ -46,7 +58,11 @@ export class WorkspaceFileNotFoundException extends NotFoundException {
  */
 export class InvitationNotFoundException extends NotFoundException {
   constructor(invitationId?: string) {
-    super(invitationId ? `초대를 찾을 수 없습니다: ${invitationId}` : '초대를 찾을 수 없습니다.');
+    super(
+      invitationId
+        ? `초대를 찾을 수 없습니다: ${invitationId}`
+        : '초대를 찾을 수 없습니다.',
+    );
   }
 }
 

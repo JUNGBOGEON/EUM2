@@ -22,7 +22,10 @@ export class WorkspacesController {
 
   @Post()
   create(@Body() createWorkspaceDto: CreateWorkspaceDto, @Req() req: any) {
-    return this.workspacesService.create(createWorkspaceDto, getAuthUser(req).id);
+    return this.workspacesService.create(
+      createWorkspaceDto,
+      getAuthUser(req).id,
+    );
   }
 
   @Get()
@@ -65,7 +68,11 @@ export class WorkspacesController {
     @Param('memberId') memberId: string,
     @Req() req: any,
   ) {
-    await this.workspacesService.kickMember(workspaceId, memberId, getAuthUser(req).id);
+    await this.workspacesService.kickMember(
+      workspaceId,
+      memberId,
+      getAuthUser(req).id,
+    );
     return { success: true, message: '멤버를 내보냈습니다' };
   }
 
@@ -74,7 +81,10 @@ export class WorkspacesController {
    */
   @Post(':id/leave')
   async leaveWorkspace(@Param('id') workspaceId: string, @Req() req: any) {
-    await this.workspacesService.leaveWorkspace(workspaceId, getAuthUser(req).id);
+    await this.workspacesService.leaveWorkspace(
+      workspaceId,
+      getAuthUser(req).id,
+    );
     return { success: true, message: '워크스페이스를 나갔습니다' };
   }
 }

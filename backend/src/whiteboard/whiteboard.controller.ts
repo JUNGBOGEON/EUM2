@@ -116,7 +116,10 @@ export class WhiteboardController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateWhiteboardItemDto: UpdateWhiteboardItemDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateWhiteboardItemDto: UpdateWhiteboardItemDto,
+  ) {
     return this.whiteboardService.update(id, updateWhiteboardItemDto);
   }
 

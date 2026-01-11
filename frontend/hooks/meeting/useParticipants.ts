@@ -53,21 +53,21 @@ export function useParticipants({
 
   // 현재 사용자의 attendeeId - prop으로 받은 값 우선, 없으면 meetingManager에서 시도
   const currentAttendeeId = propAttendeeId || meetingManager.meetingSession?.configuration?.credentials?.attendeeId;
-  
+
   // 현재 사용자 정보를 ref로 저장 (클로저 문제 해결 - 항상 최신 값 참조)
   const currentUserRef = useRef<{
     attendeeId: string | null | undefined;
     name: string | undefined;
     profileImage: string | undefined;
   }>({ attendeeId: null, name: undefined, profileImage: undefined });
-  
+
   // 매 렌더링마다 ref를 동기적으로 업데이트 (useEffect보다 먼저 실행됨)
   currentUserRef.current = {
     attendeeId: currentAttendeeId,
     name: currentUserName,
     profileImage: currentUserProfileImage,
   };
-  
+
   // 디버깅용 로그 (변경 시에만)
   useEffect(() => {
     logger.log(`Current user updated: attendeeId=${currentAttendeeId}, name=${currentUserName}`);
@@ -156,12 +156,12 @@ export function useParticipants({
           profileImage: cache.profileImage || undefined,
         };
       }
-      
+
       // 2차: ref에서 최신 현재 사용자 정보 가져오기 (클로저 문제 해결)
       const { attendeeId: curAttendeeId, name: curName, profileImage: curProfileImage } = currentUserRef.current;
-      
+
       logger.log(`Looking up attendeeId: ${attendeeId}, currentAttendeeId: ${curAttendeeId}, currentUserName: ${curName}`);
-      
+
       // 현재 사용자인지 확인 - ref 사용으로 항상 최신 값
       if (curAttendeeId && attendeeId === curAttendeeId && curName) {
         logger.log(`[Ref] Matched current user: ${curName}`);
@@ -226,7 +226,9 @@ export function useParticipants({
         if (now - lastRefreshRef.current > 2000) {
           lastRefreshRef.current = now;
           logger.log(`Unknown attendeeId: ${attendeeId}, refreshing participants...`);
-          loadParticipants();
+          setTimeout(() => {
+            loadParticipants();
+          }, 0);
         }
       }
 

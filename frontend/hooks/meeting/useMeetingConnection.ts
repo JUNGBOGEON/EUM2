@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMeetingManager } from 'amazon-chime-sdk-component-library-react';
-import { MeetingSessionConfiguration } from 'amazon-chime-sdk-js';
+import { MeetingSessionConfiguration, AudioVideoObserver, VideoPriorityBasedPolicy, ConsoleLogger, LogLevel } from 'amazon-chime-sdk-js';
 import type { MeetingInfo } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
 import { setCurrentUserCache, clearCurrentUserCache } from '@/lib/meeting/current-user-cache';
 
@@ -40,6 +40,7 @@ export function useMeetingConnection({
   const router = useRouter();
   const meetingManager = useMeetingManager();
   const hasJoinedRef = useRef(false);
+  const observerRef = useRef<AudioVideoObserver | null>(null);
 
   const [meeting, setMeeting] = useState<MeetingInfo | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -70,7 +71,7 @@ export function useMeetingConnection({
         email: userData.email,
         profileImage: userData.profileImage,
       });
-      
+
       // 동기적으로 현재 사용자 정보 캐시 설정 (이름)
       setCurrentUserCache({
         name: userData.name,
@@ -129,6 +130,13 @@ export function useMeetingConnection({
         }
       );
 
+      // 3.2. Simulcast & 3.3. Smart Downlink Policy Configuration
+      const logger = new ConsoleLogger('MeetingLogger', LogLevel.INFO);
+      const videoDownlinkPolicy = new VideoPriorityBasedPolicy(logger);
+
+      meetingSessionConfiguration.enableSimulcastForUnifiedPlanChromiumBasedBrowsers = true;
+      meetingSessionConfiguration.videoDownlinkBandwidthPolicy = videoDownlinkPolicy;
+
       // attendeeId 먼저 저장 (트랜스크립션 이벤트보다 먼저 설정되어야 함)
       setCurrentAttendeeId(attendee.attendeeId);
 
@@ -139,6 +147,27 @@ export function useMeetingConnection({
       await meetingManager.join(meetingSessionConfiguration, {
         enableWebAudio: true,
       });
+
+      // Debug Observer - Register BEFORE start
+      // Store in ref for cleanup
+      const observerObject = {
+        audioVideoDidStart: () => {
+          console.log('[MeetingConnection] AudioVideo started');
+        },
+        videoTileDidAdd: (tileState: any) => {
+          console.log('[MeetingConnection] Video tile added:', {
+            tileId: tileState.tileId,
+            isLocal: tileState.localTile,
+            isContent: tileState.isContent,
+            boundAttendeeId: tileState.boundAttendeeId
+          });
+        },
+        videoTileDidRemove: (tileState: any) => {
+          console.log('[MeetingConnection] Video tile removed:', tileState.tileId);
+        }
+      };
+      observerRef.current = observerObject as any;
+      meetingManager.audioVideo?.addObserver(observerRef.current!);
       await meetingManager.start();
 
       setMeeting(sessionInfo);
@@ -156,6 +185,14 @@ export function useMeetingConnection({
     hasJoinedRef.current = true;
 
     joinOrStartSession();
+
+    // Cleanup observer on unmount
+    return () => {
+      if (observerRef.current && meetingManager.audioVideo) {
+        console.log('[MeetingConnection] Removing observer');
+        meetingManager.audioVideo.removeObserver(observerRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -163,14 +200,18 @@ export function useMeetingConnection({
   const handleLeave = useCallback(async () => {
     try {
       clearCurrentUserCache();  // 캐시 초기화
-      await fetch(`${API_URL}/api/meetings/sessions/${sessionId}/leave`, {
+      const response = await fetch(`${API_URL}/api/meetings/sessions/${sessionId}/leave`, {
         method: 'POST',
         credentials: 'include',
       });
+      if (!response.ok) {
+        throw new Error(`Failed to leave session: ${response.status}`);
+      }
       await meetingManager.leave();
       router.push(`/workspaces/${workspaceId}`);
     } catch (err) {
       console.error('Failed to leave session:', err);
+      // Failsafe: Redirect anyway
       router.push(`/workspaces/${workspaceId}`);
     }
   }, [sessionId, workspaceId, meetingManager, router]);
@@ -181,14 +222,19 @@ export function useMeetingConnection({
       const url = new URL(`${API_URL}/api/meetings/sessions/${sessionId}`);
       url.searchParams.set('generateSummary', String(generateSummary));
 
-      await fetch(url.toString(), {
+      const response = await fetch(url.toString(), {
         method: 'DELETE',
         credentials: 'include',
       });
+      if (!response.ok) {
+        throw new Error(`Failed to end session: ${response.status}`);
+      }
       await meetingManager.leave();
       router.push(`/workspaces/${workspaceId}`);
     } catch (err) {
-      console.error('Failed to end session:', err);
+      console.error('Failed to end session (server request failed):', err);
+      // Failsafe: Still try to leave locally and redirect
+      try { await meetingManager.leave(); } catch (e) { console.warn('Local leave failed:', e); }
       router.push(`/workspaces/${workspaceId}`);
     }
   }, [sessionId, workspaceId, meetingManager, router]);

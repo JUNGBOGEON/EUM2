@@ -102,7 +102,7 @@ interface UseWorkspaceDetailReturn {
 
 export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): UseWorkspaceDetailReturn {
   const router = useRouter();
-  
+
   // Data states
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -116,7 +116,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
 
   // Navigation
   const [activeNav, setActiveNav] = useState<NavItemId>('meeting');
-  
+
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
   const [isSessionsLoading, setIsSessionsLoading] = useState(true);
@@ -128,14 +128,14 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
   const [isStartingMeeting, setIsStartingMeeting] = useState(false);
   const [isJoiningSession, setIsJoiningSession] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // WebSocket
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  
+
   // Computed
   const isOwner = !!(user && workspace?.owner && user.id === workspace.owner.id);
-  
+
   // Fetch workspace data
   const fetchWorkspace = useCallback(async () => {
     try {
@@ -156,7 +156,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsLoading(false);
     }
   }, [workspaceId]);
-  
+
   // Fetch user info
   const fetchUser = useCallback(async () => {
     try {
@@ -176,7 +176,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       console.error('Error fetching user:', error);
     }
   }, [router]);
-  
+
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
     setIsSessionsLoading(true);
@@ -200,44 +200,31 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsSessionsLoading(false);
     }
   }, [workspaceId]);
-  
-  // Fetch active sessions (multiple)
+
   const fetchActiveSessions = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/api/meetings/workspaces/${workspaceId}/active-sessions`, {
+      // Correct endpoint: active-session (singular)
+      const response = await fetch(`${API_URL}/api/meetings/workspaces/${workspaceId}/active-session`, {
         credentials: 'include',
       });
       if (response.ok) {
         const text = await response.text();
-        if (text) {
+        if (text && text !== 'null') {
           const data = JSON.parse(text);
-          setActiveSessions(Array.isArray(data) ? data : data ? [data] : []);
+          // Handle both single object and array (future proofing)
+          setActiveSessions(Array.isArray(data) ? data : [data]);
         } else {
           setActiveSessions([]);
         }
       } else {
-        // Fallback: try the old single session endpoint
-        const fallbackResponse = await fetch(`${API_URL}/api/meetings/workspaces/${workspaceId}/active-session`, {
-          credentials: 'include',
-        });
-        if (fallbackResponse.ok) {
-          const text = await fallbackResponse.text();
-          if (text && text !== 'null') {
-            const session = JSON.parse(text);
-            setActiveSessions(session ? [session] : []);
-          } else {
-            setActiveSessions([]);
-          }
-        } else {
-          setActiveSessions([]);
-        }
+        setActiveSessions([]);
       }
     } catch (error) {
       console.error('Error fetching active sessions:', error);
       setActiveSessions([]);
     }
   }, [workspaceId]);
-  
+
   // Fetch files
   const fetchFiles = useCallback(async () => {
     setIsFilesLoading(true);
@@ -260,7 +247,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsFilesLoading(false);
     }
   }, [workspaceId]);
-  
+
   // Start meeting
   const startMeeting = useCallback(async (title?: string) => {
     setIsStartingMeeting(true);
@@ -271,12 +258,12 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
         credentials: 'include',
         body: JSON.stringify({ workspaceId, title: title || '새 회의' }),
       });
-      
+
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.message || 'Failed to start meeting');
       }
-      
+
       const data = await response.json();
       router.push(`/workspaces/${workspaceId}/meeting/${data.session.id}`);
     } catch (error) {
@@ -286,7 +273,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsStartingMeeting(false);
     }
   }, [workspaceId, router]);
-  
+
   // Join session
   const joinSession = useCallback(async (sessionId: string) => {
     setIsJoiningSession(true);
@@ -296,34 +283,34 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsJoiningSession(false);
     }
   }, [workspaceId, router]);
-  
+
   // View session detail
   const viewSession = useCallback((session: MeetingSession) => {
     console.log('View session:', session);
   }, []);
-  
+
   // Upload files (one at a time - backend expects single file)
   const uploadFiles = useCallback(async (fileList: FileList) => {
     setIsUploading(true);
     try {
       const files = Array.from(fileList);
-      
+
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files`, {
           method: 'POST',
           credentials: 'include',
           body: formData,
         });
-        
+
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
           throw new Error(data.message || 'Failed to upload file');
         }
       }
-      
+
       toast.success(files.length > 1 ? `${files.length}개 파일이 업로드되었습니다.` : '파일이 업로드되었습니다.');
       await fetchFiles();
     } catch (error) {
@@ -333,7 +320,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       setIsUploading(false);
     }
   }, [workspaceId, fetchFiles]);
-  
+
   // Download file
   const downloadFile = useCallback(async (file: WorkspaceFile) => {
     try {
@@ -365,7 +352,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       toast.error('파일 다운로드에 실패했습니다.');
     }
   }, [workspaceId]);
-  
+
   // Delete file
   const deleteFile = useCallback(async (file: WorkspaceFile) => {
     try {
@@ -373,9 +360,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
         method: 'DELETE',
         credentials: 'include',
       });
-      
+
       if (!response.ok) throw new Error('Failed to delete file');
-      
+
       toast.success('파일이 삭제되었습니다.');
       await fetchFiles();
     } catch (error) {
@@ -700,11 +687,11 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       const response = await fetch(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         return [];
       }
-      
+
       const data = await response.json();
       return Array.isArray(data) ? data : [];
     } catch (error) {
@@ -712,7 +699,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       return [];
     }
   }, []);
-  
+
   // Update workspace
   const updateWorkspace = useCallback(async (data: {
     name?: string;
@@ -727,19 +714,19 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
         credentials: 'include',
         body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
         const result = await response.json();
         throw new Error(result.message || 'Failed to update workspace');
       }
-      
+
       await fetchWorkspace();
     } catch (error) {
       console.error('Error updating workspace:', error);
       throw error;
     }
   }, [workspaceId, fetchWorkspace]);
-  
+
   // Delete workspace
   const deleteWorkspace = useCallback(async () => {
     try {
@@ -747,12 +734,12 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
         method: 'DELETE',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.message || 'Failed to delete workspace');
       }
-      
+
       toast.success('워크스페이스가 삭제되었습니다.');
       router.push('/workspaces');
     } catch (error) {
@@ -760,7 +747,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       throw error;
     }
   }, [workspaceId, router]);
-  
+
   // Socket.IO connection
   useEffect(() => {
     if (!workspaceId) return;
@@ -866,7 +853,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       socketRef.current = null;
     };
   }, [workspaceId, fetchSessions, fetchActiveSessions, fetchEvents, setActiveNav]);
-  
+
   // Initial data fetch
   useEffect(() => {
     fetchWorkspace();

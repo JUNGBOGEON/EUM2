@@ -53,6 +53,7 @@ export function AppSidebar({
             width={24}
             height={10}
             className="invert group-data-[collapsible=icon]:hidden"
+            style={{ height: "auto" }}
           />
           <div className="flex items-center gap-1 group-data-[collapsible=icon]:hidden">
             {onAcceptInvitation && onRejectInvitation && (

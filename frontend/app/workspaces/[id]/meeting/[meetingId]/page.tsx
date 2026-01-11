@@ -14,7 +14,7 @@ import {
   lightTheme,
 } from 'amazon-chime-sdk-component-library-react';
 import { ThemeProvider } from 'styled-components';
-
+import WhiteboardCanvas from '@/components/whiteboard/WhiteboardCanvas'; // 화이트보드 import 추가
 // Custom hooks
 import {
   useDeviceManager,
@@ -24,8 +24,7 @@ import {
   useVoiceFocus,
   useTranscriptSync,
 } from '@/hooks/meeting';
-
-// New modular components
+// New modular components (Main 브랜치의 컴포넌트들)
 import {
   MeetingHeader,
   MeetingControls,
@@ -35,7 +34,6 @@ import {
   FloatingSubtitle,
   EndMeetingDialog,
 } from './_components';
-
 // Legacy components for loading/error states
 import {
   LoadingView,
@@ -55,10 +53,10 @@ function MeetingRoomContent() {
 
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
+  const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
 
   // stopTranscription ref (useBrowserTranscription보다 먼저 정의된 콜백에서 사용)
   const stopTranscriptionRef = useRef<(() => void) | null>(null);
-
   // Custom hooks
   const {
     devicesInitialized,
@@ -87,7 +85,6 @@ function MeetingRoomContent() {
       initializeAudioOnly();
     }
   }, [meeting, audioInitialized, initializeAudioOnly]);
-
   // Meeting start time (timestamp)
   const meetingStartTime = meeting?.startedAt
     ? new Date(meeting.startedAt).getTime()
@@ -191,10 +188,9 @@ function MeetingRoomContent() {
   const { toggleContentShare } = useContentShareControls();
   const { isLocalUserSharing } = useContentShareState();
   const { roster } = useRosterState();
-  const { tiles: remoteVideoTiles } = useRemoteVideoTileState();
-
+  const { tiles: remoteVideoTiles } = useRemoteVideoTileState(); // Main의 hook 사용
   const participantCount = Object.keys(roster).length;
-  
+
   // Convert roster to participants array (with proper typing)
   const participants = Object.entries(roster).map(([attendeeId, attendee]) => {
     const typedAttendee = attendee as ChimeRosterAttendee;
@@ -204,7 +200,6 @@ function MeetingRoomContent() {
       profileImage: typedAttendee.profileImage,
     };
   });
-
   // Camera toggle handler (includes permission request)
   const handleToggleVideo = useCallback(async () => {
     if (!devicesInitialized) {
@@ -251,12 +246,10 @@ function MeetingRoomContent() {
     }
     originalHandleEndMeeting(generateSummary);
   }, [stopTranscription, originalHandleEndMeeting]);
-
   // Loading state
   if (isJoining) {
     return <LoadingView />;
   }
-
   // Error state
   if (error) {
     return (
@@ -266,7 +259,6 @@ function MeetingRoomContent() {
       />
     );
   }
-
   return (
     <div className="h-screen flex flex-col bg-[#0f0f0f]">
       {/* Header */}
@@ -276,33 +268,40 @@ function MeetingRoomContent() {
         participants={participants}
         meetingStartTime={meetingStartTime}
         workspaceId={workspaceId}
+      // onEndMeeting={handleEndMeeting} // 필요한 경우 추가
       />
-
       {/* Permission Banner */}
       {permissionError && (
         <PermissionBanner message={permissionError} onClose={clearPermissionError} />
       )}
-
       {/* Main Content */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Video Area */}
-        <div className="flex-1 relative">
-          <VideoGrid
-            remoteVideoTiles={remoteVideoTiles}
-            isVideoEnabled={isVideoEnabled}
-            onToggleVideo={handleToggleVideo}
-            currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
-          />
-          
-          {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
-          {translationEnabled && recentTranslations.length > 0 && (
-            <FloatingSubtitle
-              translations={recentTranslations}
-              getParticipantByAttendeeId={getParticipantByAttendeeId}
-            />
+      <main className="flex-1 flex overflow-hidden relative">
+        {/* Video Area or Whiteboard */}
+        <div className="flex-1 relative flex flex-col h-full">
+          {showWhiteboard ? (
+            <div className="absolute inset-0 z-10 bg-white">
+              <WhiteboardCanvas />
+            </div>
+          ) : (
+            <>
+              <VideoGrid
+                remoteVideoTiles={remoteVideoTiles}
+                isVideoEnabled={isVideoEnabled}
+                currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+                participants={participants}
+                currentAttendeeId={currentAttendeeId}
+              />
+
+              {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
+              {translationEnabled && recentTranslations.length > 0 && (
+                <FloatingSubtitle
+                  translations={recentTranslations}
+                  getParticipantByAttendeeId={getParticipantByAttendeeId}
+                />
+              )}
+            </>
           )}
         </div>
-
         {/* Transcript Panel - Always visible on right */}
         <TranscriptPanel
           transcripts={syncedTranscripts}
@@ -317,29 +316,42 @@ function MeetingRoomContent() {
           getTranslation={getTranslation}
         />
       </main>
-
       {/* Controls */}
-      <MeetingControls
-        muted={muted}
-        isVideoEnabled={isVideoEnabled}
-        isLocalUserSharing={isLocalUserSharing}
-        isHost={isHost}
-        translationEnabled={translationEnabled}
-        isTogglingTranslation={isTogglingTranslation}
-        isVoiceFocusSupported={isVoiceFocusSupported}
-        isVoiceFocusEnabled={isVoiceFocusEnabled}
-        isVoiceFocusLoading={isVoiceFocusLoading}
-        onToggleMute={handleToggleMute}
-        onToggleVideo={handleToggleVideo}
-        onToggleScreenShare={() => toggleContentShare()}
-        onToggleTranslation={toggleTranslation}
-        onToggleVoiceFocus={toggleVoiceFocus}
-        onOpenSettings={() => setShowDeviceSettings(true)}
-        onLeave={handleLeave}
-        onEndMeeting={handleEndMeetingClick}
-      />
-
-
+      <div className="relative">
+        <MeetingControls
+          muted={muted}
+          isVideoEnabled={isVideoEnabled}
+          isLocalUserSharing={isLocalUserSharing}
+          isHost={isHost}
+          translationEnabled={translationEnabled}
+          isTogglingTranslation={isTogglingTranslation}
+          isVoiceFocusSupported={isVoiceFocusSupported}
+          isVoiceFocusEnabled={isVoiceFocusEnabled}
+          isVoiceFocusLoading={isVoiceFocusLoading}
+          onToggleMute={handleToggleMute}
+          onToggleVideo={handleToggleVideo}
+          onToggleScreenShare={() => toggleContentShare()}
+          onToggleTranslation={toggleTranslation}
+          onToggleVoiceFocus={toggleVoiceFocus}
+          onOpenSettings={() => setShowDeviceSettings(true)}
+          onLeave={handleLeave}
+          onEndMeeting={handleEndMeetingClick}
+        />
+        {/* Temporary Whiteboard Toggle Button Overlay */}
+        <button
+          onClick={() => setShowWhiteboard(!showWhiteboard)}
+          className={`absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full transition-colors ${showWhiteboard
+            ? 'bg-blue-500 hover:bg-blue-600'
+            : 'bg-[#ffffff14] hover:bg-[#ffffff29]'
+            }`}
+          title={showWhiteboard ? '화이트보드 닫기' : '화이트보드 열기'}
+          style={{ right: '180px' }}
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      </div>
       {/* Device Settings Dialog */}
       <DeviceSettingsDialog
         isOpen={showDeviceSettings}
@@ -363,7 +375,6 @@ function MeetingRoomContent() {
     </div>
   );
 }
-
 export default function MeetingPage() {
   return (
     <ThemeProvider theme={lightTheme}>

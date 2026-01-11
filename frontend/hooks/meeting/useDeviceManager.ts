@@ -67,6 +67,8 @@ export function useDeviceManager(): UseDeviceManagerReturn {
       console.log('Video input devices:', videoInputs);
       setVideoDevices(videoInputs);
       if (videoInputs.length > 0 && videoInputs[0].deviceId) {
+        // 3.1. Source Quality Uplift: 720p @ 30fps
+        await audioVideo.chooseVideoInputQuality(1280, 720, 30);
         await meetingManager.startVideoInputDevice(videoInputs[0].deviceId);
         setSelectedVideoDevice(videoInputs[0].deviceId);
         console.log('Video device started:', videoInputs[0].deviceId);
@@ -139,6 +141,8 @@ export function useDeviceManager(): UseDeviceManagerReturn {
     async (deviceId: string) => {
       if (!meetingManager) return;
       try {
+        // Ensure quality persists when changing devices
+        await meetingManager.audioVideo?.chooseVideoInputQuality(1280, 720, 30);
         await meetingManager.startVideoInputDevice(deviceId);
         setSelectedVideoDevice(deviceId);
       } catch (err) {

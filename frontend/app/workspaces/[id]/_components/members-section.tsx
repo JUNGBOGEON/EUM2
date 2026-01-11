@@ -47,25 +47,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { WorkspaceOwner, WorkspaceMember, UserInfo } from '../_lib/types';
-
-interface InvitableUser {
-  id: string;
-  name: string;
-  email: string;
-  profileImage?: string;
-}
-
-interface PendingInvitation {
-  id: string;
-  invitee: {
-    id: string;
-    name: string;
-    email: string;
-    profileImage?: string;
-  };
-  status: string;
-  createdAt: string;
-}
+import type { InvitableUser, PendingInvitation } from '@/lib/types';
 
 interface MembersSectionProps {
   owner: WorkspaceOwner | null;

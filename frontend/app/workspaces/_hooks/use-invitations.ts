@@ -3,37 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
+import type { WorkspaceInvitation, PendingInvitation } from '@/lib/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-export interface WorkspaceInvitation {
-  id: string;
-  workspace: {
-    id: string;
-    name: string;
-    icon?: string;
-    thumbnail?: string;
-  };
-  inviter: {
-    id: string;
-    name: string;
-    profileImage?: string;
-  };
-  message?: string;
-  createdAt: string;
-}
-
-export interface PendingInvitation {
-  id: string;
-  invitee: {
-    id: string;
-    name: string;
-    email: string;
-    profileImage?: string;
-  };
-  status: string;
-  createdAt: string;
-}
+// Re-export for backward compatibility
+export type { WorkspaceInvitation, PendingInvitation } from '@/lib/types';
 
 interface UseInvitationsProps {
   userId?: string;

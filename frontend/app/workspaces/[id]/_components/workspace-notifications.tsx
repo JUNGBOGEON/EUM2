@@ -19,23 +19,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { WorkspaceInvitation } from '@/lib/types';
 
-export interface WorkspaceInvitation {
-  id: string;
-  workspace: {
-    id: string;
-    name: string;
-    icon?: string;
-    thumbnail?: string;
-  };
-  inviter: {
-    id: string;
-    name: string;
-    profileImage?: string;
-  };
-  message?: string;
-  createdAt: string;
-}
+// Re-export for backward compatibility
+export type { WorkspaceInvitation } from '@/lib/types';
 
 interface WorkspaceNotificationsProps {
   invitations: WorkspaceInvitation[];

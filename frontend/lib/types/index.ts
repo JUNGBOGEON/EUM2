@@ -47,3 +47,14 @@ export type {
   FileListResponse,
   FileDownloadResponse,
 } from './file';
+
+// Invitation 관련 타입
+export type {
+  InvitableUser,
+  Invitee,
+  Inviter,
+  PendingInvitation,
+  WorkspaceInvitation,
+  InvitationStatus,
+  InvitationNotificationType,
+} from './invitation';

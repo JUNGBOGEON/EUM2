@@ -4,116 +4,31 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import {
+  GatewayBroadcastService,
+  SessionUpdatePayload,
+  InvitationNotificationPayload,
+  TranslatedTranscriptPayload,
+  NewTranscriptPayload,
+  SummaryStatusPayload,
+  LanguageChangedPayload,
+} from './services/gateway-broadcast.service';
 
-export interface SessionUpdatePayload {
-  workspaceId: string;
-  session: {
-    id: string;
-    title: string;
-    status: string;
-    hostId: string;
-    startedAt: Date;
-    participantCount?: number;
-    host?: {
-      id: string;
-      name: string;
-      profileImage?: string;
-    };
-  } | null;
-}
-
-export interface InvitationNotificationPayload {
-  type:
-    | 'invitation_received'
-    | 'invitation_cancelled'
-    | 'invitation_accepted'
-    | 'invitation_rejected';
-  invitation?: {
-    id: string;
-    workspace: {
-      id: string;
-      name: string;
-      icon?: string;
-      thumbnail?: string;
-    };
-    inviter: {
-      id: string;
-      name: string;
-      profileImage?: string;
-    };
-    message?: string;
-    createdAt: Date;
-  };
-  invitationId?: string;
-  user?: {
-    id: string;
-    name: string;
-    profileImage?: string;
-  };
-  userId?: string;
-  workspaceId?: string;
-}
-
-/**
- * 번역된 자막 WebSocket 페이로드
- */
-export interface TranslatedTranscriptPayload {
-  type: 'translated_transcript';
-  resultId: string;
-  speakerId: string;
-  speakerName: string;
-  originalText: string;
-  translatedText: string;
-  sourceLanguage: string;
-  targetLanguage: string;
-  timestamp: number;
-}
-
-/**
- * 새 트랜스크립트 WebSocket 페이로드 (원본, 실시간 동기화용)
- */
-export interface NewTranscriptPayload {
-  type: 'new_transcript';
-  resultId: string;
-  sessionId: string;
-  speakerId: string; // attendeeId (for roster lookup)
-  speakerUserId: string; // userId (for self-filtering)
-  speakerName: string;
-  speakerProfileImage?: string;
-  text: string;
-  timestamp: number; // 서버 계산 상대 타임스탬프 (ms)
-  isPartial: boolean;
-  languageCode: string;
-}
-
-/**
- * AI 요약 상태 업데이트 페이로드
- */
-export interface SummaryStatusPayload {
-  type: 'summary_status_update';
-  workspaceId: string;
-  sessionId: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
-  message?: string;
-}
-
-/**
- * 언어 변경 WebSocket 페이로드
- */
-export interface LanguageChangedPayload {
-  type: 'language_changed';
-  sessionId: string;
-  userId: string;
-  attendeeId?: string;
-  userName: string;
-  languageCode: string;
-  timestamp: number;
-}
+// Re-export payload types for external use
+export type {
+  SessionUpdatePayload,
+  InvitationNotificationPayload,
+  TranslatedTranscriptPayload,
+  NewTranscriptPayload,
+  SummaryStatusPayload,
+  LanguageChangedPayload,
+} from './services/gateway-broadcast.service';
 
 @WebSocketGateway({
   namespace: '/workspace',
@@ -126,18 +41,29 @@ export interface LanguageChangedPayload {
   },
 })
 export class WorkspaceGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(WorkspaceGateway.name);
 
-  // 연결된 클라이언트 추적 (socketId -> workspaceIds)
+  // Connected client tracking (socketId -> workspaceIds)
   private clientWorkspaces = new Map<string, Set<string>>();
 
-  // 사용자 ID -> Socket ID 매핑 (초대 알림용)
+  // User ID -> Socket ID mapping (for invitation notifications)
   private userSockets = new Map<string, Set<string>>();
+
+  constructor(private broadcastService: GatewayBroadcastService) {}
+
+  // ==========================================
+  // Gateway Lifecycle
+  // ==========================================
+
+  afterInit(server: Server) {
+    this.broadcastService.setServer(server);
+    this.logger.log('WebSocket Gateway initialized');
+  }
 
   handleConnection(client: Socket) {
     this.logger.log(
@@ -156,7 +82,7 @@ export class WorkspaceGateway
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
 
-    // 모든 워크스페이스 room에서 나가기
+    // Leave all workspace rooms
     const workspaces = this.clientWorkspaces.get(client.id);
     if (workspaces) {
       workspaces.forEach((workspaceId) => {
@@ -165,7 +91,7 @@ export class WorkspaceGateway
     }
     this.clientWorkspaces.delete(client.id);
 
-    // 사용자 소켓 매핑에서 제거
+    // Remove from user socket mapping
     this.userSockets.forEach((sockets, userId) => {
       sockets.delete(client.id);
       if (sockets.size === 0) {
@@ -174,8 +100,12 @@ export class WorkspaceGateway
     });
   }
 
+  // ==========================================
+  // Message Handlers
+  // ==========================================
+
   /**
-   * 사용자 인증 및 소켓 매핑 등록
+   * User authentication and socket mapping
    */
   @SubscribeMessage('authenticate')
   handleAuthenticate(
@@ -186,13 +116,13 @@ export class WorkspaceGateway
       return { success: false, error: 'userId is required' };
     }
 
-    // 사용자 ID와 소켓 매핑
+    // Map user ID to socket
     if (!this.userSockets.has(userId)) {
       this.userSockets.set(userId, new Set());
     }
     this.userSockets.get(userId)!.add(client.id);
 
-    // 사용자 전용 room에 참가
+    // Join user-specific room
     client.join(`user:${userId}`);
 
     this.logger.log(`User ${userId} authenticated with socket ${client.id}`);
@@ -201,7 +131,7 @@ export class WorkspaceGateway
   }
 
   /**
-   * 클라이언트가 워크스페이스 room에 참가
+   * Client joins workspace room
    */
   @SubscribeMessage('joinWorkspace')
   handleJoinWorkspace(
@@ -211,7 +141,7 @@ export class WorkspaceGateway
     const roomName = `workspace:${workspaceId}`;
     client.join(roomName);
 
-    // 클라이언트의 워크스페이스 목록에 추가
+    // Add to client's workspace list
     const workspaces = this.clientWorkspaces.get(client.id);
     if (workspaces) {
       workspaces.add(workspaceId);
@@ -223,7 +153,7 @@ export class WorkspaceGateway
   }
 
   /**
-   * 클라이언트가 워크스페이스 room에서 나가기
+   * Client leaves workspace room
    */
   @SubscribeMessage('leaveWorkspace')
   handleLeaveWorkspace(
@@ -233,7 +163,7 @@ export class WorkspaceGateway
     const roomName = `workspace:${workspaceId}`;
     client.leave(roomName);
 
-    // 클라이언트의 워크스페이스 목록에서 제거
+    // Remove from client's workspace list
     const workspaces = this.clientWorkspaces.get(client.id);
     if (workspaces) {
       workspaces.delete(workspaceId);
@@ -245,120 +175,7 @@ export class WorkspaceGateway
   }
 
   /**
-   * 워크스페이스에 세션 상태 변경 브로드캐스트
-   * - 세션 시작/종료 시 호출
-   */
-  broadcastSessionUpdate(payload: SessionUpdatePayload) {
-    const roomName = `workspace:${payload.workspaceId}`;
-    this.server.to(roomName).emit('sessionUpdate', payload);
-    this.logger.log(
-      `Broadcasted session update to ${roomName}: ${payload.session ? 'active' : 'ended'}`,
-    );
-  }
-
-  /**
-   * 세션 참가자들에게 세션 종료 알림 브로드캐스트
-   * - 호스트가 회의를 종료할 때 모든 참가자에게 알림
-   * - 참가자들은 이 이벤트를 받으면 자동으로 미팅에서 나가야 함
-   */
-  broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
-    const roomName = `session:${sessionId}`;
-    const clientCount =
-      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
-
-    this.logger.log(
-      `[Session Ended] Broadcasting to ${roomName}: ${clientCount} clients, reason: ${reason}`,
-    );
-
-    this.server.to(roomName).emit('sessionEnded', {
-      sessionId,
-      reason,
-      timestamp: Date.now(),
-    });
-  }
-
-  /**
-   * AI 요약 상태 업데이트 브로드캐스트
-   * - 요약 생성 시작/완료/실패 시 호출
-   */
-  broadcastSummaryStatus(payload: SummaryStatusPayload) {
-    const roomName = `workspace:${payload.workspaceId}`;
-    this.server.to(roomName).emit('summaryStatusUpdate', payload);
-    this.logger.log(
-      `Broadcasted summary status to ${roomName}: session=${payload.sessionId}, status=${payload.status}`,
-    );
-  }
-
-  /**
-   * 특정 사용자에게 초대 알림 전송
-   */
-  sendInvitationNotification(
-    userId: string,
-    payload: InvitationNotificationPayload,
-  ) {
-    const roomName = `user:${userId}`;
-    this.server.to(roomName).emit('invitationNotification', payload);
-    this.logger.log(
-      `Sent invitation notification to user ${userId}: ${payload.type}`,
-    );
-  }
-
-  /**
-   * 워크스페이스의 현재 연결된 클라이언트 수 조회
-   */
-  async getWorkspaceClientCount(workspaceId: string): Promise<number> {
-    const roomName = `workspace:${workspaceId}`;
-    const sockets = await this.server.in(roomName).fetchSockets();
-    return sockets.length;
-  }
-
-  /**
-   * 사용자가 현재 온라인인지 확인
-   */
-  isUserOnline(userId: string): boolean {
-    const sockets = this.userSockets.get(userId);
-    return sockets ? sockets.size > 0 : false;
-  }
-
-  /**
-   * 특정 사용자에게 번역된 자막 전송
-   */
-  sendTranslatedTranscript(
-    userId: string,
-    payload: TranslatedTranscriptPayload,
-  ) {
-    const roomName = `user:${userId}`;
-
-    // 룸에 있는 클라이언트 수 확인
-    const clientCount =
-      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
-
-    this.logger.log(
-      `[Translated Transcript] 📤 Room: ${roomName}, Clients: ${clientCount}, ${payload.sourceLanguage} → ${payload.targetLanguage}`,
-    );
-
-    if (clientCount === 0) {
-      this.logger.warn(
-        `[Translated Transcript] ⚠️ No clients in room ${roomName}! Translation will not be delivered.`,
-      );
-    }
-
-    this.server.to(roomName).emit('translatedTranscript', payload);
-  }
-
-  /**
-   * 디버그용 ping 핸들러
-   */
-  @SubscribeMessage('ping')
-  handlePing(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
-    this.logger.log(
-      `[PING] Received ping from ${client.id}: ${JSON.stringify(data)}`,
-    );
-    return { success: true, pong: true, clientId: client.id };
-  }
-
-  /**
-   * 클라이언트가 미팅 세션 room에 참가 (실시간 트랜스크립트 동기화용)
+   * Client joins session room (for real-time transcript sync)
    */
   @SubscribeMessage('joinSession')
   async handleJoinSession(
@@ -370,23 +187,19 @@ export class WorkspaceGateway
     }
 
     const roomName = `session:${sessionId}`;
-
-    // client.join()이 비동기일 수 있으므로 await 처리
     await client.join(roomName);
 
-    // 참가 후 룸 상태 확인 (adapter가 없을 수 있으므로 안전하게 접근)
-    const clientCount =
-      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+    const clientCount = this.broadcastService.getRoomClientCount(roomName);
 
     this.logger.log(
-      `[Session Join] Client ${client.id} joined room ${roomName}. Total clients in room: ${clientCount}`,
+      `[Session Join] Client ${client.id} joined room ${roomName}. Total clients: ${clientCount}`,
     );
 
     return { success: true, sessionId };
   }
 
   /**
-   * 클라이언트가 미팅 세션 room에서 나가기
+   * Client leaves session room
    */
   @SubscribeMessage('leaveSession')
   handleLeaveSession(
@@ -406,41 +219,64 @@ export class WorkspaceGateway
   }
 
   /**
-   * 세션의 모든 참가자에게 새 트랜스크립트 브로드캐스트 (실시간 동기화)
+   * Debug ping handler
    */
-  broadcastNewTranscript(sessionId: string, payload: NewTranscriptPayload) {
-    const roomName = `session:${sessionId}`;
-
-    // 룸에 있는 클라이언트 수 확인 (adapter가 없을 수 있으므로 안전하게 접근)
-    const clientCount =
-      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
-
+  @SubscribeMessage('ping')
+  handlePing(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     this.logger.log(
-      `[Transcript Broadcast] Room: ${roomName}, Clients: ${clientCount}, Speaker: ${payload.speakerName}, Text: "${payload.text.substring(0, 30)}..."`,
+      `[PING] Received ping from ${client.id}: ${JSON.stringify(data)}`,
     );
-
-    if (clientCount === 0) {
-      this.logger.warn(
-        `[Transcript Broadcast] No clients in room ${roomName}! Broadcast will have no recipients.`,
-      );
-    }
-
-    this.server.to(roomName).emit('newTranscript', payload);
+    return { success: true, pong: true, clientId: client.id };
   }
 
-  /**
-   * 세션 참가자들에게 언어 변경 알림
-   */
+  // ==========================================
+  // Broadcast Methods (delegated to service)
+  // ==========================================
+
+  broadcastSessionUpdate(payload: SessionUpdatePayload) {
+    this.broadcastService.broadcastSessionUpdate(payload);
+  }
+
+  broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
+    this.broadcastService.broadcastSessionEnded(sessionId, reason);
+  }
+
+  broadcastSummaryStatus(payload: SummaryStatusPayload) {
+    this.broadcastService.broadcastSummaryStatus(payload);
+  }
+
+  sendInvitationNotification(
+    userId: string,
+    payload: InvitationNotificationPayload,
+  ) {
+    this.broadcastService.sendInvitationNotification(userId, payload);
+  }
+
+  sendTranslatedTranscript(
+    userId: string,
+    payload: TranslatedTranscriptPayload,
+  ) {
+    this.broadcastService.sendTranslatedTranscript(userId, payload);
+  }
+
+  broadcastNewTranscript(sessionId: string, payload: NewTranscriptPayload) {
+    this.broadcastService.broadcastNewTranscript(sessionId, payload);
+  }
+
   broadcastLanguageChange(sessionId: string, payload: LanguageChangedPayload) {
-    const roomName = `session:${sessionId}`;
+    this.broadcastService.broadcastLanguageChange(sessionId, payload);
+  }
 
-    const clientCount =
-      this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+  // ==========================================
+  // Utility Methods
+  // ==========================================
 
-    this.logger.log(
-      `[Language Change] Room: ${roomName}, Clients: ${clientCount}, User: ${payload.userName}, Language: ${payload.languageCode}`,
-    );
+  async getWorkspaceClientCount(workspaceId: string): Promise<number> {
+    return this.broadcastService.getWorkspaceClientCount(workspaceId);
+  }
 
-    this.server.to(roomName).emit('languageChanged', payload);
+  isUserOnline(userId: string): boolean {
+    const sockets = this.userSockets.get(userId);
+    return sockets ? sockets.size > 0 : false;
   }
 }

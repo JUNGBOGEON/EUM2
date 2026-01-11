@@ -9,8 +9,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getAuthUser } from '../auth/interfaces';
 import { WorkspaceInvitationsService } from './workspace-invitations.service';
-import { CreateInvitationDto, RespondInvitationDto } from './dto/invitation.dto';
+import {
+  CreateInvitationDto,
+  RespondInvitationDto,
+} from './dto/invitation.dto';
 import { WorkspaceGateway } from './workspace.gateway';
 
 @Controller()
@@ -32,7 +36,7 @@ export class WorkspaceInvitationsController {
   ) {
     const invitation = await this.invitationsService.createInvitation(
       workspaceId,
-      req.user.id,
+      getAuthUser(req).id,
       dto.userId,
       dto.message,
     );
@@ -67,9 +71,10 @@ export class WorkspaceInvitationsController {
         profileImage: invitation.invitee.profileImage,
       },
       status: invitation.status,
-      createdAt: invitation.createdAt instanceof Date
-        ? invitation.createdAt.toISOString()
-        : invitation.createdAt,
+      createdAt:
+        invitation.createdAt instanceof Date
+          ? invitation.createdAt.toISOString()
+          : invitation.createdAt,
     };
   }
 
@@ -81,10 +86,11 @@ export class WorkspaceInvitationsController {
     @Param('workspaceId') workspaceId: string,
     @Req() req: any,
   ) {
-    const invitations = await this.invitationsService.getPendingInvitationsForWorkspace(
-      workspaceId,
-      req.user.id,
-    );
+    const invitations =
+      await this.invitationsService.getPendingInvitationsForWorkspace(
+        workspaceId,
+        getAuthUser(req).id,
+      );
 
     return invitations.map((inv) => ({
       id: inv.id,
@@ -95,9 +101,10 @@ export class WorkspaceInvitationsController {
         profileImage: inv.invitee.profileImage,
       },
       status: inv.status,
-      createdAt: inv.createdAt instanceof Date
-        ? inv.createdAt.toISOString()
-        : inv.createdAt,
+      createdAt:
+        inv.createdAt instanceof Date
+          ? inv.createdAt.toISOString()
+          : inv.createdAt,
     }));
   }
 
@@ -111,9 +118,10 @@ export class WorkspaceInvitationsController {
     @Req() req: any,
   ) {
     // 취소 전에 초대 정보 조회
-    const invitation = await this.invitationsService.getInvitation(invitationId);
+    const invitation =
+      await this.invitationsService.getInvitation(invitationId);
 
-    await this.invitationsService.cancelInvitation(invitationId, req.user.id);
+    await this.invitationsService.cancelInvitation(invitationId, getAuthUser(req).id);
 
     // WebSocket으로 초대받은 사용자에게 취소 알림
     this.workspaceGateway.sendInvitationNotification(invitation.inviteeId, {
@@ -129,9 +137,8 @@ export class WorkspaceInvitationsController {
    */
   @Get('invitations/pending')
   async getMyPendingInvitations(@Req() req: any) {
-    const invitations = await this.invitationsService.getPendingInvitationsForUser(
-      req.user.id,
-    );
+    const invitations =
+      await this.invitationsService.getPendingInvitationsForUser(getAuthUser(req).id);
 
     return invitations.map((inv) => ({
       id: inv.id,
@@ -147,9 +154,10 @@ export class WorkspaceInvitationsController {
         profileImage: inv.inviter.profileImage,
       },
       message: inv.message,
-      createdAt: inv.createdAt instanceof Date
-        ? inv.createdAt.toISOString()
-        : inv.createdAt,
+      createdAt:
+        inv.createdAt instanceof Date
+          ? inv.createdAt.toISOString()
+          : inv.createdAt,
     }));
   }
 
@@ -163,12 +171,13 @@ export class WorkspaceInvitationsController {
     @Req() req: any,
   ) {
     // 응답 전에 초대 정보 조회
-    const invitation = await this.invitationsService.getInvitation(invitationId);
+    const invitation =
+      await this.invitationsService.getInvitation(invitationId);
 
     if (dto.action === 'accept') {
       const result = await this.invitationsService.acceptInvitation(
         invitationId,
-        req.user.id,
+        getAuthUser(req).id,
       );
 
       // WebSocket으로 워크스페이스 오너에게 수락 알림
@@ -176,7 +185,7 @@ export class WorkspaceInvitationsController {
         type: 'invitation_accepted',
         invitationId,
         user: {
-          id: req.user.id,
+          id: getAuthUser(req).id,
           name: req.user.name,
           profileImage: req.user.profileImage,
         },
@@ -192,13 +201,13 @@ export class WorkspaceInvitationsController {
         },
       };
     } else {
-      await this.invitationsService.rejectInvitation(invitationId, req.user.id);
+      await this.invitationsService.rejectInvitation(invitationId, getAuthUser(req).id);
 
       // WebSocket으로 워크스페이스 오너에게 거절 알림
       this.workspaceGateway.sendInvitationNotification(invitation.inviterId, {
         type: 'invitation_rejected',
         invitationId,
-        userId: req.user.id,
+        userId: getAuthUser(req).id,
         workspaceId: invitation.workspaceId,
       });
 

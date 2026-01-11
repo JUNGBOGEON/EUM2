@@ -18,7 +18,12 @@ import { TranscribeUrlService } from './services/transcribe-url.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MeetingSession, SessionParticipant, Transcription, Workspace]),
+    TypeOrmModule.forFeature([
+      MeetingSession,
+      SessionParticipant,
+      Transcription,
+      Workspace,
+    ]),
     RedisModule,
     WorkspacesModule,
     AiModule,

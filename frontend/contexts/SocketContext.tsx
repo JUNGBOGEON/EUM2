@@ -108,6 +108,7 @@ interface SocketProviderProps {
  */
 export function SocketProvider({ children }: SocketProviderProps) {
   const socketRef = useRef<Socket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [connectionState, setConnectionState] = useState<SocketConnectionState>('disconnected');
   const joinedRoomsRef = useRef<Set<string>>(new Set());
   // emitWithAck 타이머 메모리 릭 방지를 위한 pending timeout 추적
@@ -137,6 +138,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     });
 
     socketRef.current = socket;
+    setSocket(socket);
     setConnectionState('connecting');
 
     // 연결 이벤트
@@ -184,6 +186,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setSocket(null);
       joinedRoomsRef.current.clear();
       // 모든 pending timeout 정리 (메모리 릭 방지)
       pendingTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -271,7 +274,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
   }, []);
 
   const value: SocketContextType = {
-    socket: socketRef.current,
+    socket,
     connectionState,
     isConnected: connectionState === 'connected',
     joinRoom,

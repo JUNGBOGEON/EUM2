@@ -31,7 +31,9 @@ export class EventExtractionService {
     const region =
       this.configService.get<string>('AWS_BEDROCK_REGION') || 'ap-northeast-2';
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const secretAccessKey = this.configService.get<string>(
+      'AWS_SECRET_ACCESS_KEY',
+    );
 
     this.bedrockClient = new BedrockRuntimeClient({
       region,
@@ -62,7 +64,8 @@ export class EventExtractionService {
     this.logger.log(`Extracting events from session ${sessionId}`);
 
     // 1. AI로 시간 표현 추출
-    const extractionResult = await this.extractTimeExpressions(formattedTranscript);
+    const extractionResult =
+      await this.extractTimeExpressions(formattedTranscript);
 
     if (extractionResult.events.length === 0) {
       this.logger.log(`No time expressions found in session ${sessionId}`);
@@ -84,7 +87,10 @@ export class EventExtractionService {
     // 3. 각 추출된 이벤트 처리
     for (const extractedEvent of extractionResult.events) {
       try {
-        const eventTypeId = this.mapEventType(extractedEvent.eventType, eventTypes);
+        const eventTypeId = this.mapEventType(
+          extractedEvent.eventType,
+          eventTypes,
+        );
 
         if (extractedEvent.timeExpression.confidence >= 0.7) {
           // 자동 생성 (높은 신뢰도)
@@ -167,11 +173,12 @@ export class EventExtractionService {
 
       const response = await this.bedrockClient.send(command);
 
-      const outputText =
-        response.output?.message?.content?.[0]?.text || '';
+      const outputText = response.output?.message?.content?.[0]?.text || '';
 
       if (!outputText) {
-        this.logger.warn('Bedrock returned empty response for event extraction');
+        this.logger.warn(
+          'Bedrock returned empty response for event extraction',
+        );
         return { events: [], ambiguousExpressions: [] };
       }
 
@@ -277,7 +284,9 @@ export class EventExtractionService {
       parts.push(`담당자: ${event.assignee}`);
     }
     parts.push(`원본 표현: "${event.timeExpression.originalText}"`);
-    parts.push(`신뢰도: ${(event.timeExpression.confidence * 100).toFixed(0)}%`);
+    parts.push(
+      `신뢰도: ${(event.timeExpression.confidence * 100).toFixed(0)}%`,
+    );
     parts.push('');
     parts.push(`[회의에서 자동 추출됨 - 세션 ID: ${sessionId}]`);
 

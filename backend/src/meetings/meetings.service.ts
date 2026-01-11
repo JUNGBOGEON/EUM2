@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -71,10 +76,16 @@ export class MeetingsService {
    * @param hostId 호스트 ID
    * @param generateSummary AI 요약 생성 여부 (기본값: true)
    */
-  async endSession(sessionId: string, hostId: string, generateSummary: boolean = true) {
+  async endSession(
+    sessionId: string,
+    hostId: string,
+    generateSummary: boolean = true,
+  ) {
     // 트랜스크립션 버퍼 플러시 후 세션 종료
     const flushResult =
-      await this.transcriptionService.flushAllTranscriptionsOnSessionEnd(sessionId);
+      await this.transcriptionService.flushAllTranscriptionsOnSessionEnd(
+        sessionId,
+      );
     this.logger.log(
       `[Session End] Flushed ${flushResult.flushed} transcriptions for session ${sessionId}`,
     );
@@ -83,12 +94,19 @@ export class MeetingsService {
 
     // 요약 생성 (비동기 - 세션 종료 응답을 블로킹하지 않음)
     if (generateSummary) {
-      this.logger.log(`[Session End] Generating AI summary for session ${sessionId}...`);
+      this.logger.log(
+        `[Session End] Generating AI summary for session ${sessionId}...`,
+      );
       this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
-        this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
+        this.logger.error(
+          `[Summary] Failed to generate summary for ${sessionId}:`,
+          err,
+        );
       });
     } else {
-      this.logger.log(`[Session End] Skipping AI summary for session ${sessionId} (user opted out)`);
+      this.logger.log(
+        `[Session End] Skipping AI summary for session ${sessionId} (user opted out)`,
+      );
     }
 
     return session;
@@ -144,7 +162,9 @@ export class MeetingsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException('세션 참가자만 이 기능을 사용할 수 있습니다.');
+      throw new ForbiddenException(
+        '세션 참가자만 이 기능을 사용할 수 있습니다.',
+      );
     }
   }
 
@@ -153,7 +173,10 @@ export class MeetingsService {
   // ==========================================
 
   async startTranscription(sessionId: string, languageCode?: string) {
-    return this.transcriptionService.startTranscription(sessionId, languageCode);
+    return this.transcriptionService.startTranscription(
+      sessionId,
+      languageCode,
+    );
   }
 
   async stopTranscription(sessionId: string) {
@@ -165,16 +188,27 @@ export class MeetingsService {
    * - 세션 전체 음성 인식 언어 변경 (AWS Chime Transcribe)
    * - 사용자별 번역 타겟 언어도 함께 업데이트
    */
-  async changeTranscriptionLanguage(sessionId: string, languageCode: string, userId?: string) {
+  async changeTranscriptionLanguage(
+    sessionId: string,
+    languageCode: string,
+    userId?: string,
+  ) {
     // 세션 레벨 트랜스크립션 언어 변경 + 사용자별 번역 언어 설정
     // userId를 전달하여 사용자별 언어 설정도 함께 저장
-    return this.transcriptionService.changeLanguage(sessionId, languageCode, userId);
+    return this.transcriptionService.changeLanguage(
+      sessionId,
+      languageCode,
+      userId,
+    );
   }
 
   async getCurrentTranscriptionLanguage(sessionId: string, userId?: string) {
     // 사용자별 언어 설정이 있으면 반환, 없으면 세션 기본 언어 반환
     if (userId) {
-      const userLanguage = await this.translationService.getUserLanguage(sessionId, userId);
+      const userLanguage = await this.translationService.getUserLanguage(
+        sessionId,
+        userId,
+      );
       if (userLanguage) {
         return userLanguage;
       }
@@ -238,7 +272,11 @@ export class MeetingsService {
    * 번역 활성화/비활성화
    */
   async toggleTranslation(sessionId: string, userId: string, enabled: boolean) {
-    await this.translationService.setTranslationEnabled(sessionId, userId, enabled);
+    await this.translationService.setTranslationEnabled(
+      sessionId,
+      userId,
+      enabled,
+    );
     return { success: true, enabled };
   }
 
@@ -252,8 +290,16 @@ export class MeetingsService {
   /**
    * 사용자 언어 설정
    */
-  async setUserLanguage(sessionId: string, userId: string, languageCode: string) {
-    await this.translationService.setUserLanguage(sessionId, userId, languageCode);
+  async setUserLanguage(
+    sessionId: string,
+    userId: string,
+    languageCode: string,
+  ) {
+    await this.translationService.setUserLanguage(
+      sessionId,
+      userId,
+      languageCode,
+    );
     return { success: true, languageCode };
   }
 

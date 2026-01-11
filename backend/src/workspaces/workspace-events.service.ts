@@ -93,7 +93,9 @@ export class WorkspaceEventsService {
 
     // 이벤트 타입 필터
     if (query.eventTypeId) {
-      queryBuilder.andWhere('event.eventTypeId = :eventTypeId', { eventTypeId: query.eventTypeId });
+      queryBuilder.andWhere('event.eventTypeId = :eventTypeId', {
+        eventTypeId: query.eventTypeId,
+      });
     }
 
     queryBuilder.orderBy('event.startTime', 'ASC');
@@ -147,7 +149,8 @@ export class WorkspaceEventsService {
     if (updateDto.title !== undefined) event.title = updateDto.title;
     if (updateDto.description !== undefined)
       event.description = updateDto.description;
-    if (updateDto.eventTypeId !== undefined) event.eventTypeId = updateDto.eventTypeId;
+    if (updateDto.eventTypeId !== undefined)
+      event.eventTypeId = updateDto.eventTypeId;
     if (updateDto.color !== undefined) event.color = updateDto.color;
     if (updateDto.startTime !== undefined)
       event.startTime = new Date(updateDto.startTime);
@@ -224,12 +227,15 @@ export class WorkspaceEventsService {
   /**
    * 오늘의 이벤트 조회
    */
-  async findToday(workspaceId: string, userId: string): Promise<WorkspaceEvent[]> {
+  async findToday(
+    workspaceId: string,
+    userId: string,
+  ): Promise<WorkspaceEvent[]> {
     await this.validateWorkspaceAccess(workspaceId, userId);
 
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     return this.eventsRepository.find({
       where: {

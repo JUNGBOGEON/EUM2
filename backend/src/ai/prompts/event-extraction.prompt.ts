@@ -5,7 +5,10 @@
  * @param currentTime 현재 시간 (HH:mm 형식)
  * @returns AI 프롬프트 문자열
  */
-export const getEventExtractionPrompt = (currentDate: string, currentTime: string): string => `
+export const getEventExtractionPrompt = (
+  currentDate: string,
+  currentTime: string,
+): string => `
 당신은 회의 녹취록에서 일정 관련 시간 표현을 추출하는 전문 AI입니다.
 
 [현재 시각]

@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getAuthUser } from '../auth/interfaces';
 import { WorkspaceFilesService } from './workspace-files.service';
 import { FileQueryDto } from './dto/file-query.dto';
 import { WorkspacesService } from './workspaces.service';
@@ -48,7 +49,7 @@ export class WorkspaceFilesController {
     // Verify workspace access
     await this.workspacesService.findOne(workspaceId);
 
-    return this.filesService.uploadFile(workspaceId, req.user.id, file);
+    return this.filesService.uploadFile(workspaceId, getAuthUser(req).id, file);
   }
 
   /**
@@ -92,9 +93,15 @@ export class WorkspaceFilesController {
     @Req() req: any,
   ) {
     const workspace = await this.workspacesService.findOne(workspaceId);
-    const isOwner = workspace.ownerId === req.user.id;
+    const isOwner = workspace.ownerId === getAuthUser(req).id;
 
-    return this.filesService.renameFile(workspaceId, fileId, body.filename, req.user.id, isOwner);
+    return this.filesService.renameFile(
+      workspaceId,
+      fileId,
+      body.filename,
+      getAuthUser(req).id,
+      isOwner,
+    );
   }
 
   /**
@@ -107,9 +114,14 @@ export class WorkspaceFilesController {
     @Req() req: any,
   ) {
     const workspace = await this.workspacesService.findOne(workspaceId);
-    const isOwner = workspace.ownerId === req.user.id;
+    const isOwner = workspace.ownerId === getAuthUser(req).id;
 
-    await this.filesService.deleteFile(workspaceId, fileId, req.user.id, isOwner);
+    await this.filesService.deleteFile(
+      workspaceId,
+      fileId,
+      getAuthUser(req).id,
+      isOwner,
+    );
 
     return { success: true, message: '파일이 삭제되었습니다' };
   }

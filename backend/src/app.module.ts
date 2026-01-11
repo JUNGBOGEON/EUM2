@@ -33,9 +33,11 @@ import { join } from 'path';
         type: 'postgres',
         host: configService.get('DB_HOST'),
         port: configService.get<number>('DB_PORT') || 5432,
-        username: configService.get('DB_USERNAME') || configService.get('DB_USER'), // Support OldEum env
+        username:
+          configService.get('DB_USERNAME') || configService.get('DB_USER'), // Support OldEum env
         password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE') || configService.get('DB_NAME'), // Support OldEum env
+        database:
+          configService.get('DB_DATABASE') || configService.get('DB_NAME'), // Support OldEum env
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: configService.get('NODE_ENV') !== 'production',
         ssl: configService.get('DB_HOST')?.includes('rds.amazonaws.com')
@@ -61,4 +63,4 @@ import { join } from 'path';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

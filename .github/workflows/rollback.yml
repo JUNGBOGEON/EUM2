@@ -1,14 +1,14 @@
-name: Rollback Deployment
+name: 배포 롤백
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag to rollback to (e.g., abc1234 or run number)'
+        description: '롤백할 Docker 이미지 태그 (예: abc1234 또는 실행 번호)'
         required: true
         type: string
       reason:
-        description: 'Reason for rollback'
+        description: '롤백 사유'
         required: true
         type: string
 
@@ -22,7 +22,7 @@ env:
 
 jobs:
   rollback:
-    name: Rollback to Previous Version
+    name: 이전 버전으로 롤백
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -30,32 +30,32 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
-      - name: Checkout repository
+      - name: 저장소 체크아웃
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: AWS 자격 증명 구성
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Amazon ECR 로그인
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify image exists
+      - name: 이미지 존재 여부 확인
         run: |
           aws ecr describe-images \
             --repository-name ${{ env.ECR_REPOSITORY }} \
             --image-ids imageTag=${{ github.event.inputs.image_tag }} \
-            || (echo "Image tag not found!" && exit 1)
+            || (echo "이미지 태그를 찾을 수 없습니다!" && exit 1)
 
-      - name: Prepare task definition
+      - name: 태스크 정의 준비
         run: |
           sed -i "s/YOUR_ACCOUNT_ID/${{ secrets.AWS_ACCOUNT_ID }}/g" ${{ env.ECS_TASK_DEFINITION }}
 
-      - name: Update task definition with rollback image
+      - name: 롤백 이미지로 태스크 정의 업데이트
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -63,7 +63,7 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.image_tag }}
 
-      - name: Deploy rollback task definition
+      - name: 롤백 태스크 정의 배포
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
@@ -72,30 +72,30 @@ jobs:
           wait-for-service-stability: true
           wait-for-minutes: 10
 
-      - name: Rollback Summary
+      - name: 롤백 요약
         run: |
-          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 롤백 요약" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image Tag | ${{ github.event.inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Timestamp | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |" >> $GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 이미지 태그 | ${{ github.event.inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 사유 | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 실행자 | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 시간 | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Slack Notification
+      - name: Slack 알림
         if: ${{ env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
             {
-              "text": "EUM Backend Rollback Executed",
+              "text": "EUM 백엔드 롤백 실행됨",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "Rollback Executed :warning:",
+                    "text": "롤백 실행됨 :warning:",
                     "emoji": true
                   }
                 },
@@ -104,15 +104,15 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Rolled back to:*\n${{ github.event.inputs.image_tag }}"
+                      "text": "*롤백 버전:*\n${{ github.event.inputs.image_tag }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Reason:*\n${{ github.event.inputs.reason }}"
+                      "text": "*사유:*\n${{ github.event.inputs.reason }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Triggered by:*\n${{ github.actor }}"
+                      "text": "*실행자:*\n${{ github.actor }}"
                     }
                   ]
                 }

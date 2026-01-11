@@ -892,6 +892,17 @@ export function useBrowserTranscription({
         sessionState,
       });
     }
+
+    // Cleanup: 의존성 변경 시 타이머 취소 및 플래그 리셋
+    return () => {
+      if (autoStartTimerRef.current) {
+        console.log('[BrowserTranscription] Cleanup: cancelling pending auto-start timer');
+        clearTimeout(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+        // 타이머가 취소되면 다음 effect 실행에서 다시 시작할 수 있도록 리셋
+        autoStartTriggeredRef.current = false;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- startTranscription은 ref로 관리됨
   }, [enabled, sessionId, meetingManager.audioVideo, sessionState, isMuted, isRoomJoined, stopTranscription]);
 

@@ -38,6 +38,7 @@ export function useVoiceFocus(): UseVoiceFocusReturn {
   const originalDeviceRef = useRef<string | null>(null);
   const hasInitializedRef = useRef(false);
   const isCheckingSupportRef = useRef(false);
+  const autoEnableTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Voice Focus 지원 여부 확인 및 초기화
   useEffect(() => {
@@ -192,6 +193,12 @@ export function useVoiceFocus(): UseVoiceFocusReturn {
     }
   }, [isVoiceFocusEnabled, isVoiceFocusLoading, isVoiceFocusSupported, enableVoiceFocus, disableVoiceFocus]);
 
+  // enableVoiceFocus의 최신 버전을 ref로 유지 (effect에서 안전하게 호출하기 위함)
+  const enableVoiceFocusRef = useRef(enableVoiceFocus);
+  useEffect(() => {
+    enableVoiceFocusRef.current = enableVoiceFocus;
+  }, [enableVoiceFocus]);
+
   // 기본 활성화: 미팅 참가 후 자동으로 Voice Focus 활성화
   useEffect(() => {
     const audioVideo = meetingManager.audioVideo;
@@ -201,18 +208,31 @@ export function useVoiceFocus(): UseVoiceFocusReturn {
       hasInitializedRef.current = true;
       console.log('[VoiceFocus] 🚀 Auto-enabling Voice Focus in 1 second...');
 
-      // 약간의 딜레이 후 활성화 (오디오 장치 설정 완료 대기)
-      const timer = setTimeout(() => {
-        enableVoiceFocus();
-      }, 1000);
+      // 이전 타이머가 있으면 취소 (중복 방지)
+      if (autoEnableTimerRef.current) {
+        clearTimeout(autoEnableTimerRef.current);
+      }
 
-      return () => clearTimeout(timer);
+      // 약간의 딜레이 후 활성화 (오디오 장치 설정 완료 대기)
+      autoEnableTimerRef.current = setTimeout(() => {
+        console.log('[VoiceFocus] ⏰ Timer fired, calling enableVoiceFocus...');
+        enableVoiceFocusRef.current();
+        autoEnableTimerRef.current = null;
+      }, 1000);
     }
-  }, [meetingManager.audioVideo, isVoiceFocusSupported, enableVoiceFocus]);
+
+    // 클린업에서 타이머를 취소하지 않음 - ref로 관리하므로 effect 재실행에 영향받지 않음
+  }, [meetingManager.audioVideo, isVoiceFocusSupported]);
 
   // 클린업
   useEffect(() => {
     return () => {
+      // 타이머 정리
+      if (autoEnableTimerRef.current) {
+        clearTimeout(autoEnableTimerRef.current);
+        autoEnableTimerRef.current = null;
+      }
+      // 트랜스포머 정리
       if (voiceFocusTransformerRef.current) {
         console.log('[VoiceFocus] Cleaning up transformer');
         voiceFocusTransformerRef.current = null;

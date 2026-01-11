@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   MeetingProvider,
@@ -55,12 +55,14 @@ function MeetingRoomContent() {
   // Custom hooks
   const {
     devicesInitialized,
+    audioInitialized,
     permissionError,
     videoDevices,
     audioInputDevices,
     selectedVideoDevice,
     selectedAudioDevice,
     selectDevices,
+    initializeAudioOnly,
     changeVideoDevice,
     changeAudioDevice,
     clearPermissionError,
@@ -70,6 +72,14 @@ function MeetingRoomContent() {
     meetingId,
     workspaceId,
   });
+
+  // 회의 연결 후 오디오 자동 초기화 (음소거 버튼 빠른 응답을 위해)
+  useEffect(() => {
+    if (meeting && !audioInitialized) {
+      console.log('[MeetingPage] Auto-initializing audio after meeting connection...');
+      initializeAudioOnly();
+    }
+  }, [meeting, audioInitialized, initializeAudioOnly]);
 
   // Meeting start time (timestamp)
   const meetingStartTime = meeting?.startedAt
@@ -169,14 +179,14 @@ function MeetingRoomContent() {
     await toggleVideo();
   }, [devicesInitialized, selectDevices, toggleVideo]);
 
-  // Microphone toggle handler (includes permission request)
+  // Microphone toggle handler (오디오만 초기화 - 빠른 응답)
   const handleToggleMute = useCallback(async () => {
-    if (!devicesInitialized) {
-      const success = await selectDevices();
+    if (!audioInitialized) {
+      const success = await initializeAudioOnly();
       if (!success) return;
     }
     toggleMute();
-  }, [devicesInitialized, selectDevices, toggleMute]);
+  }, [audioInitialized, initializeAudioOnly, toggleMute]);
 
   // 회의 나가기 (트랜스크립션 먼저 중지)
   const handleLeave = useCallback(() => {

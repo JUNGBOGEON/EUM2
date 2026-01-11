@@ -131,11 +131,14 @@ export function useMeetingConnection({
 
       // attendeeId 먼저 저장 (트랜스크립션 이벤트보다 먼저 설정되어야 함)
       setCurrentAttendeeId(attendee.attendeeId);
-      
+
       // 동기적으로 현재 사용자 정보 캐시 설정 (attendeeId)
       setCurrentUserCache({ attendeeId: attendee.attendeeId });
-      
-      await meetingManager.join(meetingSessionConfiguration);
+
+      // Web Audio 활성화 (Voice Focus 노이즈 제거에 필요)
+      await meetingManager.join(meetingSessionConfiguration, {
+        enableWebAudio: true,
+      });
       await meetingManager.start();
 
       setMeeting(sessionInfo);

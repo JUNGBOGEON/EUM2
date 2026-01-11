@@ -17,4 +17,39 @@ export {
 export { debug, isDebugEnabled } from './debug';
 
 // 시간 유틸리티
-export { formatElapsedTime } from './time';
+export { formatTime, formatElapsedTime } from './time';
+
+// 날짜 유틸리티
+export {
+  formatRelativeTime,
+  formatDate,
+  formatDateTime,
+  formatFullDate,
+  formatShortDate,
+  formatSmartDate,
+  formatDateTimeLocal,
+  formatTranscriptTime,
+  formatDuration,
+  formatOngoingDuration,
+} from './date';
+
+// 파일 유틸리티
+export {
+  formatFileSize,
+  splitFilename,
+  getFileExtension,
+  isImageFile,
+  isVideoFile,
+  isAudioFile,
+  isPdfFile,
+  isDocumentFile,
+  getFileIconType,
+  validateFile,
+  sanitizeFilename,
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_DOCUMENT_TYPES,
+} from './file';
+export type { FileIconType } from './file';
+
+// 로거 유틸리티
+export { logger } from './logger';

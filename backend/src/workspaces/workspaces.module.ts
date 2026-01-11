@@ -8,6 +8,7 @@ import { WorkspaceInvitation } from './entities/workspace-invitation.entity';
 import { WorkspaceEvent } from './entities/workspace-event.entity';
 import { WorkspaceEventType } from './entities/workspace-event-type.entity';
 import { WorkspaceGateway } from './workspace.gateway';
+import { GatewayBroadcastService } from './services/gateway-broadcast.service';
 import { WorkspaceFilesService } from './workspace-files.service';
 import { WorkspaceFilesController } from './workspace-files.controller';
 import { WorkspaceInvitationsService } from './workspace-invitations.service';
@@ -41,6 +42,7 @@ import { User } from '../users/entities/user.entity';
   providers: [
     WorkspacesService,
     WorkspaceGateway,
+    GatewayBroadcastService,
     WorkspaceFilesService,
     WorkspaceInvitationsService,
     WorkspaceEventsService,

@@ -1,0 +1,44 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build output (will be created in Docker)
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Environment files (will be provided via ECS)
+.env
+.env.*
+!.env.example
+
+# Test files
+test
+**/*.spec.ts
+**/*.test.ts
+coverage
+.nyc_output
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Misc
+.DS_Store
+*.log
+tmp
+temp

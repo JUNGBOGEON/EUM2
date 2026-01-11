@@ -2,20 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  ChimeSDKMeetingsClient,
-  CreateMeetingCommand,
-  CreateAttendeeCommand,
-  DeleteMeetingCommand,
-  DeleteAttendeeCommand,
-  StartMeetingTranscriptionCommand,
-  StopMeetingTranscriptionCommand,
-} from '@aws-sdk/client-chime-sdk-meetings';
 
 import {
   MeetingSession,
@@ -28,11 +19,17 @@ import {
 import { Workspace } from '../../workspaces/entities/workspace.entity';
 import { RedisService } from '../../redis/redis.service';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
-import { User } from '../../users/entities/user.entity';
+import { ChimeSdkService } from './chime-sdk.service';
+import { CACHE_TTL } from '../../common/constants';
 
+/**
+ * Chime Session Lifecycle Service
+ * Handles meeting session creation, joining, leaving, and ending
+ * Delegates AWS SDK operations to ChimeSdkService
+ */
 @Injectable()
 export class ChimeService {
-  private chimeClient: ChimeSDKMeetingsClient;
+  private readonly logger = new Logger(ChimeService.name);
 
   constructor(
     @InjectRepository(MeetingSession)
@@ -41,18 +38,10 @@ export class ChimeService {
     private participantRepository: Repository<SessionParticipant>,
     @InjectRepository(Workspace)
     private workspaceRepository: Repository<Workspace>,
-    private configService: ConfigService,
     private redisService: RedisService,
     private workspaceGateway: WorkspaceGateway,
-  ) {
-    this.chimeClient = new ChimeSDKMeetingsClient({
-      region: this.configService.get('AWS_REGION') || 'ap-northeast-2',
-      credentials: {
-        accessKeyId: this.configService.get('AWS_ACCESS_KEY_ID') || '',
-        secretAccessKey: this.configService.get('AWS_SECRET_ACCESS_KEY') || '',
-      },
-    });
-  }
+    private chimeSdkService: ChimeSdkService,
+  ) {}
 
   /**
    * 워크스페이스에서 새 미팅 세션 시작
@@ -91,26 +80,9 @@ export class ChimeService {
     // 새 세션 생성
     const externalMeetingId = uuidv4();
 
-    // AWS Chime Meeting 생성
-    const createMeetingCommand = new CreateMeetingCommand({
-      ClientRequestToken: externalMeetingId,
-      ExternalMeetingId: externalMeetingId,
-      MediaRegion: this.configService.get('AWS_REGION') || 'ap-northeast-2',
-      MeetingFeatures: {
-        Audio: { EchoReduction: 'AVAILABLE' },
-        Video: { MaxResolution: 'FHD' },
-        Content: { MaxResolution: 'FHD' },
-        Attendee: { MaxCount: 10 },
-      },
-    });
-
-    const chimeMeetingResponse =
-      await this.chimeClient.send(createMeetingCommand);
-    const chimeMeeting = chimeMeetingResponse.Meeting;
-
-    if (!chimeMeeting) {
-      throw new BadRequestException('Chime 미팅 생성에 실패했습니다.');
-    }
+    // AWS Chime Meeting 생성 (SDK 서비스 사용)
+    const chimeMeeting =
+      await this.chimeSdkService.createMeeting(externalMeetingId);
 
     // 세션 저장
     const session = new MeetingSession();
@@ -118,9 +90,9 @@ export class ChimeService {
     session.workspaceId = workspaceId;
     session.hostId = hostId;
     session.externalMeetingId = externalMeetingId;
-    session.chimeMeetingId = chimeMeeting.MeetingId;
-    session.mediaPlacement = chimeMeeting.MediaPlacement as Record<string, any>;
-    session.mediaRegion = chimeMeeting.MediaRegion;
+    session.chimeMeetingId = chimeMeeting.meetingId;
+    session.mediaPlacement = chimeMeeting.mediaPlacement;
+    session.mediaRegion = chimeMeeting.mediaRegion;
     session.status = SessionStatus.ACTIVE;
     session.startedAt = new Date();
 
@@ -135,8 +107,8 @@ export class ChimeService {
 
     // Redis에 세션 정보 캐싱
     await this.redisService.setMeetingSession(session.id, {
-      chimeMeetingId: chimeMeeting.MeetingId!,
-      mediaPlacement: chimeMeeting.MediaPlacement,
+      chimeMeetingId: chimeMeeting.meetingId,
+      mediaPlacement: chimeMeeting.mediaPlacement,
       participants: [hostId],
     });
 
@@ -144,20 +116,18 @@ export class ChimeService {
     const defaultLanguage = 'ko-KR';
     try {
       await this.startSessionTranscription(
-        chimeMeeting.MeetingId!,
+        chimeMeeting.meetingId,
         defaultLanguage,
       );
       // Redis에 현재 언어 저장
       await this.redisService.set(
         `transcription:language:${session.id}`,
         defaultLanguage,
-        2 * 60 * 60 * 1000, // 2시간 TTL
+        CACHE_TTL.TRANSLATION_PREFERENCE,
       );
-      console.log(
-        `[Chime] Auto-started transcription for session ${session.id}`,
-      );
+      this.logger.log(`Auto-started transcription for session ${session.id}`);
     } catch (error) {
-      console.error('[Chime] Failed to auto-start transcription:', error);
+      this.logger.error('Failed to auto-start transcription:', error);
       // 트랜스크립션 시작 실패해도 세션은 정상 진행
     }
 
@@ -242,7 +212,7 @@ export class ChimeService {
         error?.name === 'NotFoundException' ||
         error?.$metadata?.httpStatusCode === 404
       ) {
-        console.log(
+        this.logger.log(
           `Chime meeting ${session.chimeMeetingId} not found, recreating...`,
         );
 
@@ -288,18 +258,12 @@ export class ChimeService {
       throw new NotFoundException('참가자를 찾을 수 없습니다.');
     }
 
-    // Chime에서 참가자 제거
+    // Chime에서 참가자 제거 (SDK 서비스 사용)
     if (session.chimeMeetingId && participant.chimeAttendeeId) {
-      try {
-        await this.chimeClient.send(
-          new DeleteAttendeeCommand({
-            MeetingId: session.chimeMeetingId,
-            AttendeeId: participant.chimeAttendeeId,
-          }),
-        );
-      } catch (error) {
-        console.error('Failed to delete Chime attendee:', error);
-      }
+      await this.chimeSdkService.deleteAttendee(
+        session.chimeMeetingId,
+        participant.chimeAttendeeId,
+      );
     }
 
     // 퇴장 시간 및 참가 시간 기록
@@ -335,23 +299,17 @@ export class ChimeService {
       // 먼저 트랜스크립션 중지
       try {
         await this.stopSessionTranscription(session.chimeMeetingId);
-        console.log(
-          `[Chime] Auto-stopped transcription for session ${sessionId}`,
-        );
+        this.logger.log(`Auto-stopped transcription for session ${sessionId}`);
       } catch (error) {
-        console.error('[Chime] Failed to auto-stop transcription:', error);
+        this.logger.error('Failed to auto-stop transcription:', error);
         // 트랜스크립션 중지 실패해도 세션 종료 진행
       }
 
-      // Chime 미팅 삭제
+      // Chime 미팅 삭제 (SDK 서비스 사용)
       try {
-        await this.chimeClient.send(
-          new DeleteMeetingCommand({
-            MeetingId: session.chimeMeetingId,
-          }),
-        );
+        await this.chimeSdkService.deleteMeeting(session.chimeMeetingId);
       } catch (error) {
-        console.error('Failed to delete Chime meeting:', error);
+        this.logger.error('Failed to delete Chime meeting:', error);
       }
     }
 
@@ -409,10 +367,6 @@ export class ChimeService {
   }
 
   /**
-   * 참가자 추가 (내부 메서드)
-   */
-
-  /**
    * Chime Meeting이 만료된 경우 새로 생성 (내부 메서드)
    */
   private async recreateChimeMeeting(
@@ -420,39 +374,22 @@ export class ChimeService {
   ): Promise<MeetingSession> {
     const externalMeetingId = uuidv4();
 
-    // 새 AWS Chime Meeting 생성
-    const createMeetingCommand = new CreateMeetingCommand({
-      ClientRequestToken: externalMeetingId,
-      ExternalMeetingId: externalMeetingId,
-      MediaRegion: this.configService.get('AWS_REGION') || 'ap-northeast-2',
-      MeetingFeatures: {
-        Audio: { EchoReduction: 'AVAILABLE' },
-        Video: { MaxResolution: 'FHD' },
-        Content: { MaxResolution: 'FHD' },
-        Attendee: { MaxCount: 10 },
-      },
-    });
-
-    const chimeMeetingResponse =
-      await this.chimeClient.send(createMeetingCommand);
-    const chimeMeeting = chimeMeetingResponse.Meeting;
-
-    if (!chimeMeeting) {
-      throw new BadRequestException('Chime 미팅 재생성에 실패했습니다.');
-    }
+    // 새 AWS Chime Meeting 생성 (SDK 서비스 사용)
+    const chimeMeeting =
+      await this.chimeSdkService.createMeeting(externalMeetingId);
 
     // 세션 업데이트
     session.externalMeetingId = externalMeetingId;
-    session.chimeMeetingId = chimeMeeting.MeetingId;
-    session.mediaPlacement = chimeMeeting.MediaPlacement as Record<string, any>;
-    session.mediaRegion = chimeMeeting.MediaRegion;
+    session.chimeMeetingId = chimeMeeting.meetingId;
+    session.mediaPlacement = chimeMeeting.mediaPlacement;
+    session.mediaRegion = chimeMeeting.mediaRegion;
 
     await this.sessionRepository.save(session);
 
     // Redis 캐시 업데이트
     await this.redisService.setMeetingSession(session.id, {
-      chimeMeetingId: chimeMeeting.MeetingId!,
-      mediaPlacement: chimeMeeting.MediaPlacement,
+      chimeMeetingId: chimeMeeting.meetingId,
+      mediaPlacement: chimeMeeting.mediaPlacement,
       participants: [],
     });
 
@@ -463,37 +400,31 @@ export class ChimeService {
       );
       const languageCode =
         (typeof savedLanguage === 'string' ? savedLanguage : null) || 'ko-KR';
-      await this.startSessionTranscription(
-        chimeMeeting.MeetingId!,
-        languageCode,
-      );
+      await this.startSessionTranscription(chimeMeeting.meetingId, languageCode);
     } catch (err) {
-      console.error('Failed to restart transcription:', err);
+      this.logger.error('Failed to restart transcription:', err);
     }
 
-    console.log(
-      `Recreated Chime meeting: ${chimeMeeting.MeetingId} for session ${session.id}`,
+    this.logger.log(
+      `Recreated Chime meeting: ${chimeMeeting.meetingId} for session ${session.id}`,
     );
 
     return session;
   }
 
+  /**
+   * 참가자 추가 (내부 메서드)
+   */
   private async addAttendee(
     session: MeetingSession,
     userId: string,
     role: ParticipantRole,
   ): Promise<SessionParticipant> {
-    const createAttendeeCommand = new CreateAttendeeCommand({
-      MeetingId: session.chimeMeetingId!,
-      ExternalUserId: userId,
-    });
-
-    const attendeeResponse = await this.chimeClient.send(createAttendeeCommand);
-    const chimeAttendee = attendeeResponse.Attendee;
-
-    if (!chimeAttendee) {
-      throw new BadRequestException('Chime 참가자 생성에 실패했습니다.');
-    }
+    // AWS Chime Attendee 생성 (SDK 서비스 사용)
+    const chimeAttendee = await this.chimeSdkService.createAttendee(
+      session.chimeMeetingId!,
+      userId,
+    );
 
     let participant = await this.participantRepository.findOne({
       where: { sessionId: session.id, userId },
@@ -505,8 +436,8 @@ export class ChimeService {
       participant.userId = userId;
     }
 
-    participant.chimeAttendeeId = chimeAttendee.AttendeeId;
-    participant.joinToken = chimeAttendee.JoinToken;
+    participant.chimeAttendeeId = chimeAttendee.attendeeId;
+    participant.joinToken = chimeAttendee.joinToken;
     participant.role = role;
     participant.joinedAt = new Date();
     participant.leftAt = undefined;
@@ -577,57 +508,17 @@ export class ChimeService {
   }
 
   // ==========================================
-  // 트랜스크립션 관련
+  // 트랜스크립션 관련 (SDK 서비스에 위임)
   // ==========================================
 
   async startSessionTranscription(
     chimeMeetingId: string,
     languageCode: string = 'ko-KR',
   ): Promise<void> {
-    // 지원하는 언어 목록 (AWS Transcribe 자동 언어 감지용)
-    const SUPPORTED_LANGUAGES = ['ko-KR', 'en-US', 'ja-JP', 'zh-CN'];
-
-    const command = new StartMeetingTranscriptionCommand({
-      MeetingId: chimeMeetingId,
-      TranscriptionConfiguration: {
-        EngineTranscribeSettings: {
-          // 자동 언어 감지 활성화 (다국어 회의 지원)
-          IdentifyLanguage: true,
-          // 감지할 언어 목록 (4개 고정: 한국어, 영어, 일본어, 중국어)
-          LanguageOptions: SUPPORTED_LANGUAGES.join(','),
-          // 기본 언어 설정 (빠른 감지를 위한 힌트)
-          PreferredLanguage: languageCode as any,
-          // ✅ 최적화 1: 리전 자동 선택 (미팅 리전과 동일 - 지연시간 감소)
-          Region: 'auto',
-          // ✅ 최적화 2: 부분 결과 안정화 (실시간 자막 응답 개선)
-          EnablePartialResultsStabilization: true,
-          PartialResultsStability: 'medium',
-        },
-      },
-    });
-
-    try {
-      await this.chimeClient.send(command);
-      console.log(
-        `[Chime] Transcription started with auto language detection. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
-      );
-    } catch (error) {
-      console.error('[Chime] Failed to start transcription:', error);
-      throw error;
-    }
+    await this.chimeSdkService.startTranscription(chimeMeetingId, languageCode);
   }
 
   async stopSessionTranscription(chimeMeetingId: string): Promise<void> {
-    const command = new StopMeetingTranscriptionCommand({
-      MeetingId: chimeMeetingId,
-    });
-
-    try {
-      await this.chimeClient.send(command);
-      console.log(`[Chime] Transcription stopped`);
-    } catch (error) {
-      console.error('[Chime] Failed to stop transcription:', error);
-      throw error;
-    }
+    await this.chimeSdkService.stopTranscription(chimeMeetingId);
   }
 }

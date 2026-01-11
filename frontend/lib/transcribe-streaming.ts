@@ -241,12 +241,6 @@ export class TranscribeStreamingClient {
     };
 
     this.websocket.onmessage = (event) => {
-      // 수신 메시지 디버깅
-      if (event.data instanceof ArrayBuffer) {
-        console.log(`[TranscribeStreaming] Received message: ${event.data.byteLength} bytes`);
-      } else {
-        console.log(`[TranscribeStreaming] Received non-ArrayBuffer message:`, typeof event.data);
-      }
       this.handleMessage(event.data);
     };
 
@@ -482,7 +476,6 @@ export class TranscribeStreamingClient {
 
     const messageType = message.headers[':message-type'];
     const eventType = message.headers[':event-type'];
-    console.log(`[TranscribeStreaming] Message type: ${messageType}, Event type: ${eventType}`);
 
     if (messageType === 'exception') {
       const errorMessage = uint8ArrayToString(message.body);

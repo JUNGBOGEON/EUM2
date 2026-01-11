@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Checkout repository
@@ -82,7 +84,7 @@ jobs:
           echo "| Timestamp | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |" >> $GITHUB_STEP_SUMMARY
 
       - name: Slack Notification
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
@@ -117,5 +119,4 @@ jobs:
               ]
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

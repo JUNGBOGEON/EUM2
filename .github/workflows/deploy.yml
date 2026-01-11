@@ -183,10 +183,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, deploy]
     if: always()
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Deployment Success Notification
-        if: ${{ needs.deploy.result == 'success' && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ needs.deploy.result == 'success' && env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
@@ -225,11 +227,10 @@ jobs:
               ]
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
       - name: Deployment Failure Notification
-        if: ${{ needs.deploy.result == 'failure' && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ needs.deploy.result == 'failure' && env.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
@@ -268,7 +269,6 @@ jobs:
               ]
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
       - name: Summary

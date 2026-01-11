@@ -1,10 +1,9 @@
 'use client';
 
-import { RefObject } from 'react';
+import { RefObject, useEffect } from 'react';
 import Image from 'next/image';
 import { Languages, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -15,7 +14,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatElapsedTime } from '@/lib/utils/time';
 import { TRANSCRIPTION_LANGUAGES } from '@/lib/constants/languages';
-import type { TranscriptItem } from '../types';
+import type { TranscriptItem, TranslatedTranscript } from '@/lib/types';
 
 interface TranscriptPanelProps {
   transcripts: TranscriptItem[];
@@ -26,6 +25,9 @@ interface TranscriptPanelProps {
   onLanguageChange: (languageCode: string) => void;
   containerRef: RefObject<HTMLDivElement | null>;
   getParticipantByAttendeeId?: (attendeeId: string) => { name: string; profileImage?: string };
+  // 번역 관련
+  translationEnabled?: boolean;
+  getTranslation?: (resultId: string) => TranslatedTranscript | undefined;
 }
 
 export function TranscriptPanel({
@@ -37,8 +39,17 @@ export function TranscriptPanel({
   onLanguageChange,
   containerRef,
   getParticipantByAttendeeId,
+  translationEnabled = false,
+  getTranslation,
 }: TranscriptPanelProps) {
   const currentLang = TRANSCRIPTION_LANGUAGES.find((l) => l.code === selectedLanguage);
+
+  // 자막 추가 시 자동 스크롤
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [transcripts]);
 
   return (
     <div className="w-[360px] flex-shrink-0 flex flex-col bg-[#1f1f1f] border-l border-white/10">
@@ -56,7 +67,10 @@ export function TranscriptPanel({
       </div>
 
       {/* Transcript Content */}
-      <ScrollArea className="flex-1" ref={containerRef as any}>
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+      >
         <div className="p-4 space-y-4">
           {isLoadingHistory ? (
             // Loading skeletons
@@ -90,6 +104,10 @@ export function TranscriptPanel({
               const speakerName = dynamicSpeaker?.name || item.speakerName;
               const speakerProfileImage = dynamicSpeaker?.profileImage || item.speakerProfileImage;
 
+              // 번역 조회
+              const translation = translationEnabled && getTranslation ? getTranslation(item.id) : undefined;
+              const targetLang = translation ? TRANSCRIPTION_LANGUAGES.find((l) => l.code === translation.targetLanguage) : undefined;
+
               return (
                 <div
                   key={item.id}
@@ -114,11 +132,17 @@ export function TranscriptPanel({
                     <span className="text-sm font-medium text-blue-400">
                       {speakerName}
                     </span>
-                    {currentLang && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-white/50">
-                        {currentLang.flag}
-                      </Badge>
-                    )}
+                    {(() => {
+                      // 발화자의 언어 표시 (트랜스크립트에 포함된 languageCode 사용)
+                      const speakerLang = item.languageCode 
+                        ? TRANSCRIPTION_LANGUAGES.find((l) => l.code === item.languageCode)
+                        : currentLang;
+                      return speakerLang && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-white/50">
+                          {speakerLang.flag}
+                        </Badge>
+                      );
+                    })()}
                     <span className="text-xs text-white/40">
                       {formatElapsedTime(item.timestamp)}
                     </span>
@@ -126,12 +150,18 @@ export function TranscriptPanel({
                   <p className="text-sm text-white/80 leading-relaxed pl-8">
                     {item.text}
                   </p>
+                  {/* 번역된 텍스트 표시 */}
+                  {translation && (
+                    <p className="text-sm text-blue-300/80 leading-relaxed pl-8 mt-1 italic">
+                      {targetLang?.flag} {translation.translatedText}
+                    </p>
+                  )}
                 </div>
               );
             })
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer: Language Selector + Status */}
       <div className="p-4 border-t border-white/10 space-y-3">
@@ -164,17 +194,23 @@ export function TranscriptPanel({
         </div>
 
         {/* Status */}
-        <div className="flex items-center justify-center gap-2 text-xs text-white/40">
+        <div className="flex flex-col items-center justify-center gap-1 text-xs text-white/40">
           {isChangingLanguage ? (
-            <>
+            <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
               <span>언어 변경 중...</span>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full" />
               <span>{currentLang?.flag} {currentLang?.name}로 자막 인식 중</span>
-            </>
+            </div>
+          )}
+          {translationEnabled && (
+            <div className="flex items-center gap-2 text-blue-400">
+              <Languages className="h-3 w-3" />
+              <span>다른 언어 → {currentLang?.flag} {currentLang?.name}로 번역 중</span>
+            </div>
           )}
         </div>
       </div>

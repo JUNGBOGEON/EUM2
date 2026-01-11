@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
 import { API_URL, type NavItemId } from '../_lib/constants';
-import type { Workspace, UserInfo, MeetingSession, WorkspaceFile, WorkspaceMember } from '../_lib/types';
+import type { Workspace, UserInfo, MeetingSession, WorkspaceFile, WorkspaceMember, WorkspaceEvent, WorkspaceEventType, CreateEventDto, CreateEventTypeDto, UpdateEventTypeDto } from '../_lib/types';
 
 interface InvitableUser {
   id: string;
@@ -39,6 +39,8 @@ interface UseWorkspaceDetailReturn {
   members: WorkspaceMember[];
   pendingInvitations: PendingInvitation[];
   activeSessions: MeetingSession[];
+  events: WorkspaceEvent[];
+  eventTypes: WorkspaceEventType[];
   isOwner: boolean;
 
   // Navigation
@@ -49,6 +51,8 @@ interface UseWorkspaceDetailReturn {
   isLoading: boolean;
   isSessionsLoading: boolean;
   isFilesLoading: boolean;
+  isEventsLoading: boolean;
+  isEventTypesLoading: boolean;
 
   // Meeting Actions
   startMeeting: (title?: string) => Promise<void>;
@@ -67,6 +71,16 @@ interface UseWorkspaceDetailReturn {
   kickMember: (memberId: string) => Promise<void>;
   cancelInvitation: (invitationId: string) => Promise<void>;
   searchUsers: (query: string) => Promise<InvitableUser[]>;
+
+  // Event Actions
+  createEvent: (data: CreateEventDto) => Promise<void>;
+  updateEvent: (eventId: string, data: Partial<CreateEventDto>) => Promise<void>;
+  deleteEvent: (eventId: string) => Promise<void>;
+
+  // Event Type Actions
+  createEventType: (data: CreateEventTypeDto) => Promise<void>;
+  updateEventType: (typeId: string, data: UpdateEventTypeDto) => Promise<void>;
+  deleteEventType: (typeId: string) => Promise<void>;
 
   // Workspace Actions
   updateWorkspace: (data: {
@@ -97,6 +111,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [activeSessions, setActiveSessions] = useState<MeetingSession[]>([]);
+  const [events, setEvents] = useState<WorkspaceEvent[]>([]);
+  const [eventTypes, setEventTypes] = useState<WorkspaceEventType[]>([]);
 
   // Navigation
   const [activeNav, setActiveNav] = useState<NavItemId>('meeting');
@@ -105,6 +121,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
   const [isLoading, setIsLoading] = useState(true);
   const [isSessionsLoading, setIsSessionsLoading] = useState(true);
   const [isFilesLoading, setIsFilesLoading] = useState(true);
+  const [isEventsLoading, setIsEventsLoading] = useState(true);
+  const [isEventTypesLoading, setIsEventTypesLoading] = useState(true);
 
   // Action states
   const [isStartingMeeting, setIsStartingMeeting] = useState(false);
@@ -392,6 +410,188 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     }
   }, [workspaceId]);
 
+  // Fetch events
+  const fetchEvents = useCallback(async () => {
+    setIsEventsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/events`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        setEvents([]);
+        return;
+      }
+      const data = await response.json();
+      setEvents(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setEvents([]);
+    } finally {
+      setIsEventsLoading(false);
+    }
+  }, [workspaceId]);
+
+  // Create event
+  const createEvent = useCallback(async (data: CreateEventDto) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to create event');
+      }
+
+      toast.success('일정이 추가되었습니다.');
+      await fetchEvents();
+    } catch (error) {
+      console.error('Error creating event:', error);
+      toast.error(error instanceof Error ? error.message : '일정 추가에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEvents]);
+
+  // Update event
+  const updateEvent = useCallback(async (eventId: string, data: Partial<CreateEventDto>) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/events/${eventId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to update event');
+      }
+
+      toast.success('일정이 수정되었습니다.');
+      await fetchEvents();
+    } catch (error) {
+      console.error('Error updating event:', error);
+      toast.error(error instanceof Error ? error.message : '일정 수정에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEvents]);
+
+  // Delete event
+  const deleteEvent = useCallback(async (eventId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/events/${eventId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to delete event');
+      }
+
+      toast.success('일정이 삭제되었습니다.');
+      await fetchEvents();
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      toast.error(error instanceof Error ? error.message : '일정 삭제에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEvents]);
+
+  // Fetch event types
+  const fetchEventTypes = useCallback(async () => {
+    setIsEventTypesLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/event-types`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        setEventTypes([]);
+        return;
+      }
+      const data = await response.json();
+      setEventTypes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching event types:', error);
+      setEventTypes([]);
+    } finally {
+      setIsEventTypesLoading(false);
+    }
+  }, [workspaceId]);
+
+  // Create event type
+  const createEventType = useCallback(async (data: CreateEventTypeDto) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/event-types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to create event type');
+      }
+
+      toast.success('이벤트 유형이 추가되었습니다.');
+      await fetchEventTypes();
+    } catch (error) {
+      console.error('Error creating event type:', error);
+      toast.error(error instanceof Error ? error.message : '이벤트 유형 추가에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEventTypes]);
+
+  // Update event type
+  const updateEventType = useCallback(async (typeId: string, data: UpdateEventTypeDto) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/event-types/${typeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to update event type');
+      }
+
+      toast.success('이벤트 유형이 수정되었습니다.');
+      await fetchEventTypes();
+    } catch (error) {
+      console.error('Error updating event type:', error);
+      toast.error(error instanceof Error ? error.message : '이벤트 유형 수정에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEventTypes]);
+
+  // Delete event type
+  const deleteEventType = useCallback(async (typeId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/event-types/${typeId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to delete event type');
+      }
+
+      toast.success('이벤트 유형이 삭제되었습니다.');
+      await fetchEventTypes();
+    } catch (error) {
+      console.error('Error deleting event type:', error);
+      toast.error(error instanceof Error ? error.message : '이벤트 유형 삭제에 실패했습니다.');
+      throw error;
+    }
+  }, [workspaceId, fetchEventTypes]);
+
   // Fetch pending invitations for this workspace
   const fetchPendingInvitations = useCallback(async () => {
     try {
@@ -555,6 +755,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     const socket = io(`${API_URL}/workspace`, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
+      forceNew: true, // SocketContext와 별도의 소켓 인스턴스 생성
     });
 
     socketRef.current = socket;
@@ -611,6 +812,34 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       }
     });
 
+    // 회의에서 자동 추출된 이벤트 알림
+    socket.on('autoEventsCreated', (payload: {
+      sessionId: string;
+      createdCount: number;
+      pendingCount: number;
+      createdEventIds: string[];
+    }) => {
+      console.log('[WebSocket] Auto events created:', payload);
+
+      if (payload.createdCount > 0) {
+        toast.success(`회의에서 ${payload.createdCount}개 일정이 자동 추가되었습니다`, {
+          action: {
+            label: '캘린더 보기',
+            onClick: () => setActiveNav('calendar'),
+          },
+          duration: 8000,
+        });
+        // 이벤트 목록 새로고침
+        fetchEvents();
+      }
+
+      if (payload.pendingCount > 0) {
+        toast.info(`${payload.pendingCount}개 일정의 확인이 필요합니다`, {
+          duration: 10000,
+        });
+      }
+    });
+
     return () => {
       if (socket.connected) {
         socket.emit('leaveWorkspace', workspaceId);
@@ -619,10 +848,11 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
       socket.off('disconnect');
       socket.off('connect_error');
       socket.off('sessionUpdate');
+      socket.off('autoEventsCreated');
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [workspaceId, fetchSessions, fetchActiveSessions]);
+  }, [workspaceId, fetchSessions, fetchActiveSessions, fetchEvents, setActiveNav]);
 
   // Initial data fetch
   useEffect(() => {
@@ -632,7 +862,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     fetchActiveSessions();
     fetchFiles();
     fetchPendingInvitations();
-  }, [fetchWorkspace, fetchUser, fetchSessions, fetchActiveSessions, fetchFiles, fetchPendingInvitations]);
+    fetchEvents();
+    fetchEventTypes();
+  }, [fetchWorkspace, fetchUser, fetchSessions, fetchActiveSessions, fetchFiles, fetchPendingInvitations, fetchEvents, fetchEventTypes]);
 
   return {
     // Data
@@ -643,6 +875,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     members,
     pendingInvitations,
     activeSessions,
+    events,
+    eventTypes,
     isOwner,
 
     // Navigation
@@ -653,6 +887,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     isLoading,
     isSessionsLoading,
     isFilesLoading,
+    isEventsLoading,
+    isEventTypesLoading,
 
     // Meeting Actions
     startMeeting,
@@ -671,6 +907,16 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps): Us
     kickMember,
     cancelInvitation,
     searchUsers,
+
+    // Event Actions
+    createEvent,
+    updateEvent,
+    deleteEvent,
+
+    // Event Type Actions
+    createEventType,
+    updateEventType,
+    deleteEventType,
 
     // Workspace Actions
     updateWorkspace,

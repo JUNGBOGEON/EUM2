@@ -15,6 +15,7 @@ export interface UseTranscriptionOptions {
   currentUserName?: string;
   currentUserProfileImage?: string;
   currentAttendeeId?: string | null;  // 현재 사용자의 Chime attendeeId
+  userId?: string | null;  // 현재 사용자의 userId (번역 언어 설정용)
 }
 
 export interface UseTranscriptionReturn {
@@ -54,6 +55,7 @@ export function useTranscription({
   currentUserName,
   currentUserProfileImage,
   currentAttendeeId,
+  userId,
 }: UseTranscriptionOptions): UseTranscriptionReturn {
   const meetingManager = useMeetingManager();
   const { getParticipantByAttendeeId } = useParticipants({
@@ -274,6 +276,8 @@ export function useTranscription({
               endTimeMs: result.endTimeMs,
               confidence: avgConfidence,
               isStable: true,
+              // 자동 언어 감지된 언어 코드 전달 (다국어 회의 지원)
+              languageCode: result.languageCode,
             }),
           }).catch((err) => logger.error('Failed to save transcription:', err));
         }

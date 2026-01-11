@@ -15,9 +15,9 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 /**
- * WebSocket 서버 URL (API 서버와 동일)
+ * WebSocket 서버 URL (API 서버와 동일, /workspace 네임스페이스 포함)
  */
-export const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+export const SOCKET_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/workspace`;
 
 /**
  * 환경 설정

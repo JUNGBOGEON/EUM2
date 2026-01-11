@@ -30,7 +30,7 @@ export interface UseMeetingConnectionReturn {
   currentAttendeeId: string | null;  // 현재 사용자의 Chime attendeeId
   isHost: boolean;
   handleLeave: () => Promise<void>;
-  handleEndMeeting: () => Promise<void>;
+  handleEndMeeting: (generateSummary?: boolean) => Promise<void>;
 }
 
 export function useMeetingConnection({
@@ -143,7 +143,10 @@ export function useMeetingConnection({
       // 동기적으로 현재 사용자 정보 캐시 설정 (attendeeId)
       setCurrentUserCache({ attendeeId: attendee.attendeeId });
 
-      await meetingManager.join(meetingSessionConfiguration);
+      // Web Audio 활성화 (Voice Focus 노이즈 제거에 필요)
+      await meetingManager.join(meetingSessionConfiguration, {
+        enableWebAudio: true,
+      });
 
       // Debug Observer - Register BEFORE start
       // Store in ref for cleanup
@@ -165,7 +168,6 @@ export function useMeetingConnection({
       };
       observerRef.current = observerObject as any;
       meetingManager.audioVideo?.addObserver(observerRef.current!);
-
       await meetingManager.start();
 
       setMeeting(sessionInfo);
@@ -215,9 +217,12 @@ export function useMeetingConnection({
   }, [sessionId, workspaceId, meetingManager, router]);
 
   // 회의 종료 (호스트 전용 - 모든 참가자 종료)
-  const handleEndMeeting = useCallback(async () => {
+  const handleEndMeeting = useCallback(async (generateSummary: boolean = true) => {
     try {
-      const response = await fetch(`${API_URL}/api/meetings/sessions/${sessionId}`, {
+      const url = new URL(`${API_URL}/api/meetings/sessions/${sessionId}`);
+      url.searchParams.set('generateSummary', String(generateSummary));
+
+      const response = await fetch(url.toString(), {
         method: 'DELETE',
         credentials: 'include',
       });

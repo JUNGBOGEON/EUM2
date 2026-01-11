@@ -204,7 +204,21 @@ export function useParticipants({
         };
       }
 
-      // 4. 못 찾은 attendeeId 기록하고 refresh 트리거
+      // 4. userId로 조회 (히스토리 자막용 - speakerId가 userId일 수 있음)
+      const participantByUserId = participants.find(
+        (p) => p.user?.id === attendeeId || p.userId === attendeeId
+      );
+      if (participantByUserId?.user) {
+        logger.log(`[UserId] Found participant by userId: ${participantByUserId.user.name}`);
+        return {
+          name: participantByUserId.user.name,
+          profileImage: participantByUserId.user.profileImage,
+          email: participantByUserId.user.email,
+          userId: participantByUserId.user.id,
+        };
+      }
+
+      // 5. 못 찾은 attendeeId 기록하고 refresh 트리거
       if (attendeeId && attendeeId !== 'unknown' && !unknownAttendeeIdsRef.current.has(attendeeId)) {
         unknownAttendeeIdsRef.current.add(attendeeId);
         // 마지막 refresh 후 2초 이상 지났으면 다시 로드
@@ -218,7 +232,7 @@ export function useParticipants({
         }
       }
 
-      // 5. 기본값 - 아직 로딩 중이면 "로딩중..." 표시
+      // 6. 기본값 - 아직 로딩 중이면 "로딩중..." 표시
       if (isLoading) {
         return {
           name: '로딩중...',
@@ -226,7 +240,7 @@ export function useParticipants({
         };
       }
 
-      // 6. 기본값
+      // 7. 기본값
       return {
         name: '참가자',
         profileImage: undefined,

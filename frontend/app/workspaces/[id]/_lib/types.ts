@@ -34,6 +34,8 @@ export interface UserInfo {
   profileImage?: string;
 }
 
+export type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
 export interface MeetingSession {
   id: string;
   title: string;
@@ -47,7 +49,8 @@ export interface MeetingSession {
   startedAt: string;
   endedAt?: string;
   participantCount?: number;
-  summary?: string;
+  summaryStatus?: SummaryStatus;
+  summaryS3Key?: string;
 }
 
 export interface WorkspaceFile {
@@ -63,4 +66,119 @@ export interface WorkspaceFile {
     name: string;
     profileImage?: string;
   };
+}
+
+// AI 요약 구조화 타입
+export interface StructuredSummary {
+  markdown: string;
+  sections: SummarySection[];
+}
+
+export interface SummarySection {
+  id: string;
+  type: 'title' | 'summary' | 'agenda' | 'decision' | 'action_item' | 'note' | 'unresolved' | 'data';
+  content: string;
+  transcriptRefs: string[];
+}
+
+// 자막/발화 기록 타입
+export interface TranscriptItem {
+  id: string;
+  resultId: string;
+  originalText: string;
+  relativeStartSec?: number;
+  speaker?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+}
+
+// 요약 응답 타입
+export interface SummaryResponse {
+  status: SummaryStatus;
+  content: string | null;
+  structuredSummary: StructuredSummary | null;
+  presignedUrl: string | null;
+}
+
+// 반복 타입
+export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
+
+// 워크스페이스 이벤트 타입 (커스텀 가능)
+export interface WorkspaceEventType {
+  id: string;
+  workspaceId: string;
+  name: string;
+  color: string;
+  icon?: string;
+  isDefault: boolean;
+  order: number;
+  createdById?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 워크스페이스 이벤트
+export interface WorkspaceEvent {
+  id: string;
+  workspaceId: string;
+  title: string;
+  description?: string;
+  eventTypeId?: string;
+  eventType?: WorkspaceEventType;
+  color?: string;
+  startTime: string;
+  endTime?: string;
+  isAllDay: boolean;
+  recurrence: RecurrenceType;
+  recurrenceEndDate?: string;
+  reminderMinutes?: number;
+  meetingSessionId?: string;
+  createdById?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 이벤트 생성 DTO
+export interface CreateEventDto {
+  title: string;
+  description?: string;
+  eventTypeId?: string;
+  color?: string;
+  startTime: string;
+  endTime?: string;
+  isAllDay?: boolean;
+  recurrence?: RecurrenceType;
+  recurrenceEndDate?: string;
+  reminderMinutes?: number;
+  meetingSessionId?: string;
+}
+
+// 이벤트 수정 DTO
+export interface UpdateEventDto extends Partial<CreateEventDto> {}
+
+// 이벤트 타입 생성 DTO
+export interface CreateEventTypeDto {
+  name: string;
+  color: string;
+  icon?: string;
+}
+
+// 이벤트 타입 수정 DTO
+export interface UpdateEventTypeDto {
+  name?: string;
+  color?: string;
+  icon?: string;
+  order?: number;
 }

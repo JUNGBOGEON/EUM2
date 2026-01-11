@@ -8,16 +8,21 @@ import {
   UseGuards,
   Req,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { StartSessionDto } from './dto/start-session.dto';
 import { SaveTranscriptionDto, SaveTranscriptionBatchDto } from './dto/save-transcription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { TranscribeUrlService, SupportedLanguage } from './services/transcribe-url.service';
 
 @Controller('meetings')
 @UseGuards(JwtAuthGuard)
 export class MeetingsController {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(
+    private readonly meetingsService: MeetingsService,
+    private readonly transcribeUrlService: TranscribeUrlService,
+  ) {}
 
   // ==========================================
   // 세션 관리 API
@@ -51,10 +56,17 @@ export class MeetingsController {
 
   /**
    * 세션 종료 (호스트만)
+   * @param generateSummary - AI 요약 생성 여부 (기본값: true)
    */
   @Delete('sessions/:sessionId')
-  endSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.endSession(sessionId, req.user.id);
+  endSession(
+    @Param('sessionId') sessionId: string,
+    @Query('generateSummary') generateSummary: string,
+    @Req() req: any,
+  ) {
+    // Query string은 문자열로 오므로 boolean으로 변환 (기본값: true)
+    const shouldGenerateSummary = generateSummary !== 'false';
+    return this.meetingsService.endSession(sessionId, req.user.id, shouldGenerateSummary);
   }
 
   /**
@@ -122,21 +134,26 @@ export class MeetingsController {
 
   /**
    * 트랜스크립션 언어 변경 (실시간)
+   * - 세션 전체 음성 인식 언어 변경 + 사용자별 번역 타겟 언어도 함께 업데이트
    */
   @Post(':sessionId/transcription/change-language')
   changeTranscriptionLanguage(
     @Param('sessionId') sessionId: string,
     @Body('languageCode') languageCode: string,
+    @Req() req: any,
   ) {
-    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode);
+    return this.meetingsService.changeTranscriptionLanguage(sessionId, languageCode, req.user.id);
   }
 
   /**
-   * 현재 트랜스크립션 언어 조회
+   * 현재 트랜스크립션 언어 조회 (사용자별)
    */
   @Get(':sessionId/transcription/language')
-  getCurrentTranscriptionLanguage(@Param('sessionId') sessionId: string) {
-    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId);
+  getCurrentTranscriptionLanguage(
+    @Param('sessionId') sessionId: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.getCurrentTranscriptionLanguage(sessionId, req.user.id);
   }
 
   /**
@@ -239,5 +256,87 @@ export class MeetingsController {
   @Post(':sessionId/summary/regenerate')
   regenerateSummary(@Param('sessionId') sessionId: string) {
     return this.meetingsService.regenerateSummary(sessionId);
+  }
+
+  // ==========================================
+  // 번역 API
+  // ==========================================
+
+  /**
+   * 번역 활성화/비활성화 토글
+   */
+  @Post(':sessionId/translation/toggle')
+  toggleTranslation(
+    @Param('sessionId') sessionId: string,
+    @Body('enabled') enabled: boolean,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.toggleTranslation(sessionId, req.user.id, enabled);
+  }
+
+  /**
+   * 번역 상태 조회 (활성화 여부 + 사용자 언어)
+   */
+  @Get(':sessionId/translation/status')
+  getTranslationStatus(
+    @Param('sessionId') sessionId: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.getTranslationStatus(sessionId, req.user.id);
+  }
+
+  /**
+   * 사용자 언어 설정 변경 (기존 changeLanguage 확장)
+   */
+  @Post(':sessionId/translation/language')
+  setUserLanguage(
+    @Param('sessionId') sessionId: string,
+    @Body('languageCode') languageCode: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.setUserLanguage(sessionId, req.user.id, languageCode);
+  }
+
+  /**
+   * 세션 참가자들의 언어 설정 목록
+   */
+  @Get(':sessionId/translation/preferences')
+  getLanguagePreferences(@Param('sessionId') sessionId: string) {
+    return this.meetingsService.getSessionLanguagePreferences(sessionId);
+  }
+
+  // ==========================================
+  // 클라이언트 STT API (AWS Transcribe Streaming)
+  // ==========================================
+
+  /**
+   * AWS Transcribe Streaming Pre-signed URL 발급
+   *
+   * 클라이언트가 직접 AWS Transcribe Streaming에 연결하여
+   * 사용자가 선택한 언어로 음성 인식을 수행할 수 있도록
+   * AWS Signature V4로 서명된 WebSocket URL을 발급합니다.
+   *
+   * @param sessionId 세션 ID (참가자 권한 확인용)
+   * @param languageCode 음성 인식 언어 코드 (ko-KR, en-US, ja-JP, zh-CN)
+   * @returns Pre-signed WebSocket URL (유효기간: 5분)
+   */
+  @Get('sessions/:sessionId/transcribe-url')
+  async getTranscribePresignedUrl(
+    @Param('sessionId') sessionId: string,
+    @Query('languageCode') languageCode: string = 'ko-KR',
+    @Req() req: any,
+  ) {
+    // 언어 코드 유효성 검사
+    if (!this.transcribeUrlService.isLanguageSupported(languageCode)) {
+      throw new BadRequestException(
+        `Unsupported language code: ${languageCode}. Supported: ${TranscribeUrlService.SUPPORTED_LANGUAGES.join(', ')}`,
+      );
+    }
+
+    // 참가자 권한 확인
+    await this.meetingsService.verifyParticipant(sessionId, req.user.id);
+
+    // Pre-signed URL 생성
+    return this.transcribeUrlService.generatePresignedUrl(languageCode as SupportedLanguage);
   }
 }

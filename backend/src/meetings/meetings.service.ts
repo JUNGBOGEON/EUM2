@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -12,6 +12,7 @@ import {
 import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
 import { SummaryService } from './services/summary.service';
+import { TranslationService } from './services/translation.service';
 
 /**
  * MeetingsService
@@ -34,6 +35,7 @@ export class MeetingsService {
     private chimeService: ChimeService,
     private transcriptionService: TranscriptionService,
     private summaryService: SummaryService,
+    private translationService: TranslationService,
   ) {}
 
   // ==========================================
@@ -65,8 +67,11 @@ export class MeetingsService {
 
   /**
    * 세션 종료
+   * @param sessionId 세션 ID
+   * @param hostId 호스트 ID
+   * @param generateSummary AI 요약 생성 여부 (기본값: true)
    */
-  async endSession(sessionId: string, hostId: string) {
+  async endSession(sessionId: string, hostId: string, generateSummary: boolean = true) {
     // 트랜스크립션 버퍼 플러시 후 세션 종료
     const flushResult =
       await this.transcriptionService.flushAllTranscriptionsOnSessionEnd(sessionId);
@@ -77,9 +82,14 @@ export class MeetingsService {
     const session = await this.chimeService.endSession(sessionId, hostId);
 
     // 요약 생성 (비동기 - 세션 종료 응답을 블로킹하지 않음)
-    this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
-      this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
-    });
+    if (generateSummary) {
+      this.logger.log(`[Session End] Generating AI summary for session ${sessionId}...`);
+      this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
+        this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
+      });
+    } else {
+      this.logger.log(`[Session End] Skipping AI summary for session ${sessionId} (user opted out)`);
+    }
 
     return session;
   }
@@ -123,6 +133,21 @@ export class MeetingsService {
     return this.chimeService.getSessionInfo(sessionId);
   }
 
+  /**
+   * 세션 참가자 권한 확인
+   * - 사용자가 해당 세션의 참가자인지 확인
+   * @throws ForbiddenException 참가자가 아닌 경우
+   */
+  async verifyParticipant(sessionId: string, userId: string): Promise<void> {
+    const participant = await this.participantRepository.findOne({
+      where: { sessionId, userId },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('세션 참가자만 이 기능을 사용할 수 있습니다.');
+    }
+  }
+
   // ==========================================
   // 트랜스크립션 기능 (TranscriptionService 위임)
   // ==========================================
@@ -135,11 +160,25 @@ export class MeetingsService {
     return this.transcriptionService.stopTranscription(sessionId);
   }
 
-  async changeTranscriptionLanguage(sessionId: string, languageCode: string) {
-    return this.transcriptionService.changeLanguage(sessionId, languageCode);
+  /**
+   * 트랜스크립션 언어 변경
+   * - 세션 전체 음성 인식 언어 변경 (AWS Chime Transcribe)
+   * - 사용자별 번역 타겟 언어도 함께 업데이트
+   */
+  async changeTranscriptionLanguage(sessionId: string, languageCode: string, userId?: string) {
+    // 세션 레벨 트랜스크립션 언어 변경 + 사용자별 번역 언어 설정
+    // userId를 전달하여 사용자별 언어 설정도 함께 저장
+    return this.transcriptionService.changeLanguage(sessionId, languageCode, userId);
   }
 
-  async getCurrentTranscriptionLanguage(sessionId: string) {
+  async getCurrentTranscriptionLanguage(sessionId: string, userId?: string) {
+    // 사용자별 언어 설정이 있으면 반환, 없으면 세션 기본 언어 반환
+    if (userId) {
+      const userLanguage = await this.translationService.getUserLanguage(sessionId, userId);
+      if (userLanguage) {
+        return userLanguage;
+      }
+    }
     return this.transcriptionService.getCurrentLanguage(sessionId);
   }
 
@@ -189,5 +228,39 @@ export class MeetingsService {
 
   async regenerateSummary(sessionId: string) {
     return this.summaryService.regenerateSummary(sessionId);
+  }
+
+  // ==========================================
+  // 번역 기능 (TranslationService 위임)
+  // ==========================================
+
+  /**
+   * 번역 활성화/비활성화
+   */
+  async toggleTranslation(sessionId: string, userId: string, enabled: boolean) {
+    await this.translationService.setTranslationEnabled(sessionId, userId, enabled);
+    return { success: true, enabled };
+  }
+
+  /**
+   * 번역 상태 조회
+   */
+  async getTranslationStatus(sessionId: string, userId: string) {
+    return this.translationService.getTranslationStatus(sessionId, userId);
+  }
+
+  /**
+   * 사용자 언어 설정
+   */
+  async setUserLanguage(sessionId: string, userId: string, languageCode: string) {
+    await this.translationService.setUserLanguage(sessionId, userId, languageCode);
+    return { success: true, languageCode };
+  }
+
+  /**
+   * 세션 참가자 언어 설정 목록
+   */
+  async getSessionLanguagePreferences(sessionId: string) {
+    return this.translationService.getSessionLanguagePreferences(sessionId);
   }
 }

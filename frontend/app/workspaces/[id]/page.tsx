@@ -10,6 +10,7 @@ import {
   FilesSection,
   MembersSection,
   SettingsSection,
+  CalendarSection,
   WorkspaceNotifications,
 } from './_components';
 import { useWorkspaceDetail } from './_hooks/use-workspace-detail';
@@ -28,6 +29,8 @@ export default function WorkspaceDetailPage() {
     members,
     pendingInvitations,
     activeSessions,
+    events,
+    eventTypes,
     isOwner,
 
     // Navigation
@@ -38,6 +41,8 @@ export default function WorkspaceDetailPage() {
     isLoading,
     isSessionsLoading,
     isFilesLoading,
+    isEventsLoading,
+    isEventTypesLoading,
 
     // Meeting Actions
     startMeeting,
@@ -56,6 +61,16 @@ export default function WorkspaceDetailPage() {
     kickMember,
     cancelInvitation,
     searchUsers,
+
+    // Event Actions
+    createEvent,
+    updateEvent,
+    deleteEvent,
+
+    // Event Type Actions
+    createEventType,
+    updateEventType,
+    deleteEventType,
 
     // Workspace Actions
     updateWorkspace,
@@ -133,6 +148,7 @@ export default function WorkspaceDetailPage() {
               <div>
                 <h1 className="text-lg font-semibold text-foreground">
                   {activeNav === 'meeting' && '회의'}
+                  {activeNav === 'calendar' && '일정'}
                   {activeNav === 'files' && '파일'}
                   {activeNav === 'history' && '회의 기록'}
                   {activeNav === 'members' && '멤버'}
@@ -160,6 +176,22 @@ export default function WorkspaceDetailPage() {
                     onJoinSession={joinSession}
                     isStarting={isStartingMeeting}
                     isJoining={isJoiningSession}
+                  />
+                )}
+
+                {/* Calendar Section */}
+                {activeNav === 'calendar' && (
+                  <CalendarSection
+                    events={events}
+                    eventTypes={eventTypes}
+                    isLoading={isEventsLoading}
+                    isEventTypesLoading={isEventTypesLoading}
+                    onCreateEvent={createEvent}
+                    onUpdateEvent={updateEvent}
+                    onDeleteEvent={deleteEvent}
+                    onCreateEventType={createEventType}
+                    onUpdateEventType={updateEventType}
+                    onDeleteEventType={deleteEventType}
                   />
                 )}
 

@@ -45,6 +45,8 @@ interface SocketContextType {
   on: <T>(event: string, callback: (data: T) => void) => () => void;
   /** 이벤트 발송 */
   emit: (event: string, data?: unknown) => void;
+  /** 이벤트 발송 (서버 응답 대기) */
+  emitWithAck: <T = unknown>(event: string, data?: unknown, timeout?: number) => Promise<T>;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
@@ -108,9 +110,13 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const socketRef = useRef<Socket | null>(null);
   const [connectionState, setConnectionState] = useState<SocketConnectionState>('disconnected');
   const joinedRoomsRef = useRef<Set<string>>(new Set());
+  // emitWithAck 타이머 메모리 릭 방지를 위한 pending timeout 추적
+  const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // 소켓 초기화
   useEffect(() => {
+    console.log('[Socket] Initializing socket to:', config.socketUrl);
+
     const socket = io(config.socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -118,6 +124,16 @@ export function SocketProvider({ children }: SocketProviderProps) {
       reconnectionDelay: config.socketReconnectDelay,
       reconnectionDelayMax: 5000,
       timeout: 10000,
+      withCredentials: true, // Chrome 호환성을 위해 추가
+    });
+
+    // 디버깅: 모든 이벤트 로깅
+    socket.onAny((event, ...args) => {
+      console.log(`[Socket] Event received: ${event}`, args);
+    });
+
+    socket.onAnyOutgoing((event, ...args) => {
+      console.log(`[Socket] Event sent: ${event}`, args);
     });
 
     socketRef.current = socket;
@@ -127,7 +143,12 @@ export function SocketProvider({ children }: SocketProviderProps) {
     socket.on('connect', () => {
       setConnectionState('connected');
       console.log('[Socket] Connected:', socket.id);
-      
+
+      // Debug: test ping to verify socket is working
+      socket.emit('ping', { test: true, timestamp: Date.now() }, (response: unknown) => {
+        console.log('[Socket] Ping response:', response);
+      });
+
       // 재연결 시 이전에 참가했던 룸에 다시 참가
       joinedRoomsRef.current.forEach((room) => {
         socket.emit('joinRoom', { room });
@@ -143,7 +164,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     // 연결 에러
     socket.on('connect_error', (error) => {
       setConnectionState('error');
-      console.error('[Socket] Connection error:', error.message);
+      console.error('[Socket] Connection error:', error.message, error);
     });
 
     // 재연결 시도
@@ -164,6 +185,9 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socket.disconnect();
       socketRef.current = null;
       joinedRoomsRef.current.clear();
+      // 모든 pending timeout 정리 (메모리 릭 방지)
+      pendingTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+      pendingTimeoutsRef.current.clear();
     };
   }, []);
 
@@ -191,6 +215,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
   }, []);
 
   // 이벤트 리스너 등록 (자동 클린업 반환)
+  // connectionState를 의존성에 추가하여 소켓 연결 시 콜백이 재생성되도록 함
   const on = useCallback(<T,>(event: string, callback: (data: T) => void): (() => void) => {
     const socket = socketRef.current;
     if (socket) {
@@ -199,8 +224,9 @@ export function SocketProvider({ children }: SocketProviderProps) {
         socket.off(event, callback);
       };
     }
+    console.warn('[Socket] Cannot subscribe to event - socket not initialized:', event);
     return () => {};
-  }, []);
+  }, [connectionState]);
 
   // 이벤트 발송
   const emit = useCallback((event: string, data?: unknown) => {
@@ -212,6 +238,38 @@ export function SocketProvider({ children }: SocketProviderProps) {
     }
   }, []);
 
+  // 이벤트 발송 (서버 응답 대기) - Promise 기반 acknowledgement
+  const emitWithAck = useCallback(<T = unknown,>(event: string, data?: unknown, timeout: number = 5000): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      const socket = socketRef.current;
+      console.log(`[Socket] emitWithAck called: event='${event}', socket=${socket?.id}, connected=${socket?.connected}`);
+
+      if (!socket?.connected) {
+        console.error(`[Socket] emitWithAck failed: Socket not connected`);
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      console.log(`[Socket] Sending event '${event}' to server...`);
+
+      // 타임아웃 설정 (메모리 릭 방지를 위해 추적)
+      const timeoutId = setTimeout(() => {
+        pendingTimeoutsRef.current.delete(timeoutId);
+        console.error(`[Socket] emitWithAck timeout for event '${event}' after ${timeout}ms`);
+        reject(new Error(`Socket emit timeout for event: ${event}`));
+      }, timeout);
+      pendingTimeoutsRef.current.add(timeoutId);
+
+      // Socket.IO acknowledgement callback
+      socket.emit(event, data, (response: T) => {
+        pendingTimeoutsRef.current.delete(timeoutId);
+        clearTimeout(timeoutId);
+        console.log(`[Socket] emitWithAck response for '${event}':`, response);
+        resolve(response);
+      });
+    });
+  }, []);
+
   const value: SocketContextType = {
     socket: socketRef.current,
     connectionState,
@@ -220,6 +278,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     leaveRoom,
     on,
     emit,
+    emitWithAck,
   };
 
   return (

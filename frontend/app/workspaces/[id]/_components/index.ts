@@ -4,4 +4,6 @@ export { SessionHistory } from './session-history';
 export { FilesSection } from './files-section';
 export { MembersSection } from './members-section';
 export { SettingsSection } from './settings-section';
+export { CalendarSection } from './calendar-section';
 export { WorkspaceNotifications } from './workspace-notifications';
+export { SummaryLoadingAnimation } from './summary-loading-animation';

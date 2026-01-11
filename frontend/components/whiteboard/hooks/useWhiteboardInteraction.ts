@@ -438,10 +438,10 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                         let dW = 0;
                         let dH = 0;
 
-                        if (handle.includes('l')) dW = -localDx;
-                        if (handle.includes('r')) dW = localDx;
-                        if (handle.includes('t')) dH = -localDy;
-                        if (handle.includes('b')) dH = localDy;
+                        if (handle?.includes('l')) dW = -localDx;
+                        if (handle?.includes('r')) dW = localDx;
+                        if (handle?.includes('t')) dH = -localDy;
+                        if (handle?.includes('b')) dH = localDy;
 
                         const item = useWhiteboardStore.getState().items.get(id);
                         if (!item) return;
@@ -471,10 +471,10 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                         let centerShiftX = 0;
                         let centerShiftY = 0;
 
-                        if (handle.includes('l')) centerShiftX = - (newW - curW) / 2;
-                        if (handle.includes('r')) centerShiftX = (newW - curW) / 2;
-                        if (handle.includes('t')) centerShiftY = - (newH - curH) / 2;
-                        if (handle.includes('b')) centerShiftY = (newH - curH) / 2;
+                        if (handle?.includes('l')) centerShiftX = - (newW - curW) / 2;
+                        if (handle?.includes('r')) centerShiftX = (newW - curW) / 2;
+                        if (handle?.includes('t')) centerShiftY = - (newH - curH) / 2;
+                        if (handle?.includes('b')) centerShiftY = (newH - curH) / 2;
 
                         const wCos = Math.cos(rot);
                         const wSin = Math.sin(rot);

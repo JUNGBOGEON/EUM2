@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { Clock, FileText, Users, ChevronRight, Play, MoreHorizontal, Download, Eye, Calendar, Timer } from 'lucide-react';
+import { Clock, FileText, Users, ChevronRight, Play, MoreHorizontal, Download, Eye, Calendar, Timer, Loader2, RefreshCw, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,18 +15,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { MeetingSession } from '../_lib/types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { MeetingSession, StructuredSummary, TranscriptItem } from '../_lib/types';
 import { API_URL } from '../_lib/constants';
+import { SummaryFullView } from './summary-full-view';
+import { SummaryLoadingAnimation } from './summary-loading-animation';
 
-interface TranscriptItem {
+// TranscriptItem with additional fields from API
+interface LocalTranscriptItem {
   id: string;
+  resultId?: string;
   originalText: string;
   speakerId?: string;
   speaker?: {
@@ -36,6 +42,15 @@ interface TranscriptItem {
   };
   relativeStartSec?: number;
   startTimeMs: number;
+}
+
+type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+interface SummaryData {
+  status: SummaryStatus;
+  content: string | null;
+  structuredSummary: StructuredSummary | null;
+  presignedUrl: string | null;
 }
 
 interface SessionDetail extends MeetingSession {
@@ -67,15 +82,61 @@ export function SessionHistory({
 }: SessionHistoryProps) {
   const [selectedSession, setSelectedSession] = useState<MeetingSession | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
-  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
+  const [transcripts, setTranscripts] = useState<LocalTranscriptItem[]>([]);
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(false);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [isFullViewOpen, setIsFullViewOpen] = useState(false);
+
+  // Fetch summary data
+  const fetchSummary = useCallback(async (sessionId: string) => {
+    setIsLoadingSummary(true);
+    try {
+      const response = await fetch(`${API_URL}/api/meetings/${sessionId}/summary`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSummaryData(data);
+        return data as SummaryData;
+      }
+    } catch (error) {
+      console.error('Failed to fetch summary:', error);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+    return null;
+  }, []);
+
+  // Regenerate summary
+  const handleRegenerateSummary = useCallback(async () => {
+    if (!selectedSession) return;
+
+    setIsRegeneratingSummary(true);
+    try {
+      const response = await fetch(`${API_URL}/api/meetings/${selectedSession.id}/summary/regenerate`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        // Set status to processing immediately
+        setSummaryData(prev => prev ? { ...prev, status: 'processing' } : { status: 'processing', content: null, structuredSummary: null, presignedUrl: null });
+      }
+    } catch (error) {
+      console.error('Failed to regenerate summary:', error);
+    } finally {
+      setIsRegeneratingSummary(false);
+    }
+  }, [selectedSession]);
 
   // Fetch session detail and transcripts when a session is selected
   useEffect(() => {
     if (!selectedSession) {
       setSessionDetail(null);
       setTranscripts([]);
+      setSummaryData(null);
       return;
     }
 
@@ -115,7 +176,21 @@ export function SessionHistory({
 
     fetchSessionDetail();
     fetchTranscripts();
-  }, [selectedSession]);
+    fetchSummary(selectedSession.id);
+  }, [selectedSession, fetchSummary]);
+
+  // Poll for summary status when pending or processing
+  useEffect(() => {
+    if (!selectedSession || !summaryData) return;
+
+    if (summaryData.status === 'pending' || summaryData.status === 'processing') {
+      const pollInterval = setInterval(() => {
+        fetchSummary(selectedSession.id);
+      }, 3000); // Poll every 3 seconds
+
+      return () => clearInterval(pollInterval);
+    }
+  }, [selectedSession, summaryData?.status, fetchSummary]);
 
   const formatDuration = (start: string, end?: string) => {
     if (!end) return '-';
@@ -256,9 +331,15 @@ export function SessionHistory({
                   <h4 className="font-medium text-foreground truncate">
                     {session.title || '제목 없는 회의'}
                   </h4>
-                  {session.summary && (
-                    <Badge variant="outline" className="text-xs">
-                      요약 있음
+                  {session.summaryStatus === 'completed' && (
+                    <Badge variant="outline" className="text-xs text-green-600 border-green-200">
+                      요약 완료
+                    </Badge>
+                  )}
+                  {(session.summaryStatus === 'pending' || session.summaryStatus === 'processing') && (
+                    <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      생성 중
                     </Badge>
                   )}
                 </div>
@@ -330,22 +411,22 @@ export function SessionHistory({
         )}
       </div>
 
-      {/* Session Detail Sheet */}
-      <Sheet open={!!selectedSession} onOpenChange={(open) => !open && setSelectedSession(null)}>
-        <SheetContent className="w-[480px] sm:max-w-[480px] p-0 flex flex-col">
+      {/* Session Detail Modal */}
+      <Dialog open={!!selectedSession} onOpenChange={(open) => !open && setSelectedSession(null)}>
+        <DialogContent className="!max-w-5xl w-[95vw] h-[85vh] p-0 flex flex-col">
           {selectedSession && (
             <>
               {/* Header */}
-              <div className="p-6 border-b border-border">
-                <SheetHeader className="space-y-1">
-                  <SheetTitle className="text-xl">
+              <div className="p-6 border-b border-border flex-shrink-0">
+                <DialogHeader className="space-y-1">
+                  <DialogTitle className="text-xl">
                     {selectedSession.title || '제목 없는 회의'}
-                  </SheetTitle>
-                  <SheetDescription className="flex items-center gap-2 text-sm">
+                  </DialogTitle>
+                  <DialogDescription className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4" />
                     {formatFullDate(selectedSession.startedAt)}
-                  </SheetDescription>
-                </SheetHeader>
+                  </DialogDescription>
+                </DialogHeader>
 
                 {/* Meeting Stats - Horizontal */}
                 <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border">
@@ -361,9 +442,20 @@ export function SessionHistory({
                       {sessionDetail?.participants?.length || selectedSession.participantCount || 1}명 참가
                     </span>
                   </div>
-                  {selectedSession.summary && (
+                  {summaryData?.status === 'completed' && (
                     <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-none">
                       요약 완료
+                    </Badge>
+                  )}
+                  {(summaryData?.status === 'pending' || summaryData?.status === 'processing') && (
+                    <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      요약 생성 중
+                    </Badge>
+                  )}
+                  {summaryData?.status === 'failed' && (
+                    <Badge variant="secondary" className="bg-red-500/10 text-red-600 border-none">
+                      요약 실패
                     </Badge>
                   )}
                   {transcripts.length > 0 && (
@@ -375,27 +467,105 @@ export function SessionHistory({
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <Tabs defaultValue="summary" className="h-full flex flex-col">
-                  <div className="px-6 pt-4">
+                  <div className="px-6 pt-4 flex-shrink-0">
                     <TabsList className="w-full grid grid-cols-2">
                       <TabsTrigger value="summary">회의 요약</TabsTrigger>
                       <TabsTrigger value="transcript">전체 내용</TabsTrigger>
                     </TabsList>
                   </div>
 
-                  <TabsContent value="summary" className="flex-1 overflow-hidden mt-0 px-6 pb-6">
-                    <ScrollArea className="h-full max-h-[calc(100vh-380px)]">
-                      {isLoadingDetail ? (
+                  <TabsContent value="summary" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      {isLoadingSummary ? (
                         <div className="py-4 space-y-4">
                           <Skeleton className="h-4 w-full" />
                           <Skeleton className="h-4 w-full" />
                           <Skeleton className="h-4 w-3/4" />
                         </div>
-                      ) : (sessionDetail?.summary || selectedSession.summary) ? (
+                      ) : summaryData?.status === 'completed' && summaryData.content ? (
                         <div className="py-4 space-y-4">
-                          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                            {sessionDetail?.summary || selectedSession.summary}
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              <span className="text-sm text-green-600 font-medium">AI 요약 완료</span>
+                            </div>
+                            {!summaryData.structuredSummary && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleRegenerateSummary}
+                                disabled={isRegeneratingSummary}
+                              >
+                                {isRegeneratingSummary ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    재생성 중...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    새 형식으로 다시 요약
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          {!summaryData.structuredSummary && (
+                            <div className="bg-muted/50 rounded-lg p-3 mb-4 text-sm text-muted-foreground">
+                              이전 형식의 요약입니다. "전체 보기" 기능을 사용하려면 새 형식으로 다시 요약해주세요.
+                            </div>
+                          )}
+                          <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground prose-table:text-foreground prose-th:text-foreground prose-td:text-foreground prose-th:border prose-td:border prose-th:border-border prose-td:border-border prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-table:border-collapse">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {summaryData.content}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      ) : summaryData?.status === 'processing' || summaryData?.status === 'pending' ? (
+                        <SummaryLoadingAnimation transcriptCount={transcripts.length} />
+                      ) : summaryData?.status === 'failed' ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                            <XCircle className="h-7 w-7 text-red-500" />
+                          </div>
+                          <p className="text-foreground font-medium">
+                            요약 생성에 실패했습니다
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            다시 시도해 주세요
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={handleRegenerateSummary}
+                            disabled={isRegeneratingSummary}
+                          >
+                            {isRegeneratingSummary ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                재생성 중...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                다시 생성하기
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      ) : summaryData?.status === 'skipped' ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="w-14 h-14 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+                            <AlertCircle className="h-7 w-7 text-yellow-500" />
+                          </div>
+                          <p className="text-foreground font-medium">
+                            요약할 내용이 없습니다
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            회의 중 기록된 자막이 없어 요약을 생성하지 않았습니다
                           </p>
                         </div>
                       ) : (
@@ -409,16 +579,32 @@ export function SessionHistory({
                           <p className="text-sm text-muted-foreground mt-1">
                             AI가 회의 내용을 요약해 드립니다
                           </p>
-                          <Button variant="outline" size="sm" className="mt-4">
-                            요약 생성하기
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={handleRegenerateSummary}
+                            disabled={isRegeneratingSummary}
+                          >
+                            {isRegeneratingSummary ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                생성 중...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="h-4 w-4 mr-2" />
+                                요약 생성하기
+                              </>
+                            )}
                           </Button>
                         </div>
                       )}
                     </ScrollArea>
                   </TabsContent>
 
-                  <TabsContent value="transcript" className="flex-1 overflow-hidden mt-0 px-6 pb-6">
-                    <ScrollArea className="h-full max-h-[calc(100vh-380px)]">
+                  <TabsContent value="transcript" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden">
+                    <ScrollArea className="h-full">
                       {isLoadingTranscripts ? (
                         <div className="py-4 space-y-4">
                           {[1, 2, 3].map((i) => (
@@ -486,13 +672,17 @@ export function SessionHistory({
               </div>
 
               {/* Footer Actions */}
-              <div className="p-6 border-t border-border bg-muted/30">
+              <div className="p-6 border-t border-border bg-muted/30 flex-shrink-0">
                 <div className="flex gap-3">
                   <Button variant="outline" className="flex-1">
                     <Download className="h-4 w-4 mr-2" />
                     다운로드
                   </Button>
-                  <Button className="flex-1">
+                  <Button
+                    className="flex-1"
+                    onClick={() => setIsFullViewOpen(true)}
+                    disabled={!summaryData?.structuredSummary}
+                  >
                     <Eye className="h-4 w-4 mr-2" />
                     전체 보기
                   </Button>
@@ -500,8 +690,25 @@ export function SessionHistory({
               </div>
             </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
+
+      {/* Summary Full View Modal */}
+      {isFullViewOpen && summaryData?.structuredSummary && selectedSession && (
+        <SummaryFullView
+          isOpen={isFullViewOpen}
+          onClose={() => setIsFullViewOpen(false)}
+          session={selectedSession}
+          structuredSummary={summaryData.structuredSummary}
+          transcripts={transcripts.map((t, idx) => ({
+            id: t.id,
+            resultId: t.resultId || `t-${idx}`,
+            originalText: t.originalText,
+            relativeStartSec: t.relativeStartSec,
+            speaker: t.speaker,
+          }))}
+        />
+      )}
     </>
   );
 }

@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from './entities/workspace.entity';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { User } from '../users/entities/user.entity';
+import { WorkspaceEventTypesService } from './workspace-event-types.service';
 
 @Injectable()
 export class WorkspacesService {
@@ -12,6 +13,8 @@ export class WorkspacesService {
     private workspacesRepository: Repository<Workspace>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @Inject(forwardRef(() => WorkspaceEventTypesService))
+    private eventTypesService: WorkspaceEventTypesService,
   ) {}
 
   async create(
@@ -23,7 +26,12 @@ export class WorkspacesService {
       ownerId,
       members: [], // 초기 멤버는 빈 배열
     });
-    return this.workspacesRepository.save(workspace);
+    const savedWorkspace = await this.workspacesRepository.save(workspace);
+
+    // 기본 이벤트 타입 생성
+    await this.eventTypesService.createDefaultTypes(savedWorkspace.id, ownerId);
+
+    return savedWorkspace;
   }
 
   /**

@@ -90,6 +90,7 @@ export interface TranscriptItem {
   timestamp: number; // 밀리초 (미팅 시작 기준 경과 시간)
   isPartial: boolean;
   attendeeId?: string;
+  languageCode?: string; // 발화자의 언어 코드 (예: 'ko-KR', 'en-US')
 }
 
 /**
@@ -141,4 +142,39 @@ export interface TranscriptionState {
   transcripts: TranscriptItem[];
   isTranscribing: boolean;
   showTranscript: boolean;
+}
+
+/**
+ * 번역된 자막 아이템
+ */
+export interface TranslatedTranscript {
+  resultId: string;
+  speakerId: string;       // attendeeId (프론트엔드 조회용)
+  speakerUserId: string;   // userId (본인 필터링용)
+  speakerName: string;
+  originalText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  timestamp: number;
+}
+
+/**
+ * 번역 상태
+ */
+export interface TranslationState {
+  enabled: boolean;
+  userLanguage: string;
+  translations: Map<string, TranslatedTranscript>; // resultId -> translation
+}
+
+/**
+ * Chime 로스터 참가자 (확장된 타입)
+ * Chime SDK의 RosterAttendeeType을 확장하여 커스텀 속성 포함
+ */
+export interface ChimeRosterAttendee {
+  chimeAttendeeId?: string;
+  externalUserId?: string;
+  name?: string;
+  profileImage?: string;
 }

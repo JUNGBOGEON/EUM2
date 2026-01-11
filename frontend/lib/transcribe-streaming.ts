@@ -3,7 +3,15 @@
  *
  * 브라우저에서 직접 AWS Transcribe Streaming WebSocket에 연결하여
  * 실시간 음성 인식을 수행합니다.
+ *
+ * AWS SDK EventStreamCodec을 사용하여 정확한 Event Stream 인코딩을 보장합니다.
  */
+
+import { EventStreamCodec } from '@aws-sdk/eventstream-codec';
+import { toUtf8, fromUtf8 } from '@smithy/util-utf8';
+
+// AWS SDK EventStreamCodec 인스턴스 (공식 인코더/디코더)
+const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 
 // ==========================================
 // 오디오 처리 유틸리티
@@ -11,7 +19,7 @@
 
 /**
  * AudioBuffer를 다운샘플링합니다.
- * 브라우저의 기본 샘플레이트(보통 44100Hz)를 Transcribe가 지원하는 샘플레이트로 변환
+ * 브라우저의 기본 샘플레이트(보통 44100Hz/48000Hz)를 Transcribe가 지원하는 샘플레이트로 변환
  */
 export function downsampleBuffer(
   buffer: Float32Array,
@@ -49,6 +57,7 @@ export function downsampleBuffer(
 
 /**
  * Float32Array를 16-bit PCM으로 인코딩합니다.
+ * AWS Transcribe Streaming은 16-bit signed little-endian PCM을 요구합니다.
  */
 export function pcmEncode(input: Float32Array): ArrayBuffer {
   const buffer = new ArrayBuffer(input.length * 2);
@@ -63,7 +72,7 @@ export function pcmEncode(input: Float32Array): ArrayBuffer {
 }
 
 // ==========================================
-// AWS Event Stream 메시지 인코더/디코더
+// AWS Event Stream 메시지 (공식 SDK 사용)
 // ==========================================
 
 /**
@@ -75,14 +84,6 @@ interface EventStreamMessage {
 }
 
 /**
- * 문자열을 Uint8Array로 변환
- */
-function stringToUint8Array(str: string): Uint8Array {
-  const encoder = new TextEncoder();
-  return encoder.encode(str);
-}
-
-/**
  * Uint8Array를 문자열로 변환
  */
 function uint8ArrayToString(array: Uint8Array): string {
@@ -90,188 +91,58 @@ function uint8ArrayToString(array: Uint8Array): string {
   return decoder.decode(array);
 }
 
-// ==========================================
-// CRC32C 계산 (AWS Event Stream 필수)
-// ==========================================
-
-const CRC32C_TABLE = new Uint32Array(256);
-
-// CRC32C 테이블 초기화 (Castagnoli polynomial)
-(function initCrc32cTable() {
-  const polynomial = 0x82f63b78;
-  for (let i = 0; i < 256; i++) {
-    let crc = i;
-    for (let j = 0; j < 8; j++) {
-      if (crc & 1) {
-        crc = (crc >>> 1) ^ polynomial;
-      } else {
-        crc >>>= 1;
-      }
-    }
-    CRC32C_TABLE[i] = crc >>> 0;
-  }
-})();
-
-function crc32c(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc = CRC32C_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (~crc) >>> 0;
-}
-
 /**
- * AWS Event Stream 메시지 인코딩
- * AWS Transcribe Streaming은 event-stream 형식의 바이너리 메시지를 사용합니다.
- *
- * Message format:
- * [total_byte_length:4][headers_byte_length:4][prelude_crc:4][headers:*][payload:*][message_crc:4]
+ * AWS Event Stream AudioEvent 메시지 생성 (공식 SDK 포맷)
  */
-export function encodeEventStreamMessage(audioChunk: ArrayBuffer): ArrayBuffer {
-  // 헤더 구성 (순서 중요)
-  const headers: Array<{ name: string; value: string }> = [
-    { name: ':content-type', value: 'application/octet-stream' },
-    { name: ':event-type', value: 'AudioEvent' },
-    { name: ':message-type', value: 'event' },
-  ];
-
-  // 헤더 인코딩
-  const headerBuffers: Uint8Array[] = [];
-  let headersLength = 0;
-
-  for (const { name, value } of headers) {
-    const nameBytes = stringToUint8Array(name);
-    const valueBytes = stringToUint8Array(value);
-
-    // Header: name_byte_length(1) + name + value_type(1) + value_string_byte_length(2) + value
-    const headerLength = 1 + nameBytes.length + 1 + 2 + valueBytes.length;
-    const headerBuffer = new Uint8Array(headerLength);
-    const headerView = new DataView(headerBuffer.buffer);
-
-    let offset = 0;
-
-    // Header name length (1 byte)
-    headerBuffer[offset] = nameBytes.length;
-    offset += 1;
-
-    // Header name
-    headerBuffer.set(nameBytes, offset);
-    offset += nameBytes.length;
-
-    // Header value type (7 = string)
-    headerBuffer[offset] = 7;
-    offset += 1;
-
-    // Header value length (2 bytes, big-endian)
-    headerView.setUint16(offset, valueBytes.length, false);
-    offset += 2;
-
-    // Header value
-    headerBuffer.set(valueBytes, offset);
-
-    headerBuffers.push(headerBuffer);
-    headersLength += headerLength;
-  }
-
-  // 메시지 전체 구성
-  const payload = new Uint8Array(audioChunk);
-  const totalLength = 4 + 4 + 4 + headersLength + payload.length + 4;
-
-  const message = new Uint8Array(totalLength);
-  const messageView = new DataView(message.buffer);
-
-  let offset = 0;
-
-  // Prelude: total_byte_length (4 bytes, big-endian)
-  messageView.setUint32(offset, totalLength, false);
-  offset += 4;
-
-  // Prelude: headers_byte_length (4 bytes, big-endian)
-  messageView.setUint32(offset, headersLength, false);
-  offset += 4;
-
-  // Prelude CRC (4 bytes, big-endian) - CRC of first 8 bytes
-  const preludeBytes = message.slice(0, 8);
-  const preludeCrc = crc32c(preludeBytes);
-  messageView.setUint32(offset, preludeCrc, false);
-  offset += 4;
-
-  // Headers
-  for (const headerBuffer of headerBuffers) {
-    message.set(headerBuffer, offset);
-    offset += headerBuffer.length;
-  }
-
-  // Payload
-  message.set(payload, offset);
-  offset += payload.length;
-
-  // Message CRC (4 bytes, big-endian) - CRC of everything except last 4 bytes
-  const messageCrc = crc32c(message.slice(0, offset));
-  messageView.setUint32(offset, messageCrc, false);
-
-  return message.buffer;
+function createAudioEventMessage(audioData: Uint8Array) {
+  return {
+    headers: {
+      ':message-type': {
+        type: 'string' as const,
+        value: 'event',
+      },
+      ':event-type': {
+        type: 'string' as const,
+        value: 'AudioEvent',
+      },
+      ':content-type': {
+        type: 'string' as const,
+        value: 'application/octet-stream',
+      },
+    },
+    body: audioData,
+  };
 }
 
 /**
- * AWS Event Stream 메시지 디코딩
+ * AWS Event Stream 메시지 인코딩 (공식 SDK 사용)
+ */
+export function encodeEventStreamMessage(audioChunk: ArrayBuffer): Uint8Array {
+  const audioData = new Uint8Array(audioChunk);
+  const message = createAudioEventMessage(audioData);
+  return eventStreamCodec.encode(message);
+}
+
+/**
+ * AWS Event Stream 메시지 디코딩 (공식 SDK 사용)
  */
 export function decodeEventStreamMessage(data: ArrayBuffer): EventStreamMessage | null {
   try {
-    const view = new DataView(data);
-    const array = new Uint8Array(data);
+    const uint8Data = new Uint8Array(data);
+    const decoded = eventStreamCodec.decode(uint8Data);
 
-    // Total byte length
-    const totalLength = view.getUint32(0, false);
-    if (totalLength !== data.byteLength) {
-      console.warn('Message length mismatch');
-      return null;
-    }
-
-    // Headers byte length
-    const headersLength = view.getUint32(4, false);
-
-    // Skip prelude CRC (4 bytes at offset 8)
-    let offset = 12;
-
-    // Parse headers
+    // 헤더를 Record<string, string>으로 변환
     const headers: Record<string, string> = {};
-    const headersEnd = offset + headersLength;
-
-    while (offset < headersEnd) {
-      // Header name length
-      const nameLength = view.getUint8(offset);
-      offset += 1;
-
-      // Header name
-      const name = uint8ArrayToString(array.slice(offset, offset + nameLength));
-      offset += nameLength;
-
-      // Header value type
-      const valueType = view.getUint8(offset);
-      offset += 1;
-
-      if (valueType === 7) {
-        // String type
-        const valueLength = view.getUint16(offset, false);
-        offset += 2;
-
-        const value = uint8ArrayToString(array.slice(offset, offset + valueLength));
-        offset += valueLength;
-
-        headers[name] = value;
-      } else {
-        // Skip other types
-        console.warn(`Unknown header value type: ${valueType}`);
-        break;
+    for (const [key, value] of Object.entries(decoded.headers)) {
+      if (typeof value === 'object' && 'value' in value) {
+        headers[key] = String(value.value);
       }
     }
 
-    // Body (between headers end and message CRC)
-    const bodyEnd = totalLength - 4; // Exclude message CRC
-    const body = array.slice(headersEnd, bodyEnd);
-
-    return { headers, body };
+    return {
+      headers,
+      body: decoded.body,
+    };
   } catch (error) {
     console.error('Failed to decode event stream message:', error);
     return null;
@@ -314,12 +185,36 @@ export class TranscribeStreamingClient {
   private options: TranscribeStreamingOptions;
   private isStreaming = false;
   private chunkCount = 0;
+  private _isMuted = false;
+  private lastAudioSentTime = 0;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private audioContextStateHandler: (() => void) | null = null;
 
   constructor(options: TranscribeStreamingOptions) {
     this.options = {
       sampleRate: 16000,
       ...options,
     };
+  }
+
+  /**
+   * 음소거 상태 설정
+   * 음소거 시 오디오 청크를 AWS에 전송하지 않음
+   */
+  setMuted(muted: boolean): void {
+    this._isMuted = muted;
+    if (muted) {
+      console.log('[TranscribeStreaming] Muted - pausing audio transmission');
+    } else {
+      console.log('[TranscribeStreaming] Unmuted - resuming audio transmission');
+    }
+  }
+
+  /**
+   * 음소거 상태 조회
+   */
+  get isMuted(): boolean {
+    return this._isMuted;
   }
 
   /**
@@ -346,6 +241,12 @@ export class TranscribeStreamingClient {
     };
 
     this.websocket.onmessage = (event) => {
+      // 수신 메시지 디버깅
+      if (event.data instanceof ArrayBuffer) {
+        console.log(`[TranscribeStreaming] Received message: ${event.data.byteLength} bytes`);
+      } else {
+        console.log(`[TranscribeStreaming] Received non-ArrayBuffer message:`, typeof event.data);
+      }
       this.handleMessage(event.data);
     };
 
@@ -388,6 +289,19 @@ export class TranscribeStreamingClient {
       await this.audioContext.resume();
     }
 
+    // AudioContext 상태 변경 감지 (브라우저가 일시 중지할 때 자동 재개)
+    this.audioContextStateHandler = () => {
+      if (this.audioContext?.state === 'suspended' && this.isStreaming) {
+        console.log('[TranscribeStreaming] AudioContext suspended, attempting to resume...');
+        this.audioContext.resume().then(() => {
+          console.log('[TranscribeStreaming] AudioContext resumed successfully');
+        }).catch((err) => {
+          console.error('[TranscribeStreaming] Failed to resume AudioContext:', err);
+        });
+      }
+    };
+    this.audioContext.addEventListener('statechange', this.audioContextStateHandler);
+
     console.log('[TranscribeStreaming] AudioContext sample rate:', this.audioContext.sampleRate);
     console.log('[TranscribeStreaming] Target sample rate:', this.options.sampleRate);
     console.log('[TranscribeStreaming] Downsample ratio:', this.audioContext.sampleRate / this.options.sampleRate!);
@@ -398,12 +312,44 @@ export class TranscribeStreamingClient {
     // 4096 samples buffer size for better audio quality
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
+    // 오디오 콜백 카운터 (디버깅용)
+    let audioCallbackCount = 0;
+    let lastCallbackLogTime = Date.now();
+
     this.processor.onaudioprocess = (event) => {
+      audioCallbackCount++;
+
+      // 10초마다 콜백 횟수 로깅 (오디오 처리가 정상적으로 되는지 확인)
+      const now = Date.now();
+      if (now - lastCallbackLogTime > 10000) {
+        console.log(`[TranscribeStreaming] Audio callbacks in last 10s: ${audioCallbackCount}, muted: ${this._isMuted}, wsOpen: ${this.websocket?.readyState === WebSocket.OPEN}`);
+        audioCallbackCount = 0;
+        lastCallbackLogTime = now;
+      }
+
       if (!this.isStreaming || this.websocket?.readyState !== WebSocket.OPEN) {
         return;
       }
 
+      // 음소거 상태면 오디오 전송 건너뛰기
+      if (this._isMuted) {
+        return;
+      }
+
       const inputData = event.inputBuffer.getChannelData(0);
+
+      // 오디오 레벨 확인 (디버깅용 - 매 100번째 청크)
+      if (this.chunkCount % 100 === 0) {
+        let maxLevel = 0;
+        let rms = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          const sample = Math.abs(inputData[i]);
+          if (sample > maxLevel) maxLevel = sample;
+          rms += sample * sample;
+        }
+        rms = Math.sqrt(rms / inputData.length);
+        console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+      }
 
       // 다운샘플링
       const downsampledData = downsampleBuffer(
@@ -424,6 +370,7 @@ export class TranscribeStreamingClient {
       try {
         const message = encodeEventStreamMessage(pcmData);
         this.websocket!.send(message);
+        this.lastAudioSentTime = Date.now();
 
         this.chunkCount++;
         if (this.chunkCount === 1) {
@@ -443,14 +390,99 @@ export class TranscribeStreamingClient {
 
     source.connect(this.processor);
     this.processor.connect(this.audioContext.destination);
+
+    // 연결 상태 모니터링 (5초마다)
+    this.startHealthCheck();
+  }
+
+  /**
+   * 연결 상태 모니터링 시작
+   * - AudioContext suspended 감지 및 자동 resume
+   * - 오디오 전송 중단 감지
+   * - Keep-alive 메커니즘 (무음 오디오 전송)
+   */
+  private startHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    // 더 자주 체크 (3초마다) - AWS Transcribe는 15초 후 타임아웃
+    this.healthCheckInterval = setInterval(() => {
+      if (!this.isStreaming) {
+        return;
+      }
+
+      // AudioContext 상태 확인
+      if (this.audioContext?.state === 'suspended') {
+        console.warn('[TranscribeStreaming] HealthCheck: AudioContext is suspended, resuming...');
+        this.audioContext.resume().catch((err) => {
+          console.error('[TranscribeStreaming] Failed to resume AudioContext:', err);
+        });
+      }
+
+      // WebSocket 상태 확인
+      if (this.websocket?.readyState !== WebSocket.OPEN) {
+        console.warn('[TranscribeStreaming] HealthCheck: WebSocket is not open, state:', this.websocket?.readyState);
+        return;
+      }
+
+      // 오디오 전송 중단 감지 (8초 이상 전송 없음 - 타임아웃 전에 감지)
+      const timeSinceLastAudio = Date.now() - this.lastAudioSentTime;
+      if (this.lastAudioSentTime > 0 && timeSinceLastAudio > 8000) {
+        console.warn(`[TranscribeStreaming] HealthCheck: No audio sent for ${Math.round(timeSinceLastAudio / 1000)}s, muted: ${this._isMuted}`);
+
+        // AudioContext 강제 resume 시도
+        if (this.audioContext && this.audioContext.state !== 'running') {
+          console.log('[TranscribeStreaming] Forcing AudioContext resume...');
+          this.audioContext.resume().catch(console.error);
+        }
+
+        // 음소거가 아닌데 오디오가 전송되지 않으면 무음 keep-alive 패킷 전송
+        // AWS Transcribe는 15초 동안 오디오가 없으면 연결을 끊음
+        if (!this._isMuted && timeSinceLastAudio > 10000) {
+          console.log('[TranscribeStreaming] Sending keep-alive silent audio...');
+          this.sendKeepAlive();
+        }
+      }
+    }, 3000);
+  }
+
+  /**
+   * Keep-alive 무음 오디오 패킷 전송
+   * AWS Transcribe 연결을 유지하기 위해 무음 PCM 데이터 전송
+   */
+  private sendKeepAlive(): void {
+    if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      // 100ms 분량의 무음 PCM 데이터 생성 (16kHz, 16-bit mono)
+      const sampleRate = this.options.sampleRate || 16000;
+      const durationMs = 100;
+      const numSamples = Math.floor(sampleRate * durationMs / 1000);
+      const silentPcm = new ArrayBuffer(numSamples * 2); // 16-bit = 2 bytes per sample
+      // ArrayBuffer는 기본적으로 0으로 초기화됨 (무음)
+
+      const message = encodeEventStreamMessage(silentPcm);
+      this.websocket.send(message);
+      this.lastAudioSentTime = Date.now();
+      console.log('[TranscribeStreaming] Keep-alive sent');
+    } catch (error) {
+      console.error('[TranscribeStreaming] Failed to send keep-alive:', error);
+    }
   }
 
   private handleMessage(data: ArrayBuffer): void {
     const message = decodeEventStreamMessage(data);
-    if (!message) return;
+    if (!message) {
+      console.error('[TranscribeStreaming] Failed to decode message');
+      return;
+    }
 
     const messageType = message.headers[':message-type'];
     const eventType = message.headers[':event-type'];
+    console.log(`[TranscribeStreaming] Message type: ${messageType}, Event type: ${eventType}`);
 
     if (messageType === 'exception') {
       const errorMessage = uint8ArrayToString(message.body);
@@ -497,20 +529,52 @@ export class TranscribeStreamingClient {
   private cleanup(): void {
     this.isStreaming = false;
 
-    if (this.processor) {
-      this.processor.disconnect();
+    // 헬스 체크 인터벌 정리
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+
+    // 프로세서 정리 (에러 발생해도 계속 진행)
+    try {
+      if (this.processor) {
+        this.processor.disconnect();
+      }
+    } catch (error) {
+      console.error('[TranscribeStreaming] Error disconnecting processor:', error);
+    } finally {
       this.processor = null;
     }
 
-    if (this.audioContext) {
-      this.audioContext.close();
+    // AudioContext 이벤트 리스너 제거 및 정리
+    try {
+      if (this.audioContext) {
+        // 상태 변경 이벤트 리스너 제거
+        if (this.audioContextStateHandler) {
+          this.audioContext.removeEventListener('statechange', this.audioContextStateHandler);
+          this.audioContextStateHandler = null;
+        }
+        // AudioContext 닫기 (close()는 Promise를 반환하지만 fire-and-forget)
+        if (this.audioContext.state !== 'closed') {
+          this.audioContext.close().catch((error) => {
+            console.error('[TranscribeStreaming] Error closing AudioContext:', error);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[TranscribeStreaming] Error cleaning up AudioContext:', error);
+    } finally {
       this.audioContext = null;
     }
 
-    if (this.websocket) {
-      if (this.websocket.readyState === WebSocket.OPEN) {
+    // WebSocket 정리 (에러 발생해도 계속 진행)
+    try {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         this.websocket.close();
       }
+    } catch (error) {
+      console.error('[TranscribeStreaming] Error closing WebSocket:', error);
+    } finally {
       this.websocket = null;
     }
 

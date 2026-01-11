@@ -35,6 +35,9 @@ export type {
   ParticipantInfo,
   DeviceState,
   TranscriptionState,
+  TranslatedTranscript,
+  TranslationState,
+  ChimeRosterAttendee,
 } from './meeting';
 
 // File 관련 타입

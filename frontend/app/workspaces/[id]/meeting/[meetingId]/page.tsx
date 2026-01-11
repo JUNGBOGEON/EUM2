@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   MeetingProvider,
+  useMeetingManager,
   useLocalVideo,
   useToggleLocalMute,
   useContentShareControls,
@@ -32,6 +33,7 @@ import {
   TranscriptPanel,
   DeviceSettingsDialog,
   FloatingSubtitle,
+  EndMeetingDialog,
 } from './_components';
 
 // Legacy components for loading/error states
@@ -47,10 +49,15 @@ import type { ChimeRosterAttendee } from '@/lib/types';
 function MeetingRoomContent() {
   const params = useParams();
   const router = useRouter();
+  const meetingManager = useMeetingManager();
   const workspaceId = params.id as string;
   const meetingId = params.meetingId as string;
-  
+
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
+  const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
+
+  // stopTranscription ref (useBrowserTranscription보다 먼저 정의된 콜백에서 사용)
+  const stopTranscriptionRef = useRef<(() => void) | null>(null);
 
   // Custom hooks
   const {
@@ -86,6 +93,28 @@ function MeetingRoomContent() {
     ? new Date(meeting.startedAt).getTime()
     : null;
 
+  // 세션 종료 시 핸들러 (호스트가 회의를 종료했을 때 다른 참가자들 자동 퇴장)
+  const handleSessionEnded = useCallback(async (reason: string) => {
+    console.log('[MeetingPage] 🛑 Session ended by host, reason:', reason);
+
+    // 트랜스크립션 중지 (ref 사용)
+    try {
+      stopTranscriptionRef.current?.();
+    } catch (error) {
+      console.error('[MeetingPage] Failed to stop transcription:', error);
+    }
+
+    // Chime 미팅에서 나가기
+    try {
+      await meetingManager.leave();
+    } catch (error) {
+      console.error('[MeetingPage] Failed to leave meeting:', error);
+    }
+
+    // 워크스페이스 페이지로 리다이렉트
+    router.push(`/workspaces/${workspaceId}`);
+  }, [meetingManager, router, workspaceId]);
+
   // 트랜스크립트 동기화 훅 (로컬 + 원격 트랜스크립트 통합)
   const {
     transcripts: syncedTranscripts,
@@ -97,6 +126,7 @@ function MeetingRoomContent() {
     sessionId: meetingId,
     currentUserId: userId,
     currentAttendeeId,
+    onSessionEnded: handleSessionEnded,
   });
 
   // Chime SDK hooks (음소거 상태 먼저 가져오기)
@@ -129,6 +159,11 @@ function MeetingRoomContent() {
     },
     onHistoryLoaded: loadHistory,
   });
+
+  // stopTranscription ref 업데이트 (handleSessionEnded에서 사용)
+  useEffect(() => {
+    stopTranscriptionRef.current = stopTranscription;
+  }, [stopTranscription]);
 
   // Translation hook
   const {
@@ -199,15 +234,22 @@ function MeetingRoomContent() {
     originalHandleLeave();
   }, [stopTranscription, originalHandleLeave]);
 
-  // 회의 종료 (트랜스크립션 먼저 중지)
-  const handleEndMeeting = useCallback(() => {
+  // 회의 종료 버튼 클릭 시 다이얼로그 표시
+  const handleEndMeetingClick = useCallback(() => {
+    setShowEndMeetingDialog(true);
+  }, []);
+
+  // 회의 종료 확인 (다이얼로그에서 확인 버튼 클릭 시)
+  const handleEndMeetingConfirm = useCallback((generateSummary: boolean) => {
     console.log('[MeetingPage] Stopping transcription before ending meeting...');
+    console.log('[MeetingPage] Generate AI summary:', generateSummary);
+    setShowEndMeetingDialog(false);
     try {
       stopTranscription();
     } catch (error) {
       console.error('[MeetingPage] Failed to stop transcription, proceeding with end meeting:', error);
     }
-    originalHandleEndMeeting();
+    originalHandleEndMeeting(generateSummary);
   }, [stopTranscription, originalHandleEndMeeting]);
 
   // Loading state
@@ -294,7 +336,7 @@ function MeetingRoomContent() {
         onToggleVoiceFocus={toggleVoiceFocus}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
-        onEndMeeting={handleEndMeeting}
+        onEndMeeting={handleEndMeetingClick}
       />
 
 
@@ -310,6 +352,13 @@ function MeetingRoomContent() {
         onSelectDevices={async () => { await selectDevices(); }}
         onChangeVideoDevice={changeVideoDevice}
         onChangeAudioDevice={changeAudioDevice}
+      />
+
+      {/* End Meeting Confirmation Dialog */}
+      <EndMeetingDialog
+        isOpen={showEndMeetingDialog}
+        onClose={() => setShowEndMeetingDialog(false)}
+        onConfirm={handleEndMeetingConfirm}
       />
     </div>
   );

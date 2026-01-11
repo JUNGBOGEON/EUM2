@@ -348,7 +348,10 @@ export class ChimeService {
     // Redis 세션 삭제
     await this.redisService.deleteMeetingSession(sessionId);
 
-    // WebSocket으로 세션 종료 브로드캐스트
+    // 1. 세션 참가자들에게 세션 종료 알림 (미팅 페이지에서 자동 퇴장용)
+    this.workspaceGateway.broadcastSessionEnded(sessionId, 'host_ended');
+
+    // 2. 워크스페이스 멤버들에게 세션 상태 업데이트 (UI 업데이트용)
     this.workspaceGateway.broadcastSessionUpdate({
       workspaceId: session.workspaceId,
       session: null, // null = 세션 종료됨

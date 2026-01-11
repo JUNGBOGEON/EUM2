@@ -241,6 +241,12 @@ export class TranscribeStreamingClient {
     };
 
     this.websocket.onmessage = (event) => {
+      // 수신 메시지 디버깅
+      if (event.data instanceof ArrayBuffer) {
+        console.log(`[TranscribeStreaming] Received message: ${event.data.byteLength} bytes`);
+      } else {
+        console.log(`[TranscribeStreaming] Received non-ArrayBuffer message:`, typeof event.data);
+      }
       this.handleMessage(event.data);
     };
 
@@ -331,6 +337,19 @@ export class TranscribeStreamingClient {
       }
 
       const inputData = event.inputBuffer.getChannelData(0);
+
+      // 오디오 레벨 확인 (디버깅용 - 매 100번째 청크)
+      if (this.chunkCount % 100 === 0) {
+        let maxLevel = 0;
+        let rms = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          const sample = Math.abs(inputData[i]);
+          if (sample > maxLevel) maxLevel = sample;
+          rms += sample * sample;
+        }
+        rms = Math.sqrt(rms / inputData.length);
+        console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+      }
 
       // 다운샘플링
       const downsampledData = downsampleBuffer(
@@ -456,10 +475,14 @@ export class TranscribeStreamingClient {
 
   private handleMessage(data: ArrayBuffer): void {
     const message = decodeEventStreamMessage(data);
-    if (!message) return;
+    if (!message) {
+      console.error('[TranscribeStreaming] Failed to decode message');
+      return;
+    }
 
     const messageType = message.headers[':message-type'];
     const eventType = message.headers[':event-type'];
+    console.log(`[TranscribeStreaming] Message type: ${messageType}, Event type: ${eventType}`);
 
     if (messageType === 'exception') {
       const errorMessage = uint8ArrayToString(message.body);

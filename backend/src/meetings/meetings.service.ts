@@ -67,8 +67,11 @@ export class MeetingsService {
 
   /**
    * 세션 종료
+   * @param sessionId 세션 ID
+   * @param hostId 호스트 ID
+   * @param generateSummary AI 요약 생성 여부 (기본값: true)
    */
-  async endSession(sessionId: string, hostId: string) {
+  async endSession(sessionId: string, hostId: string, generateSummary: boolean = true) {
     // 트랜스크립션 버퍼 플러시 후 세션 종료
     const flushResult =
       await this.transcriptionService.flushAllTranscriptionsOnSessionEnd(sessionId);
@@ -79,9 +82,14 @@ export class MeetingsService {
     const session = await this.chimeService.endSession(sessionId, hostId);
 
     // 요약 생성 (비동기 - 세션 종료 응답을 블로킹하지 않음)
-    this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
-      this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
-    });
+    if (generateSummary) {
+      this.logger.log(`[Session End] Generating AI summary for session ${sessionId}...`);
+      this.summaryService.generateAndSaveSummary(sessionId).catch((err) => {
+        this.logger.error(`[Summary] Failed to generate summary for ${sessionId}:`, err);
+      });
+    } else {
+      this.logger.log(`[Session End] Skipping AI summary for session ${sessionId} (user opted out)`);
+    }
 
     return session;
   }

@@ -51,6 +51,8 @@ export interface UseTranscriptSyncOptions {
   currentUserId: string | null | undefined;
   /** 현재 사용자 attendeeId (자기 트랜스크립트 필터링용) */
   currentAttendeeId: string | null | undefined;
+  /** 세션 종료 시 콜백 (호스트가 회의를 종료했을 때) */
+  onSessionEnded?: (reason: string) => void;
 }
 
 export interface UseTranscriptSyncReturn {
@@ -79,6 +81,7 @@ export function useTranscriptSync({
   sessionId,
   currentUserId,
   currentAttendeeId,
+  onSessionEnded,
 }: UseTranscriptSyncOptions): UseTranscriptSyncReturn {
   const { on, emit, emitWithAck, isConnected } = useSocket();
 
@@ -375,6 +378,33 @@ export function useTranscriptSync({
       unsubscribe();
     };
   }, [isConnected, on]);
+
+  // 세션 종료 이벤트 수신 (호스트가 회의를 종료했을 때)
+  useEffect(() => {
+    if (!isConnected || !onSessionEnded) {
+      return;
+    }
+
+    console.log('[TranscriptSync] Setting up sessionEnded listener');
+
+    const unsubscribe = on<{ sessionId: string; reason: string; timestamp: number }>(
+      'sessionEnded',
+      (payload) => {
+        console.log('[TranscriptSync] 🛑 Session ended event received:', payload);
+
+        // 현재 세션과 일치하는지 확인
+        if (payload.sessionId === sessionId) {
+          console.log('[TranscriptSync] 🚪 Current session ended, triggering callback');
+          onSessionEnded(payload.reason);
+        }
+      }
+    );
+
+    return () => {
+      console.log('[TranscriptSync] Cleaning up sessionEnded listener');
+      unsubscribe();
+    };
+  }, [isConnected, on, sessionId, onSessionEnded]);
 
   // 컴포넌트 언마운트 시 전체 cleanup
   useEffect(() => {

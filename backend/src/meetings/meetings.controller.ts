@@ -56,10 +56,17 @@ export class MeetingsController {
 
   /**
    * 세션 종료 (호스트만)
+   * @param generateSummary - AI 요약 생성 여부 (기본값: true)
    */
   @Delete('sessions/:sessionId')
-  endSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.endSession(sessionId, req.user.id);
+  endSession(
+    @Param('sessionId') sessionId: string,
+    @Query('generateSummary') generateSummary: string,
+    @Req() req: any,
+  ) {
+    // Query string은 문자열로 오므로 boolean으로 변환 (기본값: true)
+    const shouldGenerateSummary = generateSummary !== 'false';
+    return this.meetingsService.endSession(sessionId, req.user.id, shouldGenerateSummary);
   }
 
   /**

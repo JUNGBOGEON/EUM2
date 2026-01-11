@@ -236,6 +236,26 @@ export class WorkspaceGateway implements OnGatewayConnection, OnGatewayDisconnec
   }
 
   /**
+   * 세션 참가자들에게 세션 종료 알림 브로드캐스트
+   * - 호스트가 회의를 종료할 때 모든 참가자에게 알림
+   * - 참가자들은 이 이벤트를 받으면 자동으로 미팅에서 나가야 함
+   */
+  broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
+    const roomName = `session:${sessionId}`;
+    const clientCount = this.server?.sockets?.adapter?.rooms?.get(roomName)?.size || 0;
+
+    this.logger.log(
+      `[Session Ended] Broadcasting to ${roomName}: ${clientCount} clients, reason: ${reason}`,
+    );
+
+    this.server.to(roomName).emit('sessionEnded', {
+      sessionId,
+      reason,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * 특정 사용자에게 초대 알림 전송
    */
   sendInvitationNotification(userId: string, payload: InvitationNotificationPayload) {

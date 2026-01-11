@@ -34,6 +34,8 @@ export interface UserInfo {
   profileImage?: string;
 }
 
+export type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
 export interface MeetingSession {
   id: string;
   title: string;
@@ -47,7 +49,8 @@ export interface MeetingSession {
   startedAt: string;
   endedAt?: string;
   participantCount?: number;
-  summary?: string;
+  summaryStatus?: SummaryStatus;
+  summaryS3Key?: string;
 }
 
 export interface WorkspaceFile {

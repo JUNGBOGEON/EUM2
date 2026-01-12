@@ -19,7 +19,8 @@
       ],
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
-        { "name": "PORT", "value": "8080" }
+        { "name": "PORT", "value": "8080" },
+        { "name": "JWT_EXPIRES_IN", "value": "7d" }
       ],
       "secrets": [
         {
@@ -69,6 +70,30 @@
         {
           "name": "S3_BUCKET_NAME",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:S3_BUCKET_NAME::"
+        },
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:GOOGLE_CLIENT_ID::"
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:GOOGLE_CLIENT_SECRET::"
+        },
+        {
+          "name": "GOOGLE_CALLBACK_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:GOOGLE_CALLBACK_URL::"
+        },
+        {
+          "name": "FRONTEND_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:FRONTEND_URL::"
+        },
+        {
+          "name": "API_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:API_URL::"
+        },
+        {
+          "name": "REDIS_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:REDIS_PASSWORD::"
         }
       ],
       "healthCheck": {

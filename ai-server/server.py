@@ -28,13 +28,23 @@ from loguru import logger
 from TTS.api import TTS
 
 # DeepFilterNet import
+# Note: Catch all exceptions, not just ImportError, to see the actual error
+DEEPFILTERNET_AVAILABLE = False
+df_enhance = None
+df_init_df = None
+
 try:
-    from df import enhance, init_df
-    from df.enhance import DEFAULT_MODEL_PATH
+    from df import enhance as df_enhance, init_df as df_init_df
     DEEPFILTERNET_AVAILABLE = True
-except ImportError:
-    DEEPFILTERNET_AVAILABLE = False
-    logger.warning("DeepFilterNet not available. Audio enhancement disabled.")
+    logger.info("DeepFilterNet imported successfully!")
+except ImportError as e:
+    logger.warning(f"DeepFilterNet ImportError: {e}")
+except OSError as e:
+    # Common: missing libsndfile, libgomp, etc.
+    logger.warning(f"DeepFilterNet OSError (missing system library?): {e}")
+except Exception as e:
+    # Catch-all for unexpected errors
+    logger.warning(f"DeepFilterNet import failed with {type(e).__name__}: {e}")
 
 # ===========================================
 # Configuration
@@ -106,7 +116,7 @@ class AudioProcessor:
 
             # Apply DeepFilterNet enhancement
             logger.debug("Applying DeepFilterNet noise reduction...")
-            enhanced_48k = enhance(df_model, df_state, audio_48k)
+            enhanced_48k = df_enhance(df_model, df_state, audio_48k)
 
             # Downsample to XTTS rate (24kHz)
             if SAMPLE_RATE_DF != SAMPLE_RATE_XTTS:
@@ -186,7 +196,7 @@ async def lifespan(app: FastAPI):
     if DEEPFILTERNET_AVAILABLE:
         logger.info("Loading DeepFilterNet model...")
         try:
-            df_model, df_state, _ = init_df()
+            df_model, df_state, _ = df_init_df()
             logger.info("DeepFilterNet model loaded successfully!")
         except Exception as e:
             logger.warning(f"Failed to load DeepFilterNet: {e}. Audio enhancement disabled.")

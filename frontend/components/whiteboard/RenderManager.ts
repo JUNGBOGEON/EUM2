@@ -73,6 +73,8 @@ export class RenderManager {
         this.staticLayer.eventMode = 'none';
         this.dynamicLayer.eventMode = 'none';
         this.drawingLayer.eventMode = 'none';
+        this.selectionLayer.eventMode = 'none';
+        this.cursorLayer.eventMode = 'none';
     }
 
     async init(container: HTMLElement) {
@@ -98,12 +100,18 @@ export class RenderManager {
             this.app.canvas.style.left = '0';
             this.app.canvas.style.zIndex = '1'; // Ensure canvas is above the grid (z-0)
             this.app.canvas.style.outline = 'none'; // Remove default outline if any
+            this.app.canvas.style.cursor = 'inherit'; // Inherit from container (managed by React)
 
             container.appendChild(this.app.canvas);
 
             this.app.stage.addChild(this.drawingLayer);
             this.app.stage.addChild(this.selectionLayer);
             this.app.stage.addChild(this.cursorLayer);
+            this.app.stage.eventMode = 'none';
+
+            // Disable PixiJS internal cursor management completely
+            this.app.renderer.events.cursorStyles.default = 'inherit';
+            this.app.renderer.events.setCursor = () => { };
 
             this.initialized = true;
 
@@ -226,38 +234,59 @@ export class RenderManager {
                 const cx = bounds.x + bounds.width / 2;
                 const cy = bounds.y + bounds.height / 2;
 
-                g.pivot.set(cx, cy);
-                // Position must place the pivot at the correct world location
-                // World Pivot = Transform(Pivot) = (tx + cx, ty + cy) (roughly, if we treat tx as offset)
-                // Actually: Transform applies to the object coordinate system.
-                // If we want rotation around center, we put pivot at center.
-                // And we move the container such that pivot matches (tx + cx, ty + cy) IF scaling wasn't involved?
-                // Wait, if we scale, we scale around pivot.
-                // So position should be:
-                // item.transform.x + cx * item.transform.scaleX? No.
-                // Let's assume item.transform.x is "Top Left of Original Bounds"?
-                // If so, we want to shift to center.
-                // Let's stick to: Transform X/Y is global offset.
-                // We want to render points at (Points + Offset).
-                // Rotation around Center.
+                const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
 
-                // PIXI Transform Order: Pivot -> Scale -> Rotate -> Translate.
-                // If Pivot is (cx, cy).
-                // Point (x,y) becomes (x-cx, y-cy).
-                // Scaled: (x-cx)*s.
-                // Rotated.
-                // Translated: + Position.
+                // Create Content Wrapper
+                // If has erasures, we need a Container with a Filter to enforce compositing group
+                // This ensures 'erase' blend mode only affects this container's content, not the background.
+                let content: PIXI.Container | PIXI.Graphics = g;
 
-                // We want result: (x + tx, y + ty) if r=0, s=1.
-                // Check: (x - cx) + Position = x + tx.
-                // => Position = cx + tx.
-                // So g.position.set(item.transform.x + cx, item.transform.y + cy).
+                if (hasErasures) {
+                    const container = new PIXI.Container();
+                    container.addChild(g); // Add the shape/path
 
-                g.position.set(item.transform.x + cx, item.transform.y + cy);
-                g.scale.set(item.transform.scaleX ?? 1, item.transform.scaleY ?? 1);
-                g.rotation = item.transform.rotation ?? 0;
+                    // Add Erasures
+                    item.data.erasures.forEach((erase: any) => {
+                        const eg = new PIXI.Graphics();
+                        eg.blendMode = 'erase';
+                        const w = erase.size || 20;
 
-                this.staticLayer.addChild(g);
+                        if (erase.points && erase.points.length > 0) {
+                            eg.moveTo(erase.points[0].x, erase.points[0].y);
+                            for (let i = 1; i < erase.points.length; i++) {
+                                const p1 = erase.points[i - 1];
+                                const p2 = erase.points[i];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            }
+                            // Line to last
+                            if (erase.points.length > 1) {
+                                const last = erase.points[erase.points.length - 1];
+                                eg.lineTo(last.x, last.y);
+                            }
+                        }
+                        eg.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
+                        container.addChild(eg);
+                    });
+
+                    // Force layer group (for Pixi v8 use AlphaFilter({ alpha: 1 }) or similar if changed, but v7 is simple)
+                    // If simple number fails, verify version.
+                    // Assuming v8: new AlphaFilter({ alpha: 1 }) or just use it without args if default is 1.
+                    // But if it was number before...
+                    // Let's use no-arg if defaults work, or object.
+                    // Wait, error says `number` not assignable to `AlphaFilterOptions`.
+                    // So use object: { alpha: 1 }
+                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
+                    content = container;
+                }
+
+                content.pivot.set(cx, cy);
+                content.position.set(item.transform.x + cx, item.transform.y + cy);
+                content.scale.set(item.transform.scaleX ?? 1, item.transform.scaleY ?? 1);
+                content.rotation = item.transform.rotation ?? 0;
+
+                this.staticLayer.addChild(content);
             }
 
             if (item.type === 'image' && item.data.url) {
@@ -481,6 +510,12 @@ export class RenderManager {
         const br = rotate(halfW, halfH);
         const bl = rotate(-halfW, halfH);
 
+        // Side Handles
+        const t = rotate(0, -halfH);
+        const b = rotate(0, halfH);
+        const l = rotate(-halfW, 0);
+        const r = rotate(halfW, 0);
+
         // Box Frame
         g.moveTo(tl.x, tl.y);
         g.lineTo(tr.x, tr.y);
@@ -498,14 +533,23 @@ export class RenderManager {
         const handleStyle = { width: strokeWidth, color: 0x00A3FF };
         const fillStyle = 0xffffff;
 
+        // Corners
         g.circle(tl.x, tl.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(tr.x, tr.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(br.x, br.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(bl.x, bl.y, hSize).fill(fillStyle).stroke(handleStyle);
 
+        // Sides (Only if size is large enough to avoid clutter)
+        if (w > 20 / this.currentZoom && h > 20 / this.currentZoom) {
+            g.circle(t.x, t.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(b.x, b.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(l.x, l.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(r.x, r.y, hSize).fill(fillStyle).stroke(handleStyle);
+        }
+
         // Rotation Handle (Top Center, extended)
         if (h > 40 / this.currentZoom) {
-            const topCenter = rotate(0, -halfH - (15 / this.currentZoom));
+            const topCenter = rotate(0, -halfH - (24 / this.currentZoom));
             // Removed the connecting line "stick"
             g.circle(topCenter.x, topCenter.y, hSize).fill(fillStyle).stroke(handleStyle);
         }

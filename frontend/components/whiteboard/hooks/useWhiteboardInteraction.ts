@@ -85,24 +85,59 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                     y: wcY + (x * sin + y * cos)
                 });
 
-                const corners = {
-                    tl: { ...rotate(-halfW, -halfH), cursor: 'nwse-resize' },
-                    tr: { ...rotate(halfW, -halfH), cursor: 'nesw-resize' },
-                    bl: { ...rotate(-halfW, halfH), cursor: 'nesw-resize' },
-                    br: { ...rotate(halfW, halfH), cursor: 'nwse-resize' }
+                // Adaptive Cursor Logic
+                const getCursorForHandle = (h: string, r: number) => {
+                    let base = 0;
+                    if (h === 't') base = 0; else if (h === 'tr') base = 45;
+                    else if (h === 'r') base = 90; else if (h === 'br') base = 135;
+                    else if (h === 'b') base = 180; else if (h === 'bl') base = 225;
+                    else if (h === 'l') base = 270; else if (h === 'tl') base = 315;
+
+                    const deg = (r * 180) / Math.PI;
+                    const total = ((base + deg) % 360 + 360) % 360;
+                    const sector = Math.round(total / 45) % 4;
+
+                    switch (sector) {
+                        case 0: return 'ns-resize';
+                        case 1: return 'nesw-resize';
+                        case 2: return 'ew-resize';
+                        case 3: return 'nwse-resize';
+                    }
+                    return 'move';
+                };
+
+                const handles = {
+                    tl: { ...rotate(-halfW, -halfH) },
+                    tr: { ...rotate(halfW, -halfH) },
+                    bl: { ...rotate(-halfW, halfH) },
+                    br: { ...rotate(halfW, halfH) },
+                    t: { ...rotate(0, -halfH) },
+                    b: { ...rotate(0, halfH) },
+                    l: { ...rotate(-halfW, 0) },
+                    r: { ...rotate(halfW, 0) }
                 };
 
                 // Check distance
-                for (const [key, c] of Object.entries(corners)) {
+                for (const [key, c] of Object.entries(handles)) {
                     const dist = Math.sqrt(Math.pow(point.x - c.x, 2) + Math.pow(point.y - c.y, 2));
                     if (dist <= resizeRadius) {
-                        return { handle: key, cursor: c.cursor, bounds: null, isOBB: true, item, center: { x: wcX, y: wcY }, halfW, halfH, rotation: rot };
+                        return {
+                            handle: key,
+                            cursor: getCursorForHandle(key, rot),
+                            bounds: null,
+                            isOBB: true,
+                            item,
+                            center: { x: wcX, y: wcY },
+                            halfW,
+                            halfH,
+                            rotation: rot
+                        };
                     }
                 }
 
                 // Rotation Handle
                 // Top center extended
-                const topCenter = rotate(0, -halfH - (15 / currentZoom));
+                const topCenter = rotate(0, -halfH - (24 / currentZoom));
                 const dist = Math.sqrt(Math.pow(point.x - topCenter.x, 2) + Math.pow(point.y - topCenter.y, 2));
                 if (dist <= resizeRadius) {
                     return { handle: 'rotate', cursor: 'alias', bounds: null, isOBB: true, item, center: { x: wcX, y: wcY }, halfW, halfH, rotation: rot };
@@ -320,7 +355,11 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
         const point = getLocalPoint(e);
 
         if (!isDragging.current) {
-            const { tool, selectedIds, pendingImage } = stateRef.current;
+            // Use store.getState() to avoid stale state in event handlers (fixes cursor flickering/reset issue)
+            const CurrentState = useWhiteboardStore.getState();
+            const tool = CurrentState.tool;
+            const selectedIds = CurrentState.selectedIds;
+            const pendingImage = CurrentState.pendingImage;
 
             if (tool === 'image' && pendingImage && renderManager) {
                 renderManager.renderGhost(pendingImage.url, point.x, point.y, pendingImage.width, pendingImage.height, 0.5);
@@ -359,7 +398,7 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 if (hoveredItem && selectedIds.has(hoveredItem.id)) {
                     canvas.style.cursor = 'move';
                 } else {
-                    canvas.style.cursor = 'default';
+                    canvas.style.cursor = 'inherit'; // Reset to inherit from container (Pen/Eraser/etc)
                 }
             }
             return;

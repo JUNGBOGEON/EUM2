@@ -11,6 +11,8 @@ interface WhiteboardToolbarProps {
     onClear: () => void;
     onMouseEnter?: () => void;
     onMouseLeave?: () => void;
+    isSettingsOpen: boolean;
+    onSettingsOpenChange: (isOpen: boolean) => void;
 }
 
 function WhiteboardToolbarComponent({
@@ -19,6 +21,8 @@ function WhiteboardToolbarComponent({
     onClear,
     onMouseEnter,
     onMouseLeave,
+    isSettingsOpen,
+    onSettingsOpenChange,
 }: WhiteboardToolbarProps) {
     const {
         tool,
@@ -76,7 +80,7 @@ function WhiteboardToolbarComponent({
                     file: file
                 });
                 setTool('image');
-                setShowToolSettings(false);
+                onSettingsOpenChange(false);
             };
             img.src = dataUrl;
         };
@@ -85,21 +89,20 @@ function WhiteboardToolbarComponent({
     };
 
     const [isToolbarOpen, setIsToolbarOpen] = useState(true);
-    const [showToolSettings, setShowToolSettings] = useState(false);
     const [showImageMenu, setShowImageMenu] = useState(false);
     const [showStorageModal, setShowStorageModal] = useState(false);
 
     const handleToolClick = (t: WhiteboardTool) => {
         if (t === 'pen' || t === 'eraser' || t === 'magic-pen') {
             if (tool === t) {
-                setShowToolSettings(!showToolSettings);
+                onSettingsOpenChange(!isSettingsOpen);
             } else {
                 setTool(t);
-                setShowToolSettings(true);
+                onSettingsOpenChange(true);
             }
         } else {
             setTool(t);
-            setShowToolSettings(false);
+            onSettingsOpenChange(false);
         }
     };
 
@@ -109,6 +112,7 @@ function WhiteboardToolbarComponent({
             <div
                 onMouseEnter={onMouseEnter}
                 onMouseLeave={onMouseLeave}
+                onPointerDown={(e) => e.stopPropagation()}
                 className={`absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-all duration-500 ease-in-out ${isToolbarOpen ? 'translate-y-[-20px]' : 'translate-y-[calc(100%-32px)]'
                     }`}
             >
@@ -132,7 +136,7 @@ function WhiteboardToolbarComponent({
                 {/* Toolbar & Settings Panel */}
                 <div className="flex flex-col items-center gap-4 p-4 pt-0 bg-transparent">
                     {/* Tool Settings Popup */}
-                    {showToolSettings && (
+                    {isSettingsOpen && (
                         <div className="bg-white/90 backdrop-blur-2xl rounded-[2rem] shadow-2xl p-6 border border-white/50 flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 mb-4 w-80 ring-1 ring-black/[0.03]">
                             {/* Size */}
                             <div className="flex items-center gap-3">

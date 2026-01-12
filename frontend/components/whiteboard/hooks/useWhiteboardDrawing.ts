@@ -279,6 +279,107 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                 // Leaving regular pen capable of dots.
             }
 
+            if (currentTool === 'eraser') {
+                // ERASER LOGIC: attached erasure
+                // 1. Identify valid unique Eraser Path
+                if (!capturedPoints || capturedPoints.length < 2) return;
+
+                // 2. Check Intersection with existing items
+                // Simple AABB check for now against the whole stroke AABB
+                const xs = capturedPoints.map(p => p.x);
+                const ys = capturedPoints.map(p => p.y);
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+
+                // Expand slightly for stroke width
+                const eraseR = (currentEraserSize / currentZoom) / 2;
+                const hitArea = { x: minX - eraseR, y: minY - eraseR, width: (maxX - minX) + eraseR * 2, height: (maxY - minY) + eraseR * 2 };
+
+                const hits: any[] = [];
+                if (renderManager) {
+                    renderManager.quadTree.retrieve(hits, hitArea);
+                }
+
+                // Filter true intersections (approximate) and attach
+                const intersectedItems = hits.filter(item => {
+                    const b = item.getBounds();
+                    // Basic AABB intersection
+                    return hitArea.x < b.x + b.width && hitArea.x + hitArea.width > b.x &&
+                        hitArea.y < b.y + b.height && hitArea.y + hitArea.height > b.y;
+                });
+
+                if (intersectedItems.length > 0) {
+                    // ATTACH MODE
+                    intersectedItems.forEach(item => {
+                        // Transform Global Points -> Local Points
+                        const lBounds = renderManager!.getLocalBounds(item);
+                        const cx = lBounds.x + lBounds.width / 2;
+                        const cy = lBounds.y + lBounds.height / 2;
+
+                        const sX = item.transform.scaleX || 1;
+                        const sY = item.transform.scaleY || 1;
+                        const rot = item.transform.rotation || 0;
+                        const tx = item.transform.x + cx; // Pivot World X
+                        const ty = item.transform.y + cy; // Pivot World Y
+
+                        const cos = Math.cos(-rot);
+                        const sin = Math.sin(-rot);
+
+                        const localPoints = capturedPoints.map(p => {
+                            // 1. Translate back (World -> Pivot)
+                            const dx = p.x - tx;
+                            const dy = p.y - ty;
+                            // 2. Rotate Inverse
+                            const rx = dx * cos - dy * sin;
+                            const ry = dx * sin + dy * cos;
+                            // 3. Scale Inverse
+                            const sx = rx / sX;
+                            const sy = ry / sY;
+                            // 4. Pivot Offset (Pivot -> Local Origin)
+                            // Pivot was at (cx, cy) in local space.
+                            // So we are now relative to Pivot. To get absolute local, add Pivot.
+                            return { x: sx + cx, y: sy + cy };
+                        });
+
+                        const simplifiedLocal = simplifyPoints(localPoints, 0.5 / currentZoom);
+                        const newErasure = {
+                            points: simplifiedLocal,
+                            size: currentEraserSize / currentZoom
+                        };
+
+                        const existingErasures = item.data.erasures || [];
+                        const updatePayload = {
+                            data: {
+                                ...item.data,
+                                erasures: [...existingErasures, newErasure]
+                            }
+                        };
+
+                        // Update Store
+                        useWhiteboardStore.getState().updateItem(item.id, updatePayload); // Use getState to avoid closure staleness? updateItem is stable from store hook but good practice
+
+                        // Persist/Broadcast Update
+                        broadcastEvent('update_item', { id: item.id, ...updatePayload });
+                        // TODO: API Persist (Patch)
+                    });
+
+                    // Cleanup current graphics
+                    if (currentGraphics.current) {
+                        currentGraphics.current.destroy();
+                        currentGraphics.current = null;
+                    }
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return; // Done, do not create global item
+                }
+
+                // If NO valid intersection, fall through to create global 'white' stroke?
+                // Or just do nothing? 
+                // Let's allow global eraser strokes for background cleaning if desired.
+                // Fall through.
+            }
+
             if (currentTool === 'magic-pen') {
                 // Magic Pen Logic
                 const result = detectShape(capturedPoints);

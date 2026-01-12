@@ -41,7 +41,7 @@ export default function WhiteboardCanvas() {
     const clearItems = useWhiteboardStore((state) => state.clearItems);
     const setItems = useWhiteboardStore((state) => state.setItems);
 
-    const updateCursorForTool = useCallback((canvas: HTMLCanvasElement, currentTool: string, pSize: number, eSize: number, col: string, z: number) => {
+    const updateCursorForTool = useCallback((container: HTMLElement, currentTool: string, pSize: number, eSize: number, col: string, z: number) => {
         const generatePenCursor = (size: number, color: string) => {
             // size is diameter (stroke width). Radius is size / 2.
             // Requirement: Cursor size must be proportional. We interpret this as "visualize exact size".
@@ -56,7 +56,7 @@ export default function WhiteboardCanvas() {
                     <circle cx='${cx}' cy='${cx}' r='${Math.max(r, 0.5) + 0.5}' stroke='white' stroke-width='1' fill='none' opacity='0.5'/>
                 </svg>
             `.trim().replace(/\s+/g, ' ');
-            return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cx}, crosshair`;
+            return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${cx} ${cx}, crosshair`;
         };
 
         const generateEraserCursor = (size: number) => {
@@ -69,7 +69,7 @@ export default function WhiteboardCanvas() {
                     <circle cx='${cx}' cy='${cx}' r='${r}' stroke='black' stroke-width='1' fill='white' opacity='0.8'/>
                 </svg>
             `.trim().replace(/\s+/g, ' ');
-            return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cx}, cell`;
+            return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${cx} ${cx}, cell`;
         };
 
         const generateMagicPenCursor = (size: number, color: string) => {
@@ -114,21 +114,21 @@ export default function WhiteboardCanvas() {
                 </svg>
             `.trim().replace(/\s+/g, ' ');
 
-            return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${cx} ${cy}, auto`;
+            return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${cx} ${cy}, auto`;
         };
 
         if (currentTool === 'pen') {
-            canvas.style.cursor = generatePenCursor(pSize, col);
+            container.style.cursor = generatePenCursor(pSize, col);
         } else if (currentTool === 'magic-pen') {
-            canvas.style.cursor = generateMagicPenCursor(pSize, col);
+            container.style.cursor = generateMagicPenCursor(pSize, col);
         } else if (currentTool === 'eraser') {
-            canvas.style.cursor = generateEraserCursor(eSize);
+            container.style.cursor = generateEraserCursor(eSize);
         } else if (currentTool === 'pan') {
-            canvas.style.cursor = 'grab';
+            container.style.cursor = 'grab';
         } else if (currentTool === 'select') {
-            canvas.style.cursor = 'default';
+            container.style.cursor = 'default';
         } else {
-            canvas.style.cursor = 'crosshair';
+            container.style.cursor = 'crosshair';
         }
     }, []);
 
@@ -172,17 +172,8 @@ export default function WhiteboardCanvas() {
                 setRenderManager(rm);
                 // Force initial cursor update immediately after initialization
                 if (container) {
-                    // Use closure values or wait for state? Closure values are stale (initial default).
-                    // But store values (tool, etc.) are available via store hooks which might be current.
-                    // However, inside async init, we can't easily access updated store state unless we use refs or store.getState()
-                    // Let's rely on the effect for store updates, but we can trigger a cursor update here 
-                    // with the *current* state known to the component at this render cycle (which should be defaults or persisted state).
-                    // Actually, let's just let the effect handle it, BUT we must ensure the effect triggers.
-                    // The effect triggers on [..., renderManager]. setRenderManager(rm) will trigger it.
-                    // So why didn't it work?
-                    // Maybe the canvas styling wasn't ready?
-                    // Let's explicitly call it here just to be safe using the component scope variables.
-                    updateCursorForTool(rm.app.canvas, tool, penSize, eraserSize, colorStr, zoom);
+                    // Rely on the useEffect [renderManager] to trigger the initial cursor update
+                    // The effect at line 372 will run as soon as setRenderManager(rm) happens and state updates.
                 }
             } else {
                 if (rm) rm.destroy();
@@ -370,9 +361,10 @@ export default function WhiteboardCanvas() {
 
     // Custom Cursor Logic
     useEffect(() => {
-        if (!renderManager) return;
-        const canvas = renderManager.app.canvas;
-        updateCursorForTool(canvas, tool, penSize, eraserSize, colorStr, zoom);
+        if (renderManager && containerRef.current) {
+            renderManager.app.canvas.style.cursor = 'inherit';
+            updateCursorForTool(containerRef.current, tool, penSize, eraserSize, colorStr, zoom);
+        }
     }, [tool, penSize, eraserSize, colorStr, zoom, renderManager, updateCursorForTool]);
 
     // Drop Handler
@@ -438,12 +430,15 @@ export default function WhiteboardCanvas() {
         setZoom(newZoom);
     };
 
+    const [isToolbarSettingsOpen, setIsToolbarSettingsOpen] = useState(false);
+
     return (
         <div
             ref={containerRef}
             className="relative w-full h-full bg-white touch-none overflow-hidden select-none outline-none"
             onDrop={handleDropReal}
             onDragOver={(e) => e.preventDefault()}
+            onPointerDown={() => setIsToolbarSettingsOpen(false)}
         >
             {/* Grid Background */}
             <div
@@ -471,6 +466,8 @@ export default function WhiteboardCanvas() {
             <WhiteboardToolbar
                 onUndo={performUndo}
                 onRedo={performRedo}
+                isSettingsOpen={isToolbarSettingsOpen}
+                onSettingsOpenChange={setIsToolbarSettingsOpen}
                 onClear={() => {
                     if (window.confirm("정말로 모든 내용을 지우시겠습니까?")) {
                         clearItems();

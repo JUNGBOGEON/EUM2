@@ -11,18 +11,39 @@ import { WhiteboardToolbar } from './WhiteboardToolbar';
 import { Point } from './types';
 import { useParams } from 'next/navigation';
 import { throttle } from './utils/throttle';
+import { getProxiedUrl } from './utils/urlUtils';
 import { ZoomControls } from './components/ZoomControls';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { GRID_SETTINGS, ZOOM_SETTINGS } from './constants';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 import { useWhiteboardPanning } from './hooks/useWhiteboardPanning';
+import { WhiteboardContextMenu } from './WhiteboardContextMenu';
 
-export default function WhiteboardCanvas() {
+interface WhiteboardCanvasProps {
+    currentUser?: {
+        id: string;
+        name: string;
+        profileImage?: string;
+    };
+}
+
+export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps) {
     const params = useParams();
     const meetingId = params.meetingId as string;
     const containerRef = useRef<HTMLDivElement>(null);
     const [renderManager, setRenderManager] = useState<RenderManager | null>(null);
+    const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
     // Zustand Selectors
     const tool = useWhiteboardStore((state) => state.tool);
@@ -211,7 +232,6 @@ export default function WhiteboardCanvas() {
     }, [items, renderManager]);
 
 
-
     // React to Store Changes: Pan/Zoom
     useEffect(() => {
         if (!renderManager) return;
@@ -228,17 +248,32 @@ export default function WhiteboardCanvas() {
         renderManager.renderSelection(selectedIds, items);
     }, [selectedIds, items, renderManager]);
 
+    // Hook: Sync Logic (Move this UP so we can pass it to other hooks)
+    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager, loadItems, currentUser);
+
+    const handleClearConfirm = useCallback(() => {
+        const { clearItems } = useWhiteboardStore.getState();
+        clearItems();
+        // Broadcast Clear
+        if (broadcastEvent) broadcastEvent('clear', {});
+
+        // Persist Clear to Backend
+        fetch(`${API_URL}/api/whiteboard/meeting/${meetingId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        }).catch(err => console.error("Failed to clear backend", err));
+
+        setIsClearDialogOpen(false);
+    }, [meetingId, broadcastEvent]);
+
     // Hook: Drawing Logic
-    useWhiteboardDrawing(renderManager);
+    useWhiteboardDrawing(renderManager, broadcastEvent, broadcastCursor);
 
     // Hook: Interaction Logic (Select, Move)
-    useWhiteboardInteraction(renderManager);
+    useWhiteboardInteraction(renderManager, broadcastEvent);
 
     // Hook: Panning & Zooming
     useWhiteboardPanning(renderManager);
-
-    // Hook: Sync Logic
-    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager, loadItems);
 
     // SERVER-SIDE SYNC LOGIC FOR UNDO/REDO
     const syncStateChanges = useCallback(async (beforeItems: Map<string, any>, afterItems: Map<string, any>) => {
@@ -368,61 +403,132 @@ export default function WhiteboardCanvas() {
     }, [tool, penSize, eraserSize, colorStr, zoom, renderManager, updateCursorForTool]);
 
     // Drop Handler
-    const handleDropReal = (e: React.DragEvent) => {
+    // Drop Handler
+    const handleDropReal = async (e: React.DragEvent) => {
         e.preventDefault();
         const files = Array.from(e.dataTransfer.files);
+        const workspaceId = params?.id as string; // From useParams in parent scope if available, or fetch from URL
 
-        files.forEach(file => {
+        if (!workspaceId) {
+            console.error("Workspace ID not found for upload");
+            // Fallback to local only handling (original behavior) or return?
+            // Let's fallback to original behavior if no workspaceId
+        }
+
+        for (const file of files) {
             if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const dataUrl = event.target?.result as string;
-                    if (dataUrl && renderManager) {
-                        const img = new Image();
-                        img.onload = () => {
-                            const rect = renderManager.app.canvas.getBoundingClientRect();
-                            const x = (e.clientX - rect.left - pan.x) / zoom;
-                            const y = (e.clientY - rect.top - pan.y) / zoom;
+                let finalUrl: string | null = null;
 
-                            // Limit Max Size (e.g., 500px)
-                            const MAX_SIZE = 500;
-                            let w = img.width;
-                            let h = img.height;
+                // 1. Try Uploading to Workspace Storage
+                if (workspaceId) {
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const uploadRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files`, {
+                            method: 'POST',
+                            credentials: 'include',
+                            body: formData
+                        });
 
-                            if (w > MAX_SIZE || h > MAX_SIZE) {
-                                const ratio = w / h;
-                                if (w > h) {
-                                    w = MAX_SIZE;
-                                    h = MAX_SIZE / ratio;
-                                } else {
-                                    h = MAX_SIZE;
-                                    w = MAX_SIZE * ratio;
+                        if (uploadRes.ok) {
+                            // Current API returns list of uploaded files or the file object? 
+                            // Based on useWorkspaceFiles, it seems to just return success or data.
+                            // We need the ID to get the presigned URL.
+                            // Assuming backend returns the created file object(s).
+                            // Let's check useWorkspaceFiles again... "await response.json()".
+                            // It throws away the result and calls fetchFiles(). 
+                            // We might need to guess the behavior or inspect the response.
+
+                            // Let's assume we can get the presigned URL if we find the file.
+                            // Actually, simpler approach:
+                            // We upload. Then strictly speaking we need a URL for the whiteboard.
+                            // If we can't easily get the ID, we might have to use DataURL for the whiteboard 
+                            // BUT still having uploaded it satisfies the "add to file tab" requirement.
+
+                            // However, strictly better to use remote URL.
+                            // Let's optimistic: Upload, and if response contains ID, use it.
+                            const uploadData = await uploadRes.json();
+                            // If uploadData is array or object...
+                            const uploadedFile = Array.isArray(uploadData) ? uploadData[0] : (uploadData.files?.[0] || uploadData);
+
+                            if (uploadedFile && uploadedFile.id) {
+                                // Get Presigned URL
+                                const urlRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files/${uploadedFile.id}/download`, {
+                                    credentials: 'include'
+                                });
+                                if (urlRes.ok) {
+                                    const urlData = await urlRes.json();
+                                    finalUrl = urlData.presignedUrl;
                                 }
                             }
-
-                            addItem({
-                                id: uuidv4(),
-                                type: 'image',
-                                data: {
-                                    url: dataUrl,
-                                    width: w, // Use natural size or resized? 
-                                    // Better to store resized logic in Data or Transform?
-                                    // Let's store "Base Size" in data and 1.0 scale.
-                                    // Wait, if we change data.width, quality might be lost if we upscale later?
-                                    // No, data.width/height in `rendering` usually defines the sprite base size.
-                                    // Let's keep data as "content size" and transform as "manipulation".
-                                    // But to avoid huge default rect, we set data width/height to resized.
-                                },
-                                transform: { x: x - w / 2, y: y - h / 2, scaleX: 1, scaleY: 1, rotation: 0 }, // Center on mouse
-                                zIndex: Date.now()
-                            });
                         }
-                        img.src = dataUrl;
+                    } catch (err) {
+                        console.error("Upload failed, falling back to local", err);
                     }
-                };
-                reader.readAsDataURL(file);
+                }
+
+                // 2. Read locally (fallback or immediate display if we handled async differently, 
+                // but here we awaited. If upload failed, we use Data URL).
+                if (!finalUrl) {
+                    // Fallback to Data URL
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const dataUrl = event.target?.result as string;
+                        addToCanvas(dataUrl, e.clientX, e.clientY);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    addToCanvas(finalUrl, e.clientX, e.clientY);
+                }
             }
-        });
+        }
+    };
+
+    const addToCanvas = (url: string, clientX: number, clientY: number) => {
+        if (!renderManager) return;
+        const img = new Image();
+        img.onload = () => {
+            const rect = renderManager.app.canvas.getBoundingClientRect();
+            const x = (clientX - rect.left - pan.x) / zoom;
+            const y = (clientY - rect.top - pan.y) / zoom;
+
+            // Limit Max Size
+            const MAX_SIZE = 500;
+            let w = img.width;
+            let h = img.height;
+
+            if (w > MAX_SIZE || h > MAX_SIZE) {
+                const ratio = w / h;
+                if (w > h) {
+                    w = MAX_SIZE;
+                    h = MAX_SIZE / ratio;
+                } else {
+                    h = MAX_SIZE;
+                    w = MAX_SIZE * ratio;
+                }
+            }
+
+            addItem({
+                id: uuidv4(),
+                type: 'image',
+                data: {
+                    url: url,
+                    width: w,
+                    height: h
+                },
+                transform: { x: x - w / 2, y: y - h / 2, scaleX: 1, scaleY: 1, rotation: 0 },
+                zIndex: Date.now()
+            });
+        };
+        img.onerror = () => {
+            console.error("Failed to load image for canvas", url);
+            // Verify if presigned URL is valid or expired? Should be fresh.
+            // If local data URL failed, that's weird.
+        };
+        // Handle CORS for canvas if it's remote
+        img.crossOrigin = "anonymous";
+        // Use proxy for loading to avoid CORS issues
+        img.src = getProxiedUrl(url);
     };
 
     const zoomFunc = (factor: number) => {
@@ -430,7 +536,175 @@ export default function WhiteboardCanvas() {
         setZoom(newZoom);
     };
 
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const [isToolbarSettingsOpen, setIsToolbarSettingsOpen] = useState(false);
+
+    // Delete Key Handler
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const activeTag = document.activeElement?.tagName.toLowerCase();
+            if (activeTag === 'input' || activeTag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) {
+                return;
+            }
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const selected = useWhiteboardStore.getState().selectedIds;
+                if (selected.size > 0) {
+                    // Batch delete
+                    selected.forEach(id => {
+                        useWhiteboardStore.getState().deleteItem(id);
+                        broadcastEvent('delete_item', { id });
+                        // TODO: Persist delete
+                        fetch(`${API_URL}/api/whiteboard/item/${id}`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        }).catch(console.error);
+                    });
+                    useWhiteboardStore.getState().clearSelection();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [meetingId]); // broadcastEvent dependency? It's global/hook scope.
+
+    // Context Menu Handler
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+
+        // 1. Strict Restriction: Must have items selected
+        // Correctly retrieve store state inside handler
+        const currentSelectedIds = useWhiteboardStore.getState().selectedIds;
+
+        if (currentSelectedIds.size === 0) {
+            setContextMenu(null);
+            return;
+        }
+
+        // Hit test setup
+        if (!renderManager) return;
+
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const worldX = (x - pan.x) / zoom;
+        const worldY = (y - pan.y) / zoom;
+
+        // 2. Only check against CURRENTLY SELECTED items
+        const items = useWhiteboardStore.getState().items;
+        let hitSelected = false;
+
+        // Iterate selected items to see if we clicked inside one of them
+        for (const id of currentSelectedIds) {
+            const item = items.get(id);
+            if (!item) continue;
+
+            const localBounds = renderManager.getLocalBounds(item);
+
+            // Filter out invalid/invisible items just in case
+            const color = item.data?.color;
+            if (color === 'eraser' || color === '#ffffff' || color === 0xffffff) continue;
+            if (localBounds.width <= 0 || localBounds.height <= 0) continue;
+
+            // OBB Logic
+            const cx = localBounds.x + localBounds.width / 2;
+            const cy = localBounds.y + localBounds.height / 2;
+
+            const centerX = item.transform.x + cx;
+            const centerY = item.transform.y + cy;
+
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+
+            const r = -(item.transform.rotation || 0);
+            const rx = dx * Math.cos(r) - dy * Math.sin(r);
+            const ry = dx * Math.sin(r) + dy * Math.cos(r);
+
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+
+            const localX = rx / sx;
+            const localY = ry / sy;
+
+            const checkX = localX + cx;
+            const checkY = localY + cy;
+
+            // console.log(`HitTest ID=${id}: World(${worldX.toFixed(0)},${worldY.toFixed(0)}) -> Local(${checkX.toFixed(0)},${checkY.toFixed(0)}) in Bounds[${localBounds.x}, ${localBounds.y}, ${localBounds.width}, ${localBounds.height}]`);
+
+            if (checkX >= localBounds.x && checkX <= localBounds.x + localBounds.width &&
+                checkY >= localBounds.y && checkY <= localBounds.y + localBounds.height) {
+                hitSelected = true;
+                break; // Found a hit on a selected item
+            }
+        }
+
+        if (hitSelected) {
+            setContextMenu({ x: e.clientX, y: e.clientY });
+        } else {
+            setContextMenu(null);
+        }
+    };
+
+    const handleMenuAction = async (action: 'delete' | 'duplicate' | 'rotate-45') => {
+        console.log("Menu Action Triggered:", action);
+        const currentSelectedIds = useWhiteboardStore.getState().selectedIds;
+        if (currentSelectedIds.size === 0) return;
+        setContextMenu(null);
+
+        const items = useWhiteboardStore.getState().items;
+
+        if (action === 'delete') {
+            // Removed confirmation as per user request
+            currentSelectedIds.forEach(id => {
+                useWhiteboardStore.getState().deleteItem(id);
+                broadcastEvent('delete_item', { id });
+                fetch(`${API_URL}/api/whiteboard/item/${id}`, { method: 'DELETE', credentials: 'include' }).catch(console.error);
+            });
+            useWhiteboardStore.getState().clearSelection();
+        } else if (action === 'duplicate') {
+            currentSelectedIds.forEach(id => {
+                const item = items.get(id);
+                if (item) {
+                    const newItem = {
+                        ...item,
+                        id: uuidv4(),
+                        transform: {
+                            ...item.transform,
+                            x: item.transform.x + 20,
+                            y: item.transform.y + 20
+                        },
+                        zIndex: Date.now()
+                    };
+                    useWhiteboardStore.getState().addItem(newItem);
+                    broadcastEvent('add_item', newItem);
+                    // Persist
+                    fetch(`${API_URL}/api/whiteboard`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...newItem, meetingId: 'default', userId: 'local' }),
+                        credentials: 'include'
+                    }).catch(console.error);
+                }
+            });
+        } else if (action === 'rotate-45') {
+            currentSelectedIds.forEach(id => {
+                const item = items.get(id);
+                if (item) {
+                    const currentRot = item.transform.rotation || 0;
+                    // Rotate 45 degrees (PI/4)
+                    const newR = currentRot + (Math.PI / 4);
+                    useWhiteboardStore.getState().updateItem(id, { transform: { ...item.transform, rotation: newR } });
+                    broadcastEvent('update_item', { id, transform: { ...item.transform, rotation: newR } });
+                }
+            });
+        }
+    };
+
 
     return (
         <div
@@ -438,7 +712,8 @@ export default function WhiteboardCanvas() {
             className="relative w-full h-full bg-white touch-none overflow-hidden select-none outline-none"
             onDrop={handleDropReal}
             onDragOver={(e) => e.preventDefault()}
-            onPointerDown={() => setIsToolbarSettingsOpen(false)}
+            onPointerDown={() => { setIsToolbarSettingsOpen(false); setContextMenu(null); }}
+            onContextMenu={handleContextMenu}
         >
             {/* Grid Background */}
             <div
@@ -450,6 +725,16 @@ export default function WhiteboardCanvas() {
                     opacity: 0.15 + (zoom * 0.05) // Dynamic opacity based on zoom
                 }}
             />
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <WhiteboardContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    onClose={() => setContextMenu(null)}
+                    onAction={handleMenuAction}
+                />
+            )}
 
             {/* Zoom Controls */}
             <ZoomControls
@@ -468,20 +753,23 @@ export default function WhiteboardCanvas() {
                 onRedo={performRedo}
                 isSettingsOpen={isToolbarSettingsOpen}
                 onSettingsOpenChange={setIsToolbarSettingsOpen}
-                onClear={() => {
-                    if (window.confirm("정말로 모든 내용을 지우시겠습니까?")) {
-                        clearItems();
-                        // Broadcast Clear
-                        if (broadcastEvent) broadcastEvent('clear', {});
-
-                        // Persist Clear to Backend
-                        fetch(`${API_URL}/api/whiteboard/meeting/${meetingId}`, {
-                            method: 'DELETE',
-                            credentials: 'include'
-                        }).catch(err => console.error("Failed to clear backend", err));
-                    }
-                }}
+                onClear={() => setIsClearDialogOpen(true)}
             />
+
+            <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>모든 내용을 지우시겠습니까?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            이 작업은 화이트보드의 모든 드로잉과 객체를 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearConfirm}>확인</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

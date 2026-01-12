@@ -1,7 +1,9 @@
 'use client';
 
 import { memo, useState, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { useWhiteboardStore, WhiteboardTool } from './store';
+import { getProxiedUrl } from './utils/urlUtils';
 import { PEN_COLORS, TOOL_SETTINGS } from './constants';
 import { StorageModal } from './StorageModal';
 
@@ -46,46 +48,94 @@ function WhiteboardToolbarComponent({
         fileInputRef.current?.click();
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const params = useParams(); // Need useParams to get workspaceId
+    const workspaceId = params?.id as string;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            if (!ev.target?.result) return;
-            const dataUrl = ev.target.result as string;
+        let finalUrl: string | null = null;
 
-            const img = new Image();
-            img.onload = () => {
-                // Limit Max Size (e.g., 500px)
-                const MAX_SIZE = 500;
-                let w = img.width;
-                let h = img.height;
+        // 1. Try Uploading to Workspace Storage
+        if (workspaceId) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const uploadRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
 
-                if (w > MAX_SIZE || h > MAX_SIZE) {
-                    const ratio = w / h;
-                    if (w > h) {
-                        w = MAX_SIZE;
-                        h = MAX_SIZE / ratio;
-                    } else {
-                        h = MAX_SIZE;
-                        w = MAX_SIZE * ratio;
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    const uploadedFile = Array.isArray(uploadData) ? uploadData[0] : (uploadData.files?.[0] || uploadData);
+
+                    if (uploadedFile && uploadedFile.id) {
+                        // Get Presigned URL
+                        const urlRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files/${uploadedFile.id}/download`, {
+                            credentials: 'include'
+                        });
+                        if (urlRes.ok) {
+                            const urlData = await urlRes.json();
+                            finalUrl = urlData.presignedUrl;
+                        }
                     }
                 }
+            } catch (err) {
+                console.error("Upload failed, falling back to local", err);
+            }
+        }
 
-                setPendingImage({
-                    url: dataUrl,
-                    width: w,
-                    height: h,
-                    file: file
-                });
-                setTool('image');
-                onSettingsOpenChange(false);
+        // 2. Setup Pending Image (Fallback to Data URL if upload failed/skipped)
+        if (!finalUrl) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                if (!ev.target?.result) return;
+                const dataUrl = ev.target.result as string;
+                setupPendingImage(dataUrl, file);
             };
-            img.src = dataUrl;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        } else {
+            setupPendingImage(finalUrl, file);
+        }
+
         e.target.value = ''; // Reset
+    };
+
+    const setupPendingImage = (url: string, file: File) => {
+        const img = new Image();
+        img.onload = () => {
+            // Limit Max Size
+            const MAX_SIZE = 500;
+            let w = img.width;
+            let h = img.height;
+
+            if (w > MAX_SIZE || h > MAX_SIZE) {
+                const ratio = w / h;
+                if (w > h) {
+                    w = MAX_SIZE;
+                    h = MAX_SIZE / ratio;
+                } else {
+                    h = MAX_SIZE;
+                    w = MAX_SIZE * ratio;
+                }
+            }
+
+            setPendingImage({
+                url: url,
+                width: w,
+                height: h,
+                file: file
+            });
+            setTool('image');
+            onSettingsOpenChange(false);
+        };
+        img.crossOrigin = "anonymous";
+        // Use proxy for loading to avoid CORS issues
+        img.src = getProxiedUrl(url);
     };
 
     const [isToolbarOpen, setIsToolbarOpen] = useState(true);

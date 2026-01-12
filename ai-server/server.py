@@ -1,9 +1,3 @@
-"""
-AI Server for Real-time Voice Cloning using Coqui XTTS v2
-- POST /enroll/{user_id}: Voice enrollment (extract speaker latents)
-- WebSocket /ws/tts/{user_id}: Real-time TTS streaming (Float32 PCM)
-"""
-
 import io
 import os
 import tempfile
@@ -23,11 +17,11 @@ from TTS.api import TTS
 # Configuration
 MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-SAMPLE_RATE = 24000  # XTTS v2 default sample rate
+SAMPLE_RATE = 24000
 
 # Global storage
 tts_model: Optional[TTS] = None
-user_latents: Dict[str, dict] = {}  # {user_id: {"gpt_cond_latent": tensor, "speaker_embedding": tensor}}
+user_latents: Dict[str, dict] = {}
 
 
 @asynccontextmanager
@@ -253,6 +247,6 @@ if __name__ == "__main__":
         "server:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # Disable reload for production with GPU
+        reload=False,
         log_level="info"
     )

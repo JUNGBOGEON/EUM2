@@ -6,17 +6,22 @@ import { RenderManager } from '../RenderManager';
 import { simplifyPoints } from '../utils/simplifyPoints';
 import { OneEuroFilter } from '../utils/oneEuroFilter';
 import { detectShape } from '../utils/shapeRecognition';
-import { useWhiteboardSync } from './useWhiteboardSync';
+// import { useWhiteboardSync } from './useWhiteboardSync'; // Removed logic duplication
 import { Point } from '../types';
 import { useParams } from 'next/navigation';
 import { throttle } from '../utils/throttle';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-export function useWhiteboardDrawing(renderManager: RenderManager | null) {
+export function useWhiteboardDrawing(
+    renderManager: RenderManager | null,
+    broadcastEvent?: (type: string, data: any) => boolean,
+    broadcastCursor?: (x: number, y: number, tool: string) => void
+) {
     const params = useParams();
     const meetingId = params.meetingId as string;
-    const { broadcastEvent, broadcastCursor } = useWhiteboardSync(renderManager);
+    // Removed duplicate useWhiteboardSync call
+
 
     const {
         tool, color: colorStr, penSize, eraserSize, zoom, pan, addItem
@@ -63,13 +68,15 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                 const width = (tool === 'eraser' ? eraserSize : penSize) / zoom;
 
                 // Send Batch
-                broadcastEventRef.current('draw_batch', {
-                    points,
-                    color,
-                    width,
-                    tool,
-                    isNewStroke: false // Can be improved to detect new stroke
-                });
+                if (broadcastEventRef.current) {
+                    broadcastEventRef.current('draw_batch', {
+                        points,
+                        color,
+                        width,
+                        tool,
+                        isNewStroke: false // Can be improved to detect new stroke
+                    });
+                }
             }
         };
 
@@ -86,13 +93,15 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
             const color = parseInt(colorStr.replace('#', ''), 16);
             const width = (tool === 'eraser' ? eraserSize : penSize) / zoom;
 
-            broadcastEventRef.current('draw_batch', {
-                points,
-                color,
-                width,
-                tool,
-                isNewStroke: false
-            });
+            if (broadcastEventRef.current) {
+                broadcastEventRef.current('draw_batch', {
+                    points,
+                    color,
+                    width,
+                    tool,
+                    isNewStroke: false
+                });
+            }
         }
     }, []);
 
@@ -108,7 +117,7 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
 
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
-        const { tool: currentTool, colorStr: currentColorStr } = stateRef.current;
+        const { tool: currentTool } = stateRef.current;
         if (currentTool !== 'pen' && currentTool !== 'magic-pen' && currentTool !== 'eraser') return;
 
         isDrawing.current = true;
@@ -128,17 +137,10 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
         renderManager.staticLayer.addChild(g);
         currentGraphics.current = g;
 
-        if (currentTool === 'eraser') {
-            g.blendMode = 'erase';
-        } else if (currentTool === 'magic-pen') {
+        if (currentTool === 'magic-pen') {
             // Magic Pen Effect: Create a secondary glow graphics layer
             const glow = new PIXI.Graphics();
             glow.filters = [new PIXI.BlurFilter(8)]; // Glow effect
-            // Insert glow behind the main stroke if possible, or just add it
-            // Adding it first to staticLayer makes it appear behind if we didn't add g yet, 
-            // but we added g. Let's add glow before g?
-            // renderManager.staticLayer.addChildAt(glow, renderManager.staticLayer.getChildIndex(g));
-            // Simply adding it to staticLayer works.
             renderManager.staticLayer.addChild(glow);
             glowGraphics.current = glow;
         }
@@ -279,6 +281,115 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                 // Leaving regular pen capable of dots.
             }
 
+            if (currentTool === 'eraser') {
+                // ERASER LOGIC: attached erasure
+                // 1. Identify valid unique Eraser Path
+                if (!capturedPoints || capturedPoints.length < 2) return;
+
+                // 2. Check Intersection with existing items
+                // Simple AABB check for now against the whole stroke AABB
+                const xs = capturedPoints.map(p => p.x);
+                const ys = capturedPoints.map(p => p.y);
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+
+                // Expand slightly for stroke width
+                const eraseR = (currentEraserSize / currentZoom) / 2;
+                const hitArea = { x: minX - eraseR, y: minY - eraseR, width: (maxX - minX) + eraseR * 2, height: (maxY - minY) + eraseR * 2 };
+
+                const hits: any[] = [];
+                if (renderManager) {
+                    renderManager.quadTree.retrieve(hits, hitArea);
+                }
+
+                // Filter true intersections (approximate) and attach
+                const intersectedItems = hits.filter(item => {
+                    const b = item.getBounds();
+                    // Basic AABB intersection
+                    return hitArea.x < b.x + b.width && hitArea.x + hitArea.width > b.x &&
+                        hitArea.y < b.y + b.height && hitArea.y + hitArea.height > b.y;
+                });
+
+                if (intersectedItems.length > 0) {
+                    console.log("[Eraser] Hit Items:", intersectedItems.map(i => i.id));
+                    // ATTACH MODE
+                    intersectedItems.forEach(item => {
+                        // Transform Global Points -> Local Points
+                        const lBounds = renderManager!.getLocalBounds(item);
+                        const cx = lBounds.x + lBounds.width / 2;
+                        const cy = lBounds.y + lBounds.height / 2;
+
+                        const sX = item.transform.scaleX || 1;
+                        const sY = item.transform.scaleY || 1;
+                        const rot = item.transform.rotation || 0;
+                        const tx = item.transform.x + cx; // Pivot World X
+                        const ty = item.transform.y + cy; // Pivot World Y
+
+                        const cos = Math.cos(-rot);
+                        const sin = Math.sin(-rot);
+
+                        const localPoints = capturedPoints.map(p => {
+                            // 1. Translate back (World -> Pivot)
+                            const dx = p.x - tx;
+                            const dy = p.y - ty;
+                            // 2. Rotate Inverse
+                            const rx = dx * cos - dy * sin;
+                            const ry = dx * sin + dy * cos;
+                            // 3. Scale Inverse
+                            const sx = rx / sX;
+                            const sy = ry / sY;
+                            // 4. Pivot Offset (Pivot -> Local Origin)
+                            // Pivot was at (cx, cy) in local space.
+                            // So we are now relative to Pivot. To get absolute local, add Pivot.
+                            return { x: sx + cx, y: sy + cy };
+                        });
+
+                        const simplifiedLocal = simplifyPoints(localPoints, 0.5 / currentZoom);
+                        // Normalize eraser size by scale (approximate average scale) to maintain visual width
+                        const avgScale = (Math.abs(sX) + Math.abs(sY)) / 2;
+                        const newErasure = {
+                            points: simplifiedLocal,
+                            size: (currentEraserSize / currentZoom) / (avgScale || 1)
+                        };
+
+                        const existingErasures = item.data.erasures || [];
+                        const updatePayload = {
+                            data: {
+                                ...item.data,
+                                erasures: [...existingErasures, newErasure]
+                            }
+                        };
+
+                        // Update Store
+                        useWhiteboardStore.getState().updateItem(item.id, updatePayload); // Use getState to avoid closure staleness? updateItem is stable from store hook but good practice
+
+                        // Persist/Broadcast Update
+                        if (broadcastEvent) {
+                            console.log("[Eraser] Broadcasting Update for", item.id);
+                            broadcastEvent('update_item', { id: item.id, ...updatePayload });
+                        } else {
+                            console.warn("[Eraser] No broadcastEvent available");
+                        }
+                        // TODO: API Persist (Patch)
+                    });
+
+                    // Cleanup current graphics
+                    if (currentGraphics.current) {
+                        currentGraphics.current.destroy();
+                        currentGraphics.current = null;
+                    }
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return; // Done, do not create global item
+                }
+
+                // If NO valid intersection, fall through to create global 'white' stroke?
+                // Or just do nothing? 
+                // Let's allow global eraser strokes for background cleaning if desired.
+                // Fall through.
+            }
+
             if (currentTool === 'magic-pen') {
                 // Magic Pen Logic
                 const result = detectShape(capturedPoints);
@@ -319,7 +430,9 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
                     brushSize: (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom
                 },
                 transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
-                zIndex: Date.now()
+                zIndex: Date.now(),
+                meetingId: meetingId || 'default',
+                userId: 'user' // Placeholder, will be replaced by backend or ignored if unnecessary for broadcast
             };
 
             addItem(newItem);
@@ -333,14 +446,21 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
             });
 
             // Optimistic broadcast
-            const success = broadcastEvent('add_item', newItem);
+            // Optimistic broadcast
+            let success = false;
+            if (broadcastEvent) {
+                success = broadcastEvent('add_item', newItem);
+                if (!success) {
+                    console.warn("Broadcast skipped (likely disconnected), relying on persistence");
+                }
+            }
 
             if (!success) {
                 console.warn("Broadcast skipped (likely too large), waiting for persistence to send refetch");
                 persistPromise
                     .then(() => {
                         console.log("Persistence complete, sending refetch signal");
-                        broadcastEvent('refetch', {});
+                        if (broadcastEvent) broadcastEvent('refetch', {});
                     })
                     .catch(err => console.error("Failed to persist item", err));
             } else {
@@ -360,7 +480,7 @@ export function useWhiteboardDrawing(renderManager: RenderManager | null) {
             const items = useWhiteboardStore.getState().items;
             renderManager.renderItems(items);
         }
-    }, [renderManager, addItem, meetingId, flushBatch]);
+    }, [renderManager, addItem, meetingId, flushBatch, broadcastEvent]);
 
     useEffect(() => {
         if (!renderManager) return;

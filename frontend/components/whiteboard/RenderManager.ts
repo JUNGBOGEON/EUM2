@@ -1,4 +1,6 @@
 import * as PIXI from 'pixi.js';
+import { v4 as uuidv4 } from 'uuid';
+import { getProxiedUrl } from './utils/urlUtils';
 import { WhiteboardItem } from './store';
 import { QuadTree, Rect } from './utils/QuadTree';
 
@@ -13,10 +15,23 @@ export class RenderManager {
     public width: number;
     public height: number;
     private remoteCursors: Map<string, PIXI.Container> = new Map();
+    private remoteCursorTargets: Map<string, { x: number; y: number }> = new Map();
+    private remoteGraphics: Map<string, PIXI.Graphics> = new Map();
+    private socketToSender: Map<string, string> = new Map();
     private initialized: boolean = false;
     private destroyed: boolean = false;
     public currentZoom: number = 1;
     private selectionOverride: { cx: number, cy: number, w: number, h: number, rotation: number } | null = null;
+
+    // User Color Management
+    private userColors: Map<string, number> = new Map();
+    private colorPalette = [
+        0xFF5733, 0x33FF57, 0x3357FF, 0xF333FF, 0x33FFF6,
+        0xFF33A1, 0xFF8C33, 0x8C33FF, 0x33FF8C, 0xFFC733,
+        0x581845, 0x900C3F, 0xC70039, 0xFF5733, 0xFFC300
+    ];
+
+
 
     public setSelectionOverride(override: { cx: number, cy: number, w: number, h: number, rotation: number } | null) {
         this.selectionOverride = override;
@@ -73,6 +88,8 @@ export class RenderManager {
         this.staticLayer.eventMode = 'none';
         this.dynamicLayer.eventMode = 'none';
         this.drawingLayer.eventMode = 'none';
+        this.selectionLayer.eventMode = 'none';
+        this.cursorLayer.eventMode = 'none';
     }
 
     async init(container: HTMLElement) {
@@ -98,14 +115,23 @@ export class RenderManager {
             this.app.canvas.style.left = '0';
             this.app.canvas.style.zIndex = '1'; // Ensure canvas is above the grid (z-0)
             this.app.canvas.style.outline = 'none'; // Remove default outline if any
+            this.app.canvas.style.cursor = 'inherit'; // Inherit from container (managed by React)
 
             container.appendChild(this.app.canvas);
 
             this.app.stage.addChild(this.drawingLayer);
             this.app.stage.addChild(this.selectionLayer);
             this.app.stage.addChild(this.cursorLayer);
+            this.app.stage.eventMode = 'none';
+
+            // Disable PixiJS internal cursor management completely
+            this.app.renderer.events.cursorStyles.default = 'inherit';
+            this.app.renderer.events.setCursor = () => { };
 
             this.initialized = true;
+
+            // Start Ticker for Cursor Interpolation
+            this.app.ticker.add(this.tick.bind(this));
 
             // Initial Resize
             this.resize(container.clientWidth, container.clientHeight);
@@ -121,6 +147,25 @@ export class RenderManager {
     }
 
     // TODO: Implement Baking Logic
+    tick() {
+        if (!this.initialized) return;
+        const lerpFactor = 0.25; // Smoothness factor (higher = faster/less lag, lower = smoother)
+
+        this.remoteCursors.forEach((cursor, id) => {
+            const target = this.remoteCursorTargets.get(id);
+            if (target) {
+                cursor.x += (target.x - cursor.x) * lerpFactor;
+                cursor.y += (target.y - cursor.y) * lerpFactor;
+
+                // Snap if close
+                if (Math.abs(target.x - cursor.x) < 0.1 && Math.abs(target.y - cursor.y) < 0.1) {
+                    cursor.x = target.x;
+                    cursor.y = target.y;
+                }
+            }
+        });
+    }
+
     bake() {
         // 1. Snapshot dynamic layer
         // 2. Add to static layer
@@ -153,6 +198,19 @@ export class RenderManager {
             return { x: 0, y: 0, width: w, height: h };
         }
 
+        if (item.type === 'text') {
+            // Basic approximation if text measurement isn't perfect in headless
+            const w = item.data?.width || (item.data?.text?.length * 10) || 50;
+            const h = item.data?.height || 20;
+            return { x: 0, y: 0, width: w, height: h };
+        }
+
+        if (item.type === 'shape') {
+            const w = item.data?.width || 100;
+            const h = item.data?.height || 100;
+            return { x: 0, y: 0, width: w, height: h };
+        }
+
         return { x: 0, y: 0, width: 0, height: 0 };
     }
 
@@ -166,11 +224,12 @@ export class RenderManager {
         // Previous logic: x = minX + tx. This assumes rotation=0.
         // Let's keep previous logic for global hit test for now, or improve it later.
         // Just return naive bounds for QuadTree hit test.
+        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
         return {
-            x: local.x + item.transform.x,
-            y: local.y + item.transform.y,
-            width: local.width * (item.transform.scaleX ?? 1),
-            height: local.height * (item.transform.scaleY ?? 1)
+            x: local.x + t.x,
+            y: local.y + t.y,
+            width: local.width * (t.scaleX ?? 1),
+            height: local.height * (t.scaleY ?? 1)
         };
     }
 
@@ -226,100 +285,100 @@ export class RenderManager {
                 const cx = bounds.x + bounds.width / 2;
                 const cy = bounds.y + bounds.height / 2;
 
-                g.pivot.set(cx, cy);
-                // Position must place the pivot at the correct world location
-                // World Pivot = Transform(Pivot) = (tx + cx, ty + cy) (roughly, if we treat tx as offset)
-                // Actually: Transform applies to the object coordinate system.
-                // If we want rotation around center, we put pivot at center.
-                // And we move the container such that pivot matches (tx + cx, ty + cy) IF scaling wasn't involved?
-                // Wait, if we scale, we scale around pivot.
-                // So position should be:
-                // item.transform.x + cx * item.transform.scaleX? No.
-                // Let's assume item.transform.x is "Top Left of Original Bounds"?
-                // If so, we want to shift to center.
-                // Let's stick to: Transform X/Y is global offset.
-                // We want to render points at (Points + Offset).
-                // Rotation around Center.
+                const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
 
-                // PIXI Transform Order: Pivot -> Scale -> Rotate -> Translate.
-                // If Pivot is (cx, cy).
-                // Point (x,y) becomes (x-cx, y-cy).
-                // Scaled: (x-cx)*s.
-                // Rotated.
-                // Translated: + Position.
+                // Create Content Wrapper
+                // If has erasures, we need a Container with a Filter to enforce compositing group
+                // This ensures 'erase' blend mode only affects this container's content, not the background.
+                let content: PIXI.Container | PIXI.Graphics = g;
 
-                // We want result: (x + tx, y + ty) if r=0, s=1.
-                // Check: (x - cx) + Position = x + tx.
-                // => Position = cx + tx.
-                // So g.position.set(item.transform.x + cx, item.transform.y + cy).
+                if (hasErasures) {
+                    const container = new PIXI.Container();
+                    container.addChild(g); // Add the shape/path
 
-                g.position.set(item.transform.x + cx, item.transform.y + cy);
-                g.scale.set(item.transform.scaleX ?? 1, item.transform.scaleY ?? 1);
-                g.rotation = item.transform.rotation ?? 0;
+                    // Add Erasures
+                    item.data.erasures.forEach((erase: any) => {
+                        const eg = new PIXI.Graphics();
+                        eg.blendMode = 'erase';
+                        const w = erase.size || 20;
 
-                this.staticLayer.addChild(g);
+                        if (erase.points && erase.points.length > 0) {
+                            eg.moveTo(erase.points[0].x, erase.points[0].y);
+                            for (let i = 1; i < erase.points.length; i++) {
+                                const p1 = erase.points[i - 1];
+                                const p2 = erase.points[i];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            }
+                            // Line to last
+                            if (erase.points.length > 1) {
+                                const last = erase.points[erase.points.length - 1];
+                                eg.lineTo(last.x, last.y);
+                            }
+                        }
+                        eg.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
+                        container.addChild(eg);
+                    });
+
+                    // Force layer group (for Pixi v8 use AlphaFilter({ alpha: 1 }) or similar if changed, but v7 is simple)
+                    // If simple number fails, verify version.
+                    // Assuming v8: new AlphaFilter({ alpha: 1 }) or just use it without args if default is 1.
+                    // But if it was number before...
+                    // Let's use no-arg if defaults work, or object.
+                    // Wait, error says `number` not assignable to `AlphaFilterOptions`.
+                    // So use object: { alpha: 1 }
+                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
+                    content = container;
+                }
+
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+                content.pivot.set(cx, cy);
+                content.position.set(t.x + cx, t.y + cy);
+                content.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+                content.rotation = t.rotation ?? 0;
+
+                this.staticLayer.addChild(content);
             }
 
             if (item.type === 'image' && item.data.url) {
                 const url = item.data.url;
+                const proxiedUrl = getProxiedUrl(url); // Normalize URL via proxy
                 let texture: PIXI.Texture;
 
-                // Check cache first
-                if (PIXI.Assets.cache.has(url)) {
-                    texture = PIXI.Assets.get(url);
+                // Check cache using the PROXIED URL (since that's what we load)
+                if (PIXI.Assets.cache.has(proxiedUrl)) {
+                    texture = PIXI.Assets.get(proxiedUrl);
                 } else {
                     // Placeholder while loading
-                    texture = PIXI.Texture.WHITE;
-                    // Proactive load
-                    PIXI.Assets.load(url).then((loadedTexture) => {
-                        // Force re-render of this item or just rely on react state update loop?
-                        // In current architecture, `renderItems` is called by React `useEffect`.
-                        // If we just loaded the texture, the sprite references the OLD simple texture.
-                        // We need to update the sprite's texture. 
-                        // But we create NEW sprites every render call in this naive implementation.
-                        // So we need to trigger a re-render from the component side?
-                        // OR: `texture = PIXI.Texture.from(url)` handles this internal promise resolution 
-                        // IF we configure it right?
-                        // Actually `PIXI.Texture.from(url)` SHOULD work if it handles loading.
-                        // The warning "Asset ... was not found in the Cache" suggests we should use Assets.load.
-                        // Let's rely on React component to re-render when we might need it? 
-                        // No, React doesn't know Pixi loaded an image.
-                        // We can force a re-render by dispatching an event or just updating this sprite if we kept reference.
-                        // But we accept naive re-creation here. 
-                        // PixiJS Texture.from usually returns a placeholder and updates later.
-                        // The issue is likely V8 specific strictness.
+                    texture = PIXI.Texture.EMPTY;
 
-                        // Better approach for V8:
-                        // Just use Assets.load() and when done, if we are still rendering, it will be picked up next frame?
-                        // We don't have a game loop here. We render on state change.
-                        // So we MUST trigger a visual update. 
-                        // Let's use `invalidate()` pattern or similar?
-                        // For now: Just ensure it is loaded.
+                    // Allow simple 'from' loading via proxy if already in progress or load simple
+                    // But prefer explicit load to handle CORS config reliably everywhere
+
+                    // We only trigger load if NOT pending? 
+                    // Pixi Assets handles deduping usually.
+                    PIXI.Assets.load({
+                        src: proxiedUrl,
+                        format: 'png',
+                        loadParser: 'loadTextures',
+                        data: { crossOrigin: 'anonymous' }
+                    }).then((tex) => {
+                        console.log('[RenderManager] Image loaded successfully:', proxiedUrl);
+                        // Force re-render once loaded
                         if (this.app && this.app.render) {
-                            this.app.render(); // Force a render pass if V8 manual render
+                            this.app.render();
                         }
-                        // Actually, since we re-create sprites in `renderItems`, we rely on `renderItems` being called again.
-                        // OR we rely on the `sprite` instance updating its texture.
-                        // If we use `PIXI.Texture.from(url)`, it returns a Promise-like object or a valid texture?
-                        // In V8, `from` returns a Texture immediately (possibly placeholder).
-                    }).catch(console.warn);
+                    }).catch(err => {
+                        console.error('[RenderManager] Failed to load image:', proxiedUrl, err);
+                    });
                 }
 
-                // Try to get texture safely
-                try {
-                    // If cached, this returns valid texture. If not, it might throw or warn in V8 if strict.
-                    // We fallback to `from` if likely cached, or placeholder.
-                    if (PIXI.Assets.cache.has(url)) {
-                        texture = PIXI.Assets.get(url);
-                    } else {
-                        // Use a temporary texture to avoid "not in cache" error if `from` behaves badly
-                        // or use `Texture.from` which internally calls Assets.load?
-                        // In V8, `Texture.from` is deprecated or behaves differently.
-                        // We should use `Sprite.from(url)` which is effectively `Texture.from`.
-                        // Use empty texture initially to avoid ugly box?
-                        texture = PIXI.Texture.EMPTY;
-                    }
-                } catch (e) {
+                // If we retrieved a texture (from cache or placeholder), use it
+                // Note: We avoid the try-catch block for simple assignment if our logic above is solid.
+
+                // Ensure texture is valid
+                if (!texture) {
                     texture = PIXI.Texture.EMPTY;
                 }
 
@@ -331,26 +390,117 @@ export class RenderManager {
 
                 const updateSize = () => {
                     if (sprite.destroyed) return;
-                    sprite.width = w * (item.transform.scaleX ?? 1);
-                    sprite.height = h * (item.transform.scaleY ?? 1);
+                    sprite.width = w;
+                    sprite.height = h;
                 };
 
                 updateSize();
 
-                // If we used a placeholder, we need to ensure the real texture is swapped in
-                if (!PIXI.Assets.cache.has(url)) {
-                    PIXI.Assets.load(url).then((tex) => {
+                // If we are using the placeholder, modify the sprite when the real texture arrives
+                if (!PIXI.Assets.cache.has(proxiedUrl)) {
+                    PIXI.Assets.load({
+                        src: proxiedUrl,
+                        format: 'png',
+                        loadParser: 'loadTextures',
+                        data: { crossOrigin: 'anonymous' }
+                    }).then((tex) => {
                         if (!sprite.destroyed) {
+                            console.log('[RenderManager] Updating sprite texture:', proxiedUrl);
                             sprite.texture = tex;
                             updateSize();
+                            // Only force render if needed
                         }
+                    }).catch(err => {
+                        console.error('[RenderManager] Sprite update failed:', proxiedUrl, err);
                     });
                 }
 
-                sprite.position.set(item.transform.x + w / 2, item.transform.y + h / 2);
-                sprite.rotation = item.transform.rotation || 0;
+                // ERASER LOGIC FOR IMAGES
+                const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
+                let content: PIXI.Container | PIXI.Sprite = sprite;
 
-                this.staticLayer.addChild(sprite);
+                if (hasErasures) {
+                    const container = new PIXI.Container();
+                    container.addChild(sprite);
+
+                    item.data.erasures.forEach((erase: any) => {
+                        const eg = new PIXI.Graphics();
+                        eg.blendMode = 'erase';
+                        const ew = erase.size || 20;
+
+                        if (erase.points && erase.points.length > 0) {
+                            eg.moveTo(erase.points[0].x, erase.points[0].y);
+                            for (let i = 1; i < erase.points.length; i++) {
+                                const p1 = erase.points[i - 1];
+                                const p2 = erase.points[i];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            }
+                            if (erase.points.length > 1) {
+                                const last = erase.points[erase.points.length - 1];
+                                eg.lineTo(last.x, last.y);
+                            }
+                        }
+                        eg.stroke({ width: ew, color: 0xffffff, cap: 'round', join: 'round' });
+                        container.addChild(eg);
+                    });
+
+                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
+                    content = container;
+                }
+
+                // Apply Transforms
+                // Image Pivot is center (0.5, 0.5 anchor on sprite)
+                // If wrapped in container, container needs pivot. 
+                // Sprite has anchor 0.5, so it is centered at (0,0) in container if we don't move it.
+                // Erasures are in local space relative to Top-Left?
+                // Wait, useWhiteboardDrawing calculates local points based on `getLocalBounds`.
+                // getLocalBounds for Image returns {x: 0, y: 0, width: w, height: h}.
+                // Center is (w/2, h/2).
+                // So Pivot in World is (tx + w/2, ty + h/2).
+                // Inverse Transform subtracts Pivot (World). 
+                // So the resulting local points are relative to Pivot (World)?
+                // No, in useWhiteboardDrawing:
+                // `return { x: sx + cx, y: sy + cy };`
+                // It adds `cx, cy`. 
+                // `cx` is `lBounds.x + lBounds.width / 2` = `w/2`.
+                // So the local points are relative to Top-Left (0,0).
+
+                // If Sprite has anchor 0.5, it is drawn at (0,0) with center at (0,0). 
+                // Its bounds in its own local space are (-w/2, -h/2) to (w/2, h/2).
+                // But `getLocalBounds` returned (0,0,w,h) because it describes "Logical" bounds?
+                // `getLocalBounds` implementation: 
+                // if image: return { x: 0, y: 0, width: w, height: h };
+
+                // So `useWhiteboardDrawing` assumes local space is 0..w, 0..h.
+                // If Erasure Points are in 0..w, 0..h space:
+                // And Sprite is at (0,0) with anchor 0.5 (so visually -w/2..w/2).
+                // We have a mismatch.
+
+                // FIX:
+                // If we wrap in container:
+                // Container Pivot should be (w/2, h/2) to match the transform logic used for Paths.
+                // Transform logic for Paths used `g.pivot.set(cx, cy)`.
+                // Paths draw in 0..w, 0..h space (roughly).
+
+                // So for Image:
+                // We should put Sprite at (w/2, h/2) inside the container?
+                // Or change Sprite anchor to 0?
+                // If we change sprite anchor to 0, it draws 0..w, 0..h.
+                // Then it matches Path behavior.
+                // Erasure points (0..w) will align.
+
+                sprite.anchor.set(0); // Change to Top-Left Basic
+
+                // Content Pivot
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+                content.pivot.set(w / 2, h / 2);
+                content.position.set(t.x + w / 2, t.y + h / 2);
+                content.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+                content.rotation = t.rotation ?? 0;
+
+                this.staticLayer.addChild(content);
             }
         });
     }
@@ -409,47 +559,141 @@ export class RenderManager {
                 const worldCenterX = item.transform.x + cx;
                 const worldCenterY = item.transform.y + cy;
 
+                console.log("RenderSelection Single:", id, "Rot:", item.transform.rotation, "W:", w, "H:", h);
                 this.drawSelectionBox(worldCenterX, worldCenterY, w, h, item.transform.rotation || 0);
+            } else {
+                console.log("RenderSelection: Item not found for id", id);
             }
             return;
+        } else {
+            console.log("RenderSelection Multi:", selectedIds.size);
         }
 
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let hasSelection = false;
+        // Check for Common Rotation
+        let commonRotation: number | null = null;
+        let isCommon = true;
+        const selectedItems: WhiteboardItem[] = [];
 
         selectedIds.forEach(id => {
             const item = items.get(id);
             if (item) {
-                // Get Local Bounds
-                const b = this.getLocalBounds(item);
+                selectedItems.push(item);
+                const rot = item.transform.rotation || 0;
+                if (commonRotation === null) {
+                    commonRotation = rot;
+                } else {
+                    let diff = Math.abs(commonRotation - rot) % (2 * Math.PI);
+                    diff = Math.min(diff, 2 * Math.PI - diff);
+                    if (diff > 0.1) { // Relaxed tolerance (~5.7 degrees) to handle Image+Path float diffs
+                        isCommon = false;
+                    }
+                }
+            }
+        });
 
-                const sx = item.transform.scaleX || 1;
-                const sy = item.transform.scaleY || 1;
+        if (isCommon && commonRotation !== null && selectedItems.length > 0) {
+            // Calculate OBB aligned with commonRotation
+            const cos = Math.cos(-commonRotation);
+            const sin = Math.sin(-commonRotation);
+
+            let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
+
+            selectedItems.forEach(item => {
+                const b = this.getLocalBounds(item);
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+
+                // Get World OBB Corners for this item
                 const cx = b.x + b.width / 2;
                 const cy = b.y + b.height / 2;
+                const wcX = t.x + cx;
+                const wcY = t.y + cy;
 
-                // World Center (Pivot Point + Offset)
-                const worldCenterX = item.transform.x + cx;
-                const worldCenterY = item.transform.y + cy;
+                const hw = (b.width * (t.scaleX || 1)) / 2;
+                const hh = (b.height * (t.scaleY || 1)) / 2;
 
-                // World Dimensions (Axis Aligned approximation for selection box)
-                // Note: If rotated, this AABB might be tighter than optimal, 
-                // but matches the interaction logic I just fixed.
-                const halfW = (b.width * sx) / 2;
-                const halfH = (b.height * sy) / 2;
+                // We need to project the item's world corners onto the Common Axes
+                // Since item rotation == commonRotation, the item's local axes align with global rotated axes!
+                // So we just project the Item Center, then add half-sizes?
+                // Yes! 
+                // Project World Center onto Common Axes:
+                // Axis U: rotated by R. 
+                // We use Inverse Rotation (-R) to align world to U/V.
 
-                const bx = worldCenterX - halfW;
-                const by = worldCenterY - halfH;
-                const bw = b.width * sx;
-                const bh = b.height * sy;
+                const u = wcX * cos - wcY * sin;
+                const v = wcX * sin + wcY * cos;
 
-                if (bx < minX) minX = bx;
-                if (by < minY) minY = by;
-                if (bx + bw > maxX) maxX = bx + bw;
-                if (by + bh > maxY) maxY = by + bh;
+                if (u - hw < minU) minU = u - hw;
+                if (u + hw > maxU) maxU = u + hw;
+                if (v - hh < minV) minV = v - hh;
+                if (v + hh > maxV) maxV = v + hh;
+            });
 
-                hasSelection = true;
-            }
+            const w = maxU - minU;
+            const h = maxV - minV;
+            const centerU = minU + w / 2;
+            const centerV = minV + h / 2;
+
+            // Rotate Center back to World
+            // Rot(R)
+            const rCos = Math.cos(commonRotation);
+            const rSin = Math.sin(commonRotation);
+
+            const worldCx = centerU * rCos - centerV * rSin;
+            const worldCy = centerU * rSin + centerV * rCos;
+
+            this.drawSelectionBox(worldCx, worldCy, w, h, commonRotation);
+            return;
+        }
+
+        // Fallback to AABB
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let hasSelection = false;
+
+        selectedItems.forEach(item => {
+            // Get Local Bounds
+            const b = this.getLocalBounds(item);
+
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const cx = b.x + b.width / 2;
+            const cy = b.y + b.height / 2;
+
+            // World Center (Pivot Point + Offset)
+            const worldCenterX = item.transform.x + cx;
+            const worldCenterY = item.transform.y + cy;
+
+            // Assume 0 rotation for AABB expansion (worst case box)
+            // If we want tight AABB of rotated item, we need to project corners.
+            // But strict AABB of rotated item is fine for fallback.
+
+            // Wait, previously I calculated AABB of Unrotated box?
+            // "bx = worldCenterX - halfW"
+            // If item IS rotated, previous logic was WRONG (it drew unrotated box around rotated item's center?)
+            // If so, fixing that is also good.
+            // Let's implement proper AABB of Rotated Item for fallback.
+
+            const rot = item.transform.rotation || 0;
+            const iCos = Math.cos(rot);
+            const iSin = Math.sin(rot);
+            const hw = (b.width * sx) / 2;
+            const hh = (b.height * sy) / 2;
+
+            // Corners relative to World Center
+            const corners = [
+                { x: -hw, y: -hh }, { x: hw, y: -hh },
+                { x: hw, y: hh }, { x: -hw, y: hh }
+            ];
+
+            corners.forEach(p => {
+                const wx = worldCenterX + (p.x * iCos - p.y * iSin);
+                const wy = worldCenterY + (p.x * iSin + p.y * iCos);
+                if (wx < minX) minX = wx;
+                if (wy < minY) minY = wy;
+                if (wx > maxX) maxX = wx;
+                if (wy > maxY) maxY = wy;
+            });
+
+            hasSelection = true;
         });
 
         if (hasSelection) {
@@ -463,6 +707,9 @@ export class RenderManager {
 
     private drawSelectionBox(cx: number, cy: number, w: number, h: number, rotation: number) {
         this.selectionLayer.removeChildren();
+        // Debug: Log rotation to verify visual update
+        // console.log("[drawSelectionBox] Drawing @", cx, cy, "w:", w, "h:", h, "rot:", rotation);
+
         const g = new PIXI.Graphics();
 
         const halfW = w / 2;
@@ -481,6 +728,12 @@ export class RenderManager {
         const br = rotate(halfW, halfH);
         const bl = rotate(-halfW, halfH);
 
+        // Side Handles
+        const t = rotate(0, -halfH);
+        const b = rotate(0, halfH);
+        const l = rotate(-halfW, 0);
+        const r = rotate(halfW, 0);
+
         // Box Frame
         g.moveTo(tl.x, tl.y);
         g.lineTo(tr.x, tr.y);
@@ -498,14 +751,23 @@ export class RenderManager {
         const handleStyle = { width: strokeWidth, color: 0x00A3FF };
         const fillStyle = 0xffffff;
 
+        // Corners
         g.circle(tl.x, tl.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(tr.x, tr.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(br.x, br.y, hSize).fill(fillStyle).stroke(handleStyle);
         g.circle(bl.x, bl.y, hSize).fill(fillStyle).stroke(handleStyle);
 
+        // Sides (Only if size is large enough to avoid clutter)
+        if (w > 20 / this.currentZoom && h > 20 / this.currentZoom) {
+            g.circle(t.x, t.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(b.x, b.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(l.x, l.y, hSize).fill(fillStyle).stroke(handleStyle);
+            g.circle(r.x, r.y, hSize).fill(fillStyle).stroke(handleStyle);
+        }
+
         // Rotation Handle (Top Center, extended)
         if (h > 40 / this.currentZoom) {
-            const topCenter = rotate(0, -halfH - (15 / this.currentZoom));
+            const topCenter = rotate(0, -halfH - (24 / this.currentZoom));
             // Removed the connecting line "stick"
             g.circle(topCenter.x, topCenter.y, hSize).fill(fillStyle).stroke(handleStyle);
         }
@@ -538,19 +800,29 @@ export class RenderManager {
             this.cursorLayer.addChild(this.ghostSprite);
         }
 
+        // Use proxied URL for consistency
+        const proxiedUrl = getProxiedUrl(url);
+
         // Load or Get Texture
-        if (PIXI.Assets.cache.has(url)) {
-            this.ghostSprite.texture = PIXI.Assets.get(url);
+        if (PIXI.Assets.cache.has(proxiedUrl)) {
+            this.ghostSprite.texture = PIXI.Assets.get(proxiedUrl);
         } else {
             // Load async
-            PIXI.Assets.load(url).then(tex => {
+            PIXI.Assets.load({
+                src: proxiedUrl,
+                format: 'png',
+                loadParser: 'loadTextures',
+                data: { crossOrigin: 'anonymous' }
+            }).then(tex => {
                 if (this.ghostSprite && !this.ghostSprite.destroyed) {
                     this.ghostSprite.texture = tex;
                     // Re-apply size if needed as texture swap might reset it or we want correct ratio
                     this.ghostSprite.width = w;
                     this.ghostSprite.height = h;
                 }
-            }).catch(console.warn);
+            }).catch(err => {
+                console.error('[RenderManager] Ghost load failed', proxiedUrl, err);
+            });
         }
 
         this.ghostSprite.alpha = alpha;
@@ -559,37 +831,19 @@ export class RenderManager {
         this.ghostSprite.height = h;
     }
 
-    updateRemoteCursor(attendeeId: string, data: { x: number; y: number; tool?: string; color?: string; name?: string }) {
-        let cursor = this.remoteCursors.get(attendeeId);
-        if (!cursor) {
-            cursor = new PIXI.Container();
-            const dot = new PIXI.Graphics();
-            dot.circle(0, 0, 4);
-            dot.fill(0x3B82F6); // Blue
-            cursor.addChild(dot);
+    private lastRemotePoints: Map<string, { x: number, y: number }> = new Map();
 
-            if (data.name) {
-                const text = new PIXI.Text({
-                    text: data.name,
-                    style: { fontSize: 10, fill: 0xffffff, fontWeight: 'bold' }
-                });
-                text.position.set(8, -8);
-                const bg = new PIXI.Graphics();
-                bg.roundRect(6, -10, text.width + 10, 20, 4);
-                bg.fill(0x000000, 0.6);
-                cursor.addChild(bg);
-                cursor.addChild(text);
-            }
-
-            this.cursorLayer.addChild(cursor);
-            this.remoteCursors.set(attendeeId, cursor);
+    clearRemoteDrags(senderId: string) {
+        const g = this.remoteGraphics.get(senderId);
+        if (g) {
+            this.dynamicLayer.removeChild(g);
+            g.destroy();
+            this.remoteGraphics.delete(senderId);
         }
-
-        cursor.position.set(data.x, data.y);
+        this.lastRemotePoints.delete(senderId);
+        // Also clear cursor targets if appropriate? 
+        // No, 'clearRemoteDrags' is for drawing strokes, 'removeRemoteUser' is for cursors.
     }
-
-    // Remote Drawing Cache to continue strokes
-    private remoteGraphics: Map<string, PIXI.Graphics> = new Map();
 
     drawRemoteBatch(data: {
         senderId: string;
@@ -605,35 +859,254 @@ export class RenderManager {
         let g = this.remoteGraphics.get(senderId);
 
         if (isNewStroke || !g) {
-            // If new stroke or missing graphics, create new
             g = new PIXI.Graphics();
-            // Add to staticLayer directly? No, staticLayer is cleared on re-render.
-            // But streaming drawing should be persistent until pointerUp?
-            // Actually, we should add to `drawingLayer` (dynamic) or `staticLayer`.
-            // If we add to staticLayer, it stays until cleared.
-            // BUT: When `add_item` comes later, it will re-render everything and wipe this temporary stroke.
-            // So adding to staticLayer is fine, as `renderItems` clears staticLayer first.
-            this.staticLayer.addChild(g);
+            // Use dynamicLayer for drafting.
+            this.dynamicLayer.addChild(g);
             this.remoteGraphics.set(senderId, g);
+            this.lastRemotePoints.delete(senderId);
         }
 
+        // Fix Eraser Visualization: Draw White/Bg Color
         if (tool === 'eraser') {
-            g.blendMode = 'erase'; // Or 'dst-out'
+            // Option A: Use 'erase' blend mode if structure allows (Node checks needed)
+            // Option B: Visual feedback with White (safer for drafts)
+            // Let's use White for now as it's reliable for visual feedback on whiteboards
+            // If background is not white, we might need a different approach.
+            // Assumption: Whiteboard is white.
+            // But if we want real transparency, we need to apply to staticLayer, which is hard in real-time.
+            // User complained "Eraser draws". If it draws black, that's bad.
+            // Drawing white is better.
+            g.stroke({ width: width, color: 0xffffff, cap: 'round', join: 'round' });
+
+            // Note: This only covers "drawing" the path. Real erasure happens on `add_item` (path with correct type). 
+            // So visual feedback is enough.
+        } else {
+            const lastPoint = this.lastRemotePoints.get(senderId);
+            if (lastPoint && !isNewStroke && points.length > 0) {
+                const dist = Math.hypot(points[0].x - lastPoint.x, points[0].y - lastPoint.y);
+                if (dist < 200) {
+                    g.moveTo(lastPoint.x, lastPoint.y);
+                    g.lineTo(points[0].x, points[0].y);
+                    g.stroke({ width, color: color, cap: 'round', join: 'round' });
+                }
+            }
+
+            if (points.length > 0) {
+                g.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    g.lineTo(points[i].x, points[i].y);
+                }
+                g.stroke({ width, color: color, cap: 'round', join: 'round' });
+            }
         }
 
-        if (points.length >= 2) {
-            g.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) {
-                g.lineTo(points[i].x, points[i].y);
-            }
-
-            if (tool === 'eraser') {
-                g.stroke({ width, color: 0xffffff, cap: 'round', join: 'round' });
-            } else {
-                g.stroke({ width, color, cap: 'round', join: 'round' });
-            }
+        if (points.length > 0) {
+            this.lastRemotePoints.set(senderId, points[points.length - 1]);
         }
     }
+
+    updateRemoteCursor(attendeeId: string, data: { x: number; y: number; tool?: string; color?: string; name?: string; avatar?: string; socketId?: string }) {
+        if (data.socketId) {
+            this.socketToSender.set(data.socketId, attendeeId);
+        }
+        let cursor = this.remoteCursors.get(attendeeId);
+
+        // Tool Icon Helper
+        const getToolIcon = (t?: string) => {
+            if (t === 'pen') return '✏️';
+            if (t === 'eraser') return 'Eraser';
+            if (t === 'text') return 'T';
+            if (t === 'shape') return '⬜';
+            if (t === 'image') return '🖼️';
+            if (t === 'hand') return '✋';
+            return '';
+        };
+
+        if (!cursor) {
+            cursor = new PIXI.Container();
+            cursor.position.set(data.x, data.y);
+            this.remoteCursors.set(attendeeId, cursor);
+            this.cursorLayer.addChild(cursor);
+            this.remoteCursorTargets.set(attendeeId, { x: data.x, y: data.y });
+
+            // Assign Random Color if not exists
+            if (!this.userColors.has(attendeeId)) {
+                const randomColor = this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+                this.userColors.set(attendeeId, randomColor);
+            }
+            const userColor = this.userColors.get(attendeeId)!;
+
+            // 1. Cursor Arrow
+            const arrow = new PIXI.Graphics();
+            // SVG Path-like arrow shape
+            arrow.moveTo(0, 0);
+            arrow.lineTo(6, 18); // Down-Right
+            arrow.lineTo(10, 11); // Inner notch
+            arrow.lineTo(17, 11); // Right wing
+            arrow.lineTo(0, 0);   // Close
+            arrow.fill(userColor); // User Color
+            arrow.stroke({ width: 1, color: 0xffffff }); // White outline for contrast
+
+            // Add shadow/glow? No, keep simple.
+            cursor.addChild(arrow);
+
+            /* 2. Name Tag Pill
+            const infoGroup = new PIXI.Container();
+            infoGroup.position.set(12, 12); // Offset from arrow tip
+            cursor.addChild(infoGroup);
+            
+            // Background Pill
+            const bg = new PIXI.Graphics();
+            infoGroup.addChild(bg);
+            
+            // Name Text
+            const nameStr = data.name || 'User';
+            const text = new PIXI.Text({
+                text: nameStr,
+                style: {
+                    fontSize: 12,
+                    fill: 0xffffff,
+                    fontWeight: 'bold',
+                    fontFamily: 'Arial'
+                }
+            });
+            text.position.set(6, 3); // Padding
+            
+            const tw = text.width;
+            const th = text.height;
+            const pillW = tw + 12;
+            const pillH = th + 6;
+            
+            bg.roundRect(0, 0, pillW, pillH, 4);
+            bg.fill(userColor); */
+
+            // 2. Info Group (Avatar + Name + Tool)
+            const infoGroup = new PIXI.Container();
+            infoGroup.position.set(12, 12);
+            cursor.addChild(infoGroup);
+
+            // Background Pill
+            const bg = new PIXI.Graphics();
+            infoGroup.addChild(bg);
+
+            // Avatar Handling (Updated)
+            const avatarRadius = 12;
+            const paddingX = 6;
+            const paddingY = 6;
+            let currentX = paddingX;
+
+            // Text Measurement First
+            const toolStr = getToolIcon(data.tool);
+            const nameStr = (data.name || 'User') + (toolStr ? ` ${toolStr}` : '');
+            const text = new PIXI.Text({
+                text: nameStr,
+                style: {
+                    fontSize: 14, // Slightly larger font 
+                    fill: 0xffffff,
+                    fontWeight: 'bold',
+                    fontFamily: 'Arial',
+                }
+            });
+            const th = text.height;
+            const pillH = Math.max(th + paddingY * 2, (avatarRadius * 2) + paddingY);
+
+            if (data.avatar) {
+                const avatarGroup = new PIXI.Container();
+                const centerY = pillH / 2;
+
+                const avatarBg = new PIXI.Graphics();
+                avatarBg.circle(0, 0, avatarRadius);
+                avatarBg.fill(0xcccccc);
+                avatarBg.stroke({ width: 2, color: userColor });
+                avatarGroup.addChild(avatarBg);
+
+                const sprite = new PIXI.Sprite();
+                sprite.anchor.set(0.5);
+                sprite.width = avatarRadius * 2;
+                sprite.height = avatarRadius * 2;
+
+                const mask = new PIXI.Graphics();
+                mask.circle(0, 0, avatarRadius);
+                mask.fill(0xffffff);
+
+                sprite.mask = mask;
+                avatarGroup.addChild(mask);
+                avatarGroup.addChild(sprite);
+
+                PIXI.Assets.load({ src: getProxiedUrl(data.avatar), format: 'png', loadParser: 'loadTextures' })
+                    .then(t => { if (!sprite.destroyed) sprite.texture = t; }).catch(() => { });
+
+                avatarGroup.position.set(currentX + avatarRadius, centerY);
+                infoGroup.addChild(avatarGroup);
+
+                currentX += (avatarRadius * 2) + 6;
+            } else {
+                currentX += 4;
+            }
+
+            // Text Positioning
+            text.anchor.set(0, 0.5); // Vertical Center
+            text.position.set(currentX, pillH / 2);
+            infoGroup.addChild(text);
+
+            const pillW = currentX + text.width + paddingX + 4;
+
+            bg.roundRect(0, 0, pillW, pillH, pillH / 2);
+            bg.fill(userColor);
+
+            infoGroup.addChild(text);
+        }
+
+
+
+
+        // Update Target for LERP
+        this.remoteCursorTargets.set(attendeeId, { x: data.x, y: data.y });
+    }
+
+    // Map SocketID -> SenderID for cleanup (Defined at top)
+
+    removeRemoteUserBySocketId(socketId: string) {
+        const senderId = this.socketToSender.get(socketId);
+        if (senderId) {
+            const cursor = this.remoteCursors.get(senderId);
+            if (cursor) {
+                this.cursorLayer.removeChild(cursor);
+                cursor.destroy();
+                this.remoteCursors.delete(senderId);
+            }
+            // Cleanup their draft stroke
+            const g = this.remoteGraphics.get(senderId);
+            if (g) {
+                this.dynamicLayer.removeChild(g);
+                g.destroy();
+                this.remoteGraphics.delete(senderId);
+            }
+            this.lastRemotePoints.delete(senderId);
+            this.socketToSender.delete(socketId);
+        }
+    }
+
+    // Inject socketId mapping at top of updateRemoteCursor
+    // We need to modify the signature or just handle it inside? 
+    // The method signature change requires changing the start of the function.
+    // I am editing the END of the function here. 
+    // Wait, I need to update signature too.
+    // Let's replace the whole logical block of updateRemoteCursor signature in a separate edit if needed?
+    // No, I can't easily change the top part if I target the bottom.
+    // Let's rely on the fact that I will replace the whole method content in chunks or just force the whole thing if I can match it.
+    // Since Step 1175 failed on the whole block, I should try to replace the bottom part first to add the new methods, then update the top part.
+
+    // Actually, `updateRemoteCursor` signature already has `socketId?: string`?
+    // Let's check view_file line 760.
+    // Line 760: updateRemoteCursor(attendeeId: string, data: { ... })
+    // Does data have socketId? 
+    // "data: { x: number; y: number; tool?: string; color?: string; name?: string; avatar?: string }"
+    // It is MISSING socketId in the signature!
+    // I need to update the signature. 
+
+
+
 
     destroy() {
         this.destroyed = true;

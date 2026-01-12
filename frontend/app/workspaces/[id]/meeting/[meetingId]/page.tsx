@@ -280,7 +280,9 @@ function MeetingRoomContent() {
         <div className="flex-1 relative flex flex-col h-full">
           {showWhiteboard ? (
             <div className="absolute inset-0 z-10 bg-white">
-              <WhiteboardCanvas />
+              <div className="absolute inset-0 z-10 bg-white">
+                <WhiteboardCanvas currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined} />
+              </div>
             </div>
           ) : (
             <>

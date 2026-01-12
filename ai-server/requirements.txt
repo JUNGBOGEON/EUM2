@@ -1,3 +1,8 @@
+# ===========================================
+# EUM AI Server Dependencies
+# Python 3.9 ~ 3.10 Required (TTS compatibility)
+# ===========================================
+
 # FastAPI & Server
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
@@ -13,6 +18,14 @@ TTS>=0.21.0
 torch>=2.1.0
 torchaudio>=2.1.0
 
+# Audio Enhancement - DeepFilterNet
+deepfilternet>=0.5.6
+
+# Audio Processing
+librosa>=0.10.0
+scipy>=1.11.0
+soundfile>=0.12.0
+
 # Utilities
 requests>=2.31.0
 numpy==1.22.0
@@ -21,3 +34,6 @@ pydantic-settings>=2.0.0
 
 # Logging & Monitoring
 loguru>=0.7.0
+
+# Transformers (for XTTS)
+transformers==4.36.2

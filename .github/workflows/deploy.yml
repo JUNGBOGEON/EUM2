@@ -72,9 +72,6 @@ jobs:
     name: 이미지 빌드 및 푸시
     runs-on: ubuntu-latest
     needs: validate
-    outputs:
-      image: ${{ steps.build-image.outputs.image }}
-      image_tag: ${{ steps.build-image.outputs.image_tag }}
 
     steps:
       - name: 저장소 체크아웃
@@ -100,8 +97,7 @@ jobs:
         with:
           images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
           tags: |
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=raw,value=${{ github.run_number }}
 
       - name: Docker 이미지 빌드 및 푸시
@@ -119,12 +115,9 @@ jobs:
           provenance: false
 
       - name: 이미지 정보 출력
-        id: output-image
         run: |
-          IMAGE_TAG="${{ github.sha }}"
-          IMAGE_TAG="${IMAGE_TAG:0:7}"
-          echo "image=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "이미지: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest"
+          echo "빌드 번호: ${{ github.run_number }}"
 
   deploy:
     name: ECS 배포
@@ -162,7 +155,7 @@ jobs:
         with:
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
       - name: Amazon ECS 태스크 정의 배포
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -178,7 +171,7 @@ jobs:
           echo "배포가 성공적으로 완료되었습니다!"
           echo "서비스: ${{ env.ECS_SERVICE }}"
           echo "클러스터: ${{ env.ECS_CLUSTER }}"
-          echo "이미지: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          echo "이미지: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest"
 
   notify:
     name: 알림 전송
@@ -218,7 +211,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*커밋:*\n${{ github.sha }}"
+                      "text": "*빌드 번호:*\n#${{ github.run_number }}"
                     },
                     {
                       "type": "mrkdwn",
@@ -260,11 +253,11 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*커밋:*\n${{ github.sha }}"
+                      "text": "*빌드 번호:*\n#${{ github.run_number }}"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*워크플로우:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|로그 보기>"
+                      "text": "*로그:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|로그 보기>"
                     }
                   ]
                 }
@@ -283,5 +276,5 @@ jobs:
           echo "| 환경 | production |" >> $GITHUB_STEP_SUMMARY
           echo "| 클러스터 | ${{ env.ECS_CLUSTER }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 서비스 | ${{ env.ECS_SERVICE }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 커밋 | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 빌드 번호 | #${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 실행자 | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY

@@ -342,7 +342,13 @@ export class TranscribeStreamingClient {
           rms += sample * sample;
         }
         rms = Math.sqrt(rms / inputData.length);
-        console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+
+        // 오디오 레벨이 너무 낮으면 경고
+        if (rms < 0.001) {
+          console.warn(`[TranscribeStreaming] ⚠️ Audio level very low - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)} - 마이크가 제대로 작동하는지 확인하세요`);
+        } else {
+          console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+        }
       }
 
       // 다운샘플링

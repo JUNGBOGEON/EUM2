@@ -1,8 +1,3 @@
-# ===========================================
-# EUM AI Server Dependencies
-# Python 3.9 ~ 3.10 Required (TTS 호환성)
-# ===========================================
-
 # FastAPI & Server
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
@@ -20,7 +15,7 @@ torchaudio>=2.1.0
 
 # Utilities
 requests>=2.31.0
-numpy>=1.24.0,<2.0.0
+numpy==1.22.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 

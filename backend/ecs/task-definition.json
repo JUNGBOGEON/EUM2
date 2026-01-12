@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "eum-backend",
-      "image": "149850910112.dkr.ecr.ap-northeast-2.amazonaws.com/eum-backend:IMAGE_TAG",
+      "image": "149850910112.dkr.ecr.ap-northeast-2.amazonaws.com/eum-backend:latest",
       "essential": true,
       "portMappings": [
         {

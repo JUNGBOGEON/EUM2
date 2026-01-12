@@ -3,6 +3,11 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
 import { ParticipantPreferenceService } from './participant-preference.service';
 import { TranslationCacheService } from './translation-cache.service';
+import { TranslationContextService } from './translation-context.service';
+import {
+  SentenceDetectorService,
+  SentenceAnalysis,
+} from './sentence-detector.service';
 
 /**
  * 번역 요청 DTO
@@ -32,6 +37,7 @@ export interface TranslatedTranscriptPayload {
   sourceLanguage: string;
   targetLanguage: string;
   timestamp: number;
+  translationMethod?: 'direct' | 'context-aware'; // 번역 방식
 }
 
 /**
@@ -47,6 +53,8 @@ export class TranslationService {
   constructor(
     private participantPreferenceService: ParticipantPreferenceService,
     private translationCacheService: TranslationCacheService,
+    private translationContextService: TranslationContextService,
+    private sentenceDetectorService: SentenceDetectorService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
   ) {}
@@ -273,6 +281,7 @@ export class TranslationService {
 
   /**
    * 언어별로 번역 수행 및 WebSocket 전송
+   * 문맥 인식 번역을 사용하여 연속된 발화의 번역 품질을 향상시킵니다.
    */
   private async translateAndSend(
     languageGroups: Map<string, string[]>,
@@ -288,6 +297,7 @@ export class TranslationService {
     },
   ): Promise<void> {
     const {
+      sessionId,
       speakerAttendeeId,
       speakerUserId,
       speakerName,
@@ -297,22 +307,85 @@ export class TranslationService {
       timestamp,
     } = context;
 
+    // 문장 완료 여부 분석
+    const sentenceAnalysis = this.sentenceDetectorService.analyzeSentence(
+      originalText,
+      sourceLanguage,
+    );
+
+    this.logger.debug(
+      `[Translation] Sentence analysis: isComplete=${sentenceAnalysis.isComplete}, ` +
+        `confidence=${sentenceAnalysis.confidence}, reason=${sentenceAnalysis.reason}`,
+    );
+
+    // 발화자의 문맥 조회
+    const speakerContext = await this.translationContextService.getContext(
+      sessionId,
+      speakerUserId,
+    );
+
+    // 연속 발화인지 확인
+    const isContinuous =
+      this.translationContextService.isContinuousSpeech(speakerContext);
+
     for (const [targetLanguage, userIds] of languageGroups) {
       try {
         this.logger.log(
           `[Translation] Translating to ${targetLanguage} for users: ${userIds.join(', ')}`,
         );
 
-        const translatedText =
-          await this.translationCacheService.translateWithCache(
-            originalText,
-            sourceLanguage,
-            targetLanguage,
-          );
+        let translatedText: string;
+        let translationMethod: 'direct' | 'context-aware' = 'direct';
 
-        this.logger.log(
-          `[Translation] Translated: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
-        );
+        // 연속 발화이고 문맥이 있으면 문맥 인식 번역 사용
+        if (isContinuous && speakerContext) {
+          const previousText =
+            this.translationContextService.getRecentText(speakerContext);
+          const previousTranslation =
+            this.translationContextService.getRecentTranslation(speakerContext);
+
+          if (previousText) {
+            this.logger.debug(
+              `[Translation] Using context-aware translation. Previous: "${previousText.substring(0, 30)}..."`,
+            );
+
+            const result =
+              await this.translationCacheService.translateWithContext(
+                originalText,
+                sourceLanguage,
+                targetLanguage,
+                previousText,
+                previousTranslation,
+              );
+
+            translatedText = result.translatedText;
+            translationMethod = 'context-aware';
+
+            this.logger.log(
+              `[Translation] Context-aware: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
+            );
+          } else {
+            // 문맥이 비어있으면 직접 번역
+            translatedText =
+              await this.translationCacheService.translateWithCache(
+                originalText,
+                sourceLanguage,
+                targetLanguage,
+              );
+          }
+        } else {
+          // 새로운 발화 시작 - 직접 번역
+          translatedText =
+            await this.translationCacheService.translateWithCache(
+              originalText,
+              sourceLanguage,
+              targetLanguage,
+            );
+
+          this.logger.log(
+            `[Translation] Direct: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
+          );
+        }
 
         // 해당 언어 사용자들에게 WebSocket으로 전송
         const payload: TranslatedTranscriptPayload = {
@@ -326,6 +399,7 @@ export class TranslationService {
           sourceLanguage,
           targetLanguage,
           timestamp,
+          translationMethod,
         };
 
         for (const userId of userIds) {
@@ -336,12 +410,40 @@ export class TranslationService {
         }
 
         this.logger.log(
-          `[Translation] Sent ${targetLanguage} translation to ${userIds.length} user(s)`,
+          `[Translation] Sent ${targetLanguage} translation (${translationMethod}) to ${userIds.length} user(s)`,
         );
       } catch (error) {
         // 조용히 실패 - 개별 언어 번역 실패해도 다른 언어는 계속 처리
         this.logger.warn(
           `[Translation] Translation to ${targetLanguage} failed: ${error.message}`,
+        );
+      }
+    }
+
+    // 문맥 업데이트 (모든 번역 완료 후)
+    // 첫 번째 타겟 언어의 번역 결과를 문맥에 저장
+    const firstLanguage = languageGroups.keys().next().value;
+    if (firstLanguage) {
+      try {
+        const translatedForContext =
+          await this.translationCacheService.translateWithCache(
+            originalText,
+            sourceLanguage,
+            firstLanguage,
+          );
+
+        await this.translationContextService.updateContext(
+          sessionId,
+          speakerUserId,
+          originalText,
+          translatedForContext,
+        );
+      } catch {
+        // 문맥 업데이트 실패는 무시
+        await this.translationContextService.updateContext(
+          sessionId,
+          speakerUserId,
+          originalText,
         );
       }
     }

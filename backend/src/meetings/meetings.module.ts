@@ -19,6 +19,9 @@ import { SummaryService } from './services/summary.service';
 import { TranslationService } from './services/translation.service';
 import { ParticipantPreferenceService } from './services/participant-preference.service';
 import { TranslationCacheService } from './services/translation-cache.service';
+import { TranslationContextService } from './services/translation-context.service';
+import { SentenceDetectorService } from './services/sentence-detector.service';
+import { TextChunkingService } from './services/text-chunking.service';
 import { TranscribeUrlService } from './services/transcribe-url.service';
 
 @Module({
@@ -46,6 +49,9 @@ import { TranscribeUrlService } from './services/transcribe-url.service';
     TranslationService,
     ParticipantPreferenceService,
     TranslationCacheService,
+    TranslationContextService,
+    SentenceDetectorService,
+    TextChunkingService,
     TranscribeUrlService,
   ],
   exports: [

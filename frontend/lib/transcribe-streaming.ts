@@ -523,9 +523,19 @@ registerProcessor('pcm-processor', PCMProcessor);
             if (result.Alternatives && result.Alternatives.length > 0) {
               const alternative = result.Alternatives[0];
 
+              // 디버깅: AWS Transcribe 실제 IsPartial 값 로깅
+              console.log('[TranscribeStreaming] Result:', {
+                resultId: result.ResultId?.substring(0, 12),
+                isPartial: result.IsPartial,
+                isPartialType: typeof result.IsPartial,
+                text: alternative.Transcript?.substring(0, 30),
+              });
+
               const transcriptResult: TranscriptResult = {
                 resultId: result.ResultId || '',
-                isPartial: result.IsPartial ?? true,
+                // IsPartial이 명시적으로 false인 경우만 final로 처리
+                // undefined나 null인 경우 true로 처리 (안전 모드)
+                isPartial: result.IsPartial !== false,
                 transcript: alternative.Transcript || '',
                 startTimeMs: Math.round((result.StartTime || 0) * 1000),
                 endTimeMs: Math.round((result.EndTime || 0) * 1000),

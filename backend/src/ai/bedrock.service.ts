@@ -148,14 +148,14 @@ export interface StructuredSummary {
 export interface SummarySection {
   id: string;
   type:
-    | 'title'
-    | 'summary'
-    | 'agenda'
-    | 'decision'
-    | 'action_item'
-    | 'note'
-    | 'unresolved'
-    | 'data';
+  | 'title'
+  | 'summary'
+  | 'agenda'
+  | 'decision'
+  | 'action_item'
+  | 'note'
+  | 'unresolved'
+  | 'data';
   content: string;
   transcriptRefs: string[];
 }
@@ -294,6 +294,69 @@ export class BedrockService {
     } catch (error) {
       this.logger.error(
         'Failed to generate structured summary with Bedrock',
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 구조화된 요약을 타겟 언어로 번역합니다.
+   * JSON 구조를 유지하고 내용(content)과 제목만 번역합니다.
+   */
+  async translateSummary(
+    summary: StructuredSummary,
+    targetLang: string,
+  ): Promise<StructuredSummary> {
+    try {
+      this.logger.log(`Translating summary to ${targetLang}...`);
+
+      const jsonString = JSON.stringify(summary, null, 2);
+      const systemPrompt = `You are a professional translator for enterprise meeting minutes.
+Your task is to translate the provided JSON meeting summary into the target language: "${targetLang}".
+
+[Rules]
+1. strictly preserve the JSON structure. Do NOT change keys like "id", "type", "transcriptRefs".
+2. Only translate the "content" field values and any text that appears to be a title or content.
+3. Keep the markdown formatting (headers like ##, bold like **, lists -) intact within the content strings.
+4. Translate naturally for a business context in the target language.
+5. Do NOT translate proper nouns (names, specific technical terms) if they should remain in the original language.
+6. Output ONLY the valid JSON string.`;
+
+      const command = new ConverseCommand({
+        modelId: this.modelId,
+        system: [{ text: systemPrompt }],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                text: `Translate the following JSON to ${targetLang}:\n\n${jsonString}`,
+              },
+            ],
+          },
+        ],
+        inferenceConfig: {
+          maxTokens: 8192,
+          temperature: 0.1,
+        },
+      });
+
+      const response = await this.bedrockClient.send(command);
+      const outputText = response.output?.message?.content?.[0]?.text || '';
+
+      if (!outputText) {
+        throw new Error('Bedrock returned empty translation response');
+      }
+
+      const translatedSummary = this.parseStructuredResponse(outputText);
+      this.logger.log(`Summary translated to ${targetLang} successfully`);
+
+      return translatedSummary;
+
+    } catch (error) {
+      this.logger.error(
+        `Failed to translate summary to ${targetLang}`,
         error,
       );
       throw error;

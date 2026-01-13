@@ -199,11 +199,11 @@ function MeetingRoomContent() {
 
   // Convert roster to participants array (with proper typing)
   const participants = Object.entries(roster).map(([attendeeId, attendee]) => {
-    const typedAttendee = attendee as ChimeRosterAttendee;
+    const info = getParticipantByAttendeeId(attendeeId);
     return {
       id: attendeeId,
-      name: typedAttendee.name || 'Unknown',
-      profileImage: typedAttendee.profileImage,
+      name: info.name || (attendee as any).name || 'Unknown',
+      profileImage: info.profileImage,
     };
   });
   // Camera toggle handler (includes permission request)

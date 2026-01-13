@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { MeetingSession } from './entities/meeting-session.entity';
+import { MeetingSession, SummaryStatus } from './entities/meeting-session.entity';
 import { SessionParticipant } from './entities/session-participant.entity';
 import { Transcription } from './entities/transcription.entity';
 import {
@@ -41,7 +41,7 @@ export class MeetingsService {
     private transcriptionService: TranscriptionService,
     private summaryService: SummaryService,
     private translationService: TranslationService,
-  ) {}
+  ) { }
 
   // ==========================================
   // 세션 관리 (ChimeService 위임)
@@ -107,6 +107,10 @@ export class MeetingsService {
       this.logger.log(
         `[Session End] Skipping AI summary for session ${sessionId} (user opted out)`,
       );
+      // 요약 상태를 SKIPPED로 업데이트하여 프론트엔드에서 무한 로딩 방지
+      await this.sessionRepository.update(sessionId, {
+        summaryStatus: SummaryStatus.SKIPPED,
+      });
     }
 
     return session;
@@ -256,8 +260,8 @@ export class MeetingsService {
   // 요약 기능 (SummaryService 위임)
   // ==========================================
 
-  async getSummary(sessionId: string) {
-    return this.summaryService.getSummary(sessionId);
+  async getSummary(sessionId: string, languageCode?: string) {
+    return this.summaryService.getSummary(sessionId, languageCode);
   }
 
   async regenerateSummary(sessionId: string) {

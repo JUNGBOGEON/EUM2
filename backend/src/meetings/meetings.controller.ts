@@ -29,7 +29,7 @@ export class MeetingsController {
   constructor(
     private readonly meetingsService: MeetingsService,
     private readonly transcribeUrlService: TranscribeUrlService,
-  ) {}
+  ) { }
 
   // ==========================================
   // 세션 관리 API
@@ -267,8 +267,11 @@ export class MeetingsController {
    * - presignedUrl: S3 Presigned URL (completed 상태일 때만)
    */
   @Get(':sessionId/summary')
-  getSummary(@Param('sessionId') sessionId: string) {
-    return this.meetingsService.getSummary(sessionId);
+  getSummary(
+    @Param('sessionId') sessionId: string,
+    @Query('lang') languageCode?: string,
+  ) {
+    return this.meetingsService.getSummary(sessionId, languageCode);
   }
 
   /**

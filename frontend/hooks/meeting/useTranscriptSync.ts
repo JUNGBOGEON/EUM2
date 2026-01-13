@@ -15,6 +15,19 @@ import { useSocket } from '@/contexts/SocketContext';
 import type { TranscriptItem } from '@/lib/types';
 
 /**
+ * 트랜스크립트 정렬 함수
+ * timestamp 기준 정렬, 같으면 ID로 보조 정렬 (강제 분할 순서 보장)
+ */
+function sortTranscripts(transcripts: TranscriptItem[]): TranscriptItem[] {
+  return transcripts.sort((a, b) => {
+    const timeDiff = a.timestamp - b.timestamp;
+    if (timeDiff !== 0) return timeDiff;
+    // timestamp가 같으면 ID로 정렬 (abc < abc-cont-001 < abc-cont-002)
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/**
  * 새 트랜스크립트 WebSocket 페이로드
  */
 interface NewTranscriptPayload {
@@ -312,26 +325,15 @@ export function useTranscriptSync({
             }
             const result = [...prev];
             result[existingIndex] = newItem;
-
-            // Partial → Final 전환 시에만 정렬 (UI 안정성)
-            if (existing.isPartial && !newItem.isPartial) {
-              console.log('[TranscriptSync] Partial→Final, sorting:', payload.resultId);
-              return result.sort((a, b) => a.timestamp - b.timestamp);
-            }
-
-            console.log('[TranscriptSync] Updated transcript (no sort):', payload.resultId);
-            return result;
+            // 항상 정렬 (강제 분할 시 순서 보장)
+            console.log('[TranscriptSync] Updated transcript:', payload.resultId);
+            return sortTranscripts(result);
           }
 
-          // 새로 추가
+          // 새로 추가 후 항상 정렬
           console.log('[TranscriptSync] Added new transcript:', payload.resultId, newItem.isPartial ? 'partial' : 'final');
           const result = [...prev, newItem];
-
-          // Final만 정렬, Partial은 끝에 유지 (말하는 중 UI 점프 방지)
-          if (!newItem.isPartial) {
-            return result.sort((a, b) => a.timestamp - b.timestamp);
-          }
-          return result;
+          return sortTranscripts(result);
         });
       } catch (err) {
         console.error('[TranscriptSync] Error processing transcript:', err, payload);
@@ -449,22 +451,13 @@ export function useTranscriptSync({
         }
         const result = [...prev];
         result[existingIndex] = item;
-
-        // Partial → Final 전환 시에만 정렬 (UI 안정성)
-        if (existing.isPartial && !item.isPartial) {
-          return result.sort((a, b) => a.timestamp - b.timestamp);
-        }
-        return result;
+        // 항상 정렬 (강제 분할 시 순서 보장)
+        return sortTranscripts(result);
       }
 
-      // 새로 추가
+      // 새로 추가 후 항상 정렬 (강제 분할 시 Partial도 올바른 위치에)
       const result = [...prev, item];
-
-      // Final만 정렬, Partial은 끝에 유지 (말하는 중 UI 점프 방지)
-      if (!item.isPartial) {
-        return result.sort((a, b) => a.timestamp - b.timestamp);
-      }
-      return result;
+      return sortTranscripts(result);
     });
   }, []);
 
@@ -476,7 +469,7 @@ export function useTranscriptSync({
       setTranscripts((prev) => {
         const updated = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
         // timestamp가 변경될 수 있으므로 항상 정렬
-        return updated.sort((a, b) => a.timestamp - b.timestamp);
+        return sortTranscripts(updated);
       });
     },
     []
@@ -499,7 +492,7 @@ export function useTranscriptSync({
         }
       });
       // 시간순 정렬
-      return merged.sort((a, b) => a.timestamp - b.timestamp);
+      return sortTranscripts(merged);
     });
 
     console.log('[TranscriptSync] Loaded history:', history.length, 'items');

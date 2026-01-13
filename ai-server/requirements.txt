@@ -1,0 +1,39 @@
+# ===========================================
+# EUM AI Server Dependencies
+# Python 3.9 ~ 3.10 Required (TTS compatibility)
+# ===========================================
+
+# FastAPI & Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+python-multipart>=0.0.6
+
+# AI/ML - TTS (Python 3.9-3.10 only)
+TTS>=0.21.0
+
+# PyTorch with CUDA 12.1 support (EC2 T4 GPU)
+# Install with: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.1.0
+torchaudio>=2.1.0
+
+# Audio Enhancement - DeepFilterNet
+deepfilternet>=0.5.6
+
+# Audio Processing
+librosa>=0.10.0
+scipy>=1.11.0
+soundfile>=0.12.0
+
+# Utilities
+requests>=2.31.0
+numpy==1.22.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Logging & Monitoring
+loguru>=0.7.0
+
+# Transformers (for XTTS)
+transformers==4.36.2

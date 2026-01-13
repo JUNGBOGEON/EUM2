@@ -35,6 +35,9 @@ const PRESET_COLORS = [
   '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
 ];
 
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function EventTypeDialog({
   isOpen,
   onOpenChange,
@@ -50,6 +53,7 @@ export function EventTypeDialog({
   const [editingTypeColor, setEditingTypeColor] = useState('');
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
   const [isDeletingType, setIsDeletingType] = useState(false);
+  const { t } = useLanguage();
 
   const handleCreateEventType = async () => {
     if (!newTypeName.trim()) return;
@@ -109,9 +113,9 @@ export function EventTypeDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
-          <DialogTitle>이벤트 유형 관리</DialogTitle>
+          <DialogTitle>{t('calendar.manage_types_dialog.title')}</DialogTitle>
           <DialogDescription>
-            커스텀 이벤트 유형을 추가하거나 수정하세요.
+            {t('calendar.manage_types_dialog.desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +146,7 @@ export function EventTypeDialog({
               </PopoverContent>
             </Popover>
             <Input
-              placeholder="새 유형 이름"
+              placeholder={t('calendar.manage_types_dialog.new_type_placeholder')}
               value={newTypeName}
               onChange={(e) => setNewTypeName(e.target.value)}
               className="flex-1"
@@ -200,7 +204,7 @@ export function EventTypeDialog({
                         onClick={() => handleSaveEditType(type.id)}
                         disabled={isTypeSubmitting}
                       >
-                        저장
+                        {t('calendar.manage_types_dialog.save')}
                       </Button>
                       <Button
                         size="sm"
@@ -218,14 +222,14 @@ export function EventTypeDialog({
                       />
                       <span className="flex-1 text-sm">{type.name}</span>
                       {type.isDefault && (
-                        <Badge variant="secondary" className="text-xs">기본</Badge>
+                        <Badge variant="secondary" className="text-xs">{t('calendar.manage_types_dialog.default_badge')}</Badge>
                       )}
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => handleStartEditType(type)}
                       >
-                        수정
+                        {t('calendar.manage_types_dialog.edit')}
                       </Button>
                       {!type.isDefault && (
                         <Button

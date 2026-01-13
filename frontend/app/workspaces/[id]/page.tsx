@@ -16,9 +16,12 @@ import {
 import { useWorkspaceDetail } from './_hooks/use-workspace-detail';
 import { useInvitations } from '../_hooks/use-invitations';
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export default function WorkspaceDetailPage() {
   const params = useParams();
   const workspaceId = params.id as string;
+  const { t } = useLanguage();
 
   const {
     // Data
@@ -147,12 +150,12 @@ export default function WorkspaceDetailPage() {
             <header className="h-14 border-b border-border flex items-center justify-between px-6">
               <div>
                 <h1 className="text-lg font-semibold text-foreground">
-                  {activeNav === 'meeting' && '회의'}
-                  {activeNav === 'calendar' && '일정'}
-                  {activeNav === 'files' && '파일'}
-                  {activeNav === 'history' && '회의 기록'}
-                  {activeNav === 'members' && '멤버'}
-                  {activeNav === 'settings' && '설정'}
+                  {activeNav === 'meeting' && t('meeting.title')}
+                  {activeNav === 'calendar' && t('calendar.title')}
+                  {activeNav === 'files' && t('files.title')}
+                  {activeNav === 'history' && t('history.title')}
+                  {activeNav === 'members' && t('members.title')}
+                  {activeNav === 'settings' && t('menu.settings')}
                 </h1>
               </div>
               <div className="flex items-center gap-2">

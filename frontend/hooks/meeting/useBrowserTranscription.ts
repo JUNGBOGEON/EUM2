@@ -16,6 +16,280 @@ import { useParticipants } from './useParticipants';
 
 // 지원 언어 코드 (단일 소스)
 const SUPPORTED_LANGUAGE_CODES = ['ko-KR', 'en-US', 'ja-JP', 'zh-CN'] as const;
+
+// ==========================================
+// 강제 분할 설정 (긴 발화 처리)
+// ==========================================
+
+/**
+ * 강제 분할 설정
+ * AWS Transcribe가 final을 주지 않을 때 프론트엔드에서 강제로 분할
+ */
+const FORCE_SPLIT_CONFIG = {
+  /** 이 글자 수 초과 시 강제 분할 */
+  MAX_CHARS: 80,
+  /** 이 시간(ms) 경과 시 강제 분할 */
+  MAX_DURATION_MS: 5000,
+  /** 최소 이 글자 수 이상일 때만 분할 (너무 짧은 분할 방지) */
+  MIN_CHARS_FOR_SPLIT: 15,
+  /** 분할 체크 간격 (ms) */
+  CHECK_INTERVAL_MS: 500,
+  /** 문장 완료 신뢰도 임계값 (이 이상이면 즉시 분할) */
+  SENTENCE_CONFIDENCE_THRESHOLD: 0.7,
+} as const;
+
+/**
+ * Partial 버퍼 상태 타입
+ */
+interface PartialBuffer {
+  resultId: string;
+  text: string;
+  startTime: number;
+  lastUpdateTime: number;
+  startTimeMs: number;  // AWS Transcribe 타임스탬프
+  endTimeMs: number;
+  forceSplitCount: number;  // 해당 발화에서 강제 분할된 횟수
+  /** 이미 분할되어 전송된 텍스트 길이 (중복 방지용) */
+  splitTextLength: number;
+}
+
+/**
+ * 문장 분석 결과 타입
+ */
+interface SentenceAnalysis {
+  isComplete: boolean;
+  confidence: number;
+  reason: string;
+}
+
+// ==========================================
+// 문장 감지 유틸리티 (다국어 지원)
+// ==========================================
+
+/**
+ * 한국어 종결어미 패턴
+ */
+const KOREAN_SENTENCE_PATTERNS = {
+  // 정중어 종결어미 (가장 확실)
+  formal: ['습니다', '입니다', '합니다', '됩니다', '있습니다', '없습니다', '였습니다', '었습니다', '겠습니다', '봅니다', '옵니다', '줍니다'],
+  // 비격식 종결어미
+  informal: ['해요', '에요', '세요', '네요', '죠', '어요', '아요', '예요', '래요', '데요'],
+  // 평서형 종결어미
+  plain: ['다', '까', '네', '나', '지', '군', '구나', '라'],
+  // 의문형
+  question: ['니까', '나요', '까요', '을까요', '을까', '건가요'],
+  // 연결어미 (미완성 표시)
+  connectives: ['고', '며', '면서', '어서', '아서', '니까', '면', '려고', '도록', '는데', '은데', '지만', '더라도', '으면', '거나', '든지', '라서', '해서'],
+  // 조사 (미완성 가능성 높음)
+  particles: ['을', '를', '이', '가', '은', '는', '에', '의', '와', '과', '로', '으로', '에서', '까지', '부터'],
+};
+
+/**
+ * 일본어 종결어미 패턴
+ */
+const JAPANESE_ENDINGS = ['です', 'ます', 'した', 'ました', 'だ', 'である', 'よ', 'ね', 'か', 'わ'];
+
+/**
+ * 문장 완료 여부를 분석합니다 (프론트엔드용 경량 버전)
+ */
+function analyzeSentence(text: string, languageCode: string): SentenceAnalysis {
+  const trimmed = text.trim();
+  
+  if (!trimmed || trimmed.length < 5) {
+    return { isComplete: false, confidence: 0, reason: 'Too short' };
+  }
+
+  // 1. 명확한 종결 부호 확인 (모든 언어)
+  if (/[.?!。？！]$/.test(trimmed)) {
+    return { isComplete: true, confidence: 0.95, reason: 'Punctuation ending' };
+  }
+
+  // 2. 언어별 분석
+  if (languageCode.startsWith('ko')) {
+    return analyzeKorean(trimmed);
+  } else if (languageCode.startsWith('en')) {
+    return analyzeEnglish(trimmed);
+  } else if (languageCode.startsWith('ja')) {
+    return analyzeJapanese(trimmed);
+  } else if (languageCode.startsWith('zh')) {
+    return analyzeChinese(trimmed);
+  }
+
+  return { isComplete: false, confidence: 0.3, reason: 'Unknown language' };
+}
+
+/**
+ * 한국어 문장 분석
+ */
+function analyzeKorean(text: string): SentenceAnalysis {
+  // 정중어 종결어미 (가장 신뢰도 높음)
+  for (const ending of KOREAN_SENTENCE_PATTERNS.formal) {
+    if (text.endsWith(ending)) {
+      return { isComplete: true, confidence: 0.9, reason: `Formal ending: ${ending}` };
+    }
+  }
+
+  // 비격식 종결어미
+  for (const ending of KOREAN_SENTENCE_PATTERNS.informal) {
+    if (text.endsWith(ending)) {
+      return { isComplete: true, confidence: 0.85, reason: `Informal ending: ${ending}` };
+    }
+  }
+
+  // 평서형 종결어미 (짧은 텍스트에서는 신뢰도 낮음)
+  for (const ending of KOREAN_SENTENCE_PATTERNS.plain) {
+    if (text.endsWith(ending) && text.length > 10) {
+      return { isComplete: true, confidence: 0.65, reason: `Plain ending: ${ending}` };
+    }
+  }
+
+  // 의문형 종결어미
+  for (const ending of KOREAN_SENTENCE_PATTERNS.question) {
+    if (text.endsWith(ending)) {
+      return { isComplete: true, confidence: 0.8, reason: `Question ending: ${ending}` };
+    }
+  }
+
+  // 연결어미로 끝남 (미완성)
+  for (const conn of KOREAN_SENTENCE_PATTERNS.connectives) {
+    if (text.endsWith(conn)) {
+      return { isComplete: false, confidence: 0.8, reason: `Connective: ${conn}` };
+    }
+  }
+
+  // 조사로 끝남 (미완성 가능성 높음)
+  for (const particle of KOREAN_SENTENCE_PATTERNS.particles) {
+    if (text.endsWith(particle)) {
+      return { isComplete: false, confidence: 0.7, reason: `Particle: ${particle}` };
+    }
+  }
+
+  return { isComplete: false, confidence: 0.4, reason: 'Unknown pattern' };
+}
+
+/**
+ * 영어 문장 분석
+ */
+function analyzeEnglish(text: string): SentenceAnalysis {
+  // 완전한 문장 구조 (주어 + 동사)
+  const hasSubjectVerb = /\b(I|you|he|she|it|we|they|this|that|there)\s+(am|is|are|was|were|have|has|had|do|does|did|will|would|can|could|should|must|may|might)\b/i.test(text);
+  
+  if (hasSubjectVerb && text.length > 30) {
+    return { isComplete: true, confidence: 0.6, reason: 'Complete sentence structure' };
+  }
+
+  // 미완성 구조 (전치사, 접속사로 끝남)
+  if (/\b(and|or|but|so|because|if|when|while|that|which|who|to|for|with|in|on|at)$/i.test(text)) {
+    return { isComplete: false, confidence: 0.8, reason: 'Incomplete structure' };
+  }
+
+  return { isComplete: false, confidence: 0.4, reason: 'Unknown pattern' };
+}
+
+/**
+ * 일본어 문장 분석
+ */
+function analyzeJapanese(text: string): SentenceAnalysis {
+  for (const ending of JAPANESE_ENDINGS) {
+    if (text.endsWith(ending)) {
+      return { isComplete: true, confidence: 0.85, reason: `Japanese ending: ${ending}` };
+    }
+  }
+
+  // 조사로 끝남 (미완성)
+  if (/[はがをにでとへもや]$/.test(text)) {
+    return { isComplete: false, confidence: 0.75, reason: 'Particle ending' };
+  }
+
+  return { isComplete: false, confidence: 0.4, reason: 'Unknown pattern' };
+}
+
+/**
+ * 중국어 문장 분석
+ */
+function analyzeChinese(text: string): SentenceAnalysis {
+  // 문장 종결 표현
+  if (/[了吗呢吧啊呀哦哇嘛]$/.test(text)) {
+    return { isComplete: true, confidence: 0.8, reason: 'Sentence-final particle' };
+  }
+
+  return { isComplete: false, confidence: 0.4, reason: 'Unknown pattern' };
+}
+
+/**
+ * 강제 분할 시 사용할 표시 ID를 생성합니다.
+ * - 첫 번째 분할 (forceSplitCount===0): 원본 ID 사용 → 기존 partial을 final로 업데이트
+ * - 후속 분할: 연속 ID 사용 → 새로운 항목으로 추가
+ *
+ * partial 표시와 forced final 모두 동일한 ID 전략을 사용하여
+ * partial → final 전환이 자연스럽게 이루어지도록 합니다.
+ */
+function getDisplayId(resultId: string, forceSplitCount: number): string {
+  if (forceSplitCount === 0) {
+    // 첫 번째 분할: 원본 ID 사용 (기존 partial 업데이트)
+    return resultId;
+  }
+  // 후속 분할: 연속 ID 사용 (새 항목 추가)
+  // 숫자를 3자리로 패딩하여 정렬 시 순서 보장 (001, 002, ...)
+  return `${resultId}-cont-${String(forceSplitCount).padStart(3, '0')}`;
+}
+
+/**
+ * 트랜스크립트 정렬 함수
+ * timestamp 기준 정렬, 같으면 ID로 보조 정렬 (분할 순서 보장)
+ */
+function sortTranscripts(transcripts: TranscriptItem[]): TranscriptItem[] {
+  return transcripts.sort((a, b) => {
+    const timeDiff = a.timestamp - b.timestamp;
+    if (timeDiff !== 0) return timeDiff;
+    // timestamp가 같으면 ID로 정렬 (abc < abc-cont-001 < abc-cont-002)
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/**
+ * 강제 분할이 필요한지 판단합니다.
+ * @returns { shouldSplit: boolean, reason: string }
+ */
+function shouldForceSplit(
+  buffer: PartialBuffer,
+  languageCode: string,
+  now: number = Date.now()
+): { shouldSplit: boolean; reason: string } {
+  const { text, startTime } = buffer;
+  const duration = now - startTime;
+  
+  // 1. 텍스트가 너무 짧으면 분할하지 않음
+  if (text.length < FORCE_SPLIT_CONFIG.MIN_CHARS_FOR_SPLIT) {
+    return { shouldSplit: false, reason: 'Text too short' };
+  }
+
+  // 2. 문장 감지
+  const analysis = analyzeSentence(text, languageCode);
+  
+  // 문장이 완료되었고 신뢰도가 높으면 즉시 분할
+  if (analysis.isComplete && analysis.confidence >= FORCE_SPLIT_CONFIG.SENTENCE_CONFIDENCE_THRESHOLD) {
+    return { shouldSplit: true, reason: `Sentence complete: ${analysis.reason}` };
+  }
+
+  // 3. 글자 수 초과
+  if (text.length > FORCE_SPLIT_CONFIG.MAX_CHARS) {
+    // 문장이 미완성이더라도 너무 길면 분할
+    return { shouldSplit: true, reason: `Max chars exceeded: ${text.length}` };
+  }
+
+  // 4. 시간 초과 (문장이 미완성이어도 오래되면 분할)
+  if (duration > FORCE_SPLIT_CONFIG.MAX_DURATION_MS) {
+    return { shouldSplit: true, reason: `Max duration exceeded: ${duration}ms` };
+  }
+
+  // 5. 중간 신뢰도 문장 완료 + 일정 시간 경과
+  if (analysis.isComplete && analysis.confidence >= 0.5 && duration > 2000) {
+    return { shouldSplit: true, reason: `Likely complete sentence after ${duration}ms` };
+  }
+
+  return { shouldSplit: false, reason: 'No split needed' };
+}
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGE_CODES)[number];
 
 export type SessionState = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'error';
@@ -186,9 +460,41 @@ export function useBrowserTranscription({
   }
   const failedSavesRef = useRef<Map<string, FailedSaveData>>(new Map());
 
+  // ==========================================
+  // 강제 분할 관련 Refs
+  // ==========================================
+  
+  /** Partial 트랜스크립트 버퍼 (강제 분할용) */
+  const partialBufferRef = useRef<PartialBuffer>({
+    resultId: '',
+    text: '',
+    startTime: 0,
+    lastUpdateTime: 0,
+    startTimeMs: 0,
+    endTimeMs: 0,
+    forceSplitCount: 0,
+    splitTextLength: 0,
+  });
+  
+  /** 강제 분할 체크 타이머 */
+  const forceSplitTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  /** 강제 분할 진행 중 플래그 (중복 방지) */
+  const isForceSplittingRef = useRef(false);
+
+  // 이전 음소거 상태 추적 (불필요한 effect 실행 방지)
+  const prevMutedRef = useRef(isMuted);
+
   // 음소거 상태 동기화 - 음소거 시 연결 종료, 언뮤트 시 재연결
   useEffect(() => {
+    const wasMuted = prevMutedRef.current;
+    prevMutedRef.current = isMuted;
     isMutedRef.current = isMuted;
+
+    // 실제 음소거 상태 변경이 있을 때만 처리 (sessionState 변경만으로는 실행 안 함)
+    if (wasMuted === isMuted) {
+      return;
+    }
 
     if (isMuted) {
       console.log('[BrowserTranscription] Muted - stopping transcription to avoid timeout');
@@ -294,25 +600,384 @@ export function useBrowserTranscription({
     return stream;
   }, [selectedAudioDevice]);
 
+  // ==========================================
+  // 강제 분할 처리 함수
+  // ==========================================
+  
+  /**
+   * 강제 분할된 텍스트를 "가상 final"로 서버에 전송합니다.
+   * partial이 너무 길어지거나 문장이 완료된 것으로 판단될 때 호출됩니다.
+   */
+  const sendForcedFinal = useCallback(async (
+    forcedResult: {
+      resultId: string;
+      transcript: string;
+      startTimeMs: number;
+      endTimeMs: number;
+    },
+    reason: string
+  ) => {
+    if (!sessionId || !currentSpeakerInfo.attendeeId || isForceSplittingRef.current) {
+      return;
+    }
+
+    isForceSplittingRef.current = true;
+    
+    console.log(`[ForceSplit] 🔪 Sending forced final: "${forcedResult.transcript.substring(0, 30)}..." (reason: ${reason})`);
+
+    // 서버에 저장할 타임스탬프 계산
+    const absoluteStartTimeMs = sessionStartTimeRef.current
+      ? sessionStartTimeRef.current + forcedResult.startTimeMs
+      : Date.now();
+    const absoluteEndTimeMs = sessionStartTimeRef.current
+      ? sessionStartTimeRef.current + forcedResult.endTimeMs
+      : Date.now();
+
+    // UI 타임스탬프 계산 (발화 시작 시점 기준, 분할 시점이 아님!)
+    // sessionStartTimeRef: Transcribe WebSocket 연결 시간 (epoch)
+    // forcedResult.startTimeMs: WebSocket 연결 이후의 상대 시간
+    // meetingStartTime: 미팅 시작 시간 (epoch)
+    // 정확한 타임스탬프 = (세션시작 + 상대시간) - 미팅시작
+    const elapsedMs = sessionStartTimeRef.current && meetingStartTime
+      ? (sessionStartTimeRef.current + forcedResult.startTimeMs) - meetingStartTime
+      : forcedResult.startTimeMs;
+
+    // UI에 먼저 표시 (로컬 트랜스크립트로)
+    const forcedItem: TranscriptItem = {
+      id: forcedResult.resultId,
+      speakerName: currentSpeakerInfo.name,
+      speakerId: currentSpeakerInfo.attendeeId,
+      speakerProfileImage: currentSpeakerInfo.profileImage,
+      text: forcedResult.transcript,
+      timestamp: elapsedMs > 0 ? elapsedMs : 0,
+      isPartial: false, // final로 표시
+      attendeeId: currentSpeakerInfo.attendeeId,
+      languageCode: selectedLanguage,
+    };
+
+    if (onLocalTranscript) {
+      onLocalTranscript(forcedItem);
+    } else {
+      setTranscripts((prev) => {
+        // 같은 ID가 있으면 업데이트 (partial -> final 전환)
+        const existingIndex = prev.findIndex((t) => t.id === forcedItem.id);
+        if (existingIndex >= 0) {
+          const result = [...prev];
+          result[existingIndex] = forcedItem;
+          // Final 전환 시 정렬 (순서 보장)
+          return sortTranscripts(result);
+        }
+        // 새로 추가 후 정렬
+        const result = [...prev, forcedItem];
+        return sortTranscripts(result);
+      });
+    }
+
+    // 서버에 저장 (isPartial: false로 전송하여 번역 트리거)
+    const savePayload = {
+      sessionId,
+      resultId: forcedResult.resultId,
+      isPartial: false, // 중요: final로 전송하여 번역이 트리거되도록
+      transcript: forcedResult.transcript,
+      attendeeId: currentSpeakerInfo.attendeeId,
+      startTimeMs: absoluteStartTimeMs,
+      endTimeMs: absoluteEndTimeMs,
+      confidence: 0.8, // 강제 분할이므로 약간 낮은 신뢰도
+      languageCode: selectedLanguage,
+      isStable: true,
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/api/meetings/${sessionId}/transcriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(savePayload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[ForceSplit] ✅ Forced final saved successfully`);
+        
+        // 서버 타임스탬프로 보정
+        if (data.serverTimestamp !== undefined && onTimestampCorrection) {
+          onTimestampCorrection(forcedResult.resultId, data.serverTimestamp);
+        }
+      } else {
+        console.error(`[ForceSplit] ❌ Failed to save: ${response.status}`);
+        // 실패 시 재시도 큐에 추가
+        failedSavesRef.current.set(forcedResult.resultId, {
+          ...savePayload,
+          retryCount: 0,
+        });
+        if (isMountedRef.current) {
+          setFailedSaveCount(failedSavesRef.current.size);
+        }
+      }
+    } catch (err) {
+      console.error('[ForceSplit] ❌ Network error:', err);
+      failedSavesRef.current.set(forcedResult.resultId, {
+        ...savePayload,
+        retryCount: 0,
+      });
+      if (isMountedRef.current) {
+        setFailedSaveCount(failedSavesRef.current.size);
+      }
+    } finally {
+      isForceSplittingRef.current = false;
+    }
+  }, [sessionId, currentSpeakerInfo, selectedLanguage, meetingStartTime, onLocalTranscript, onTimestampCorrection]);
+
+  /**
+   * 강제 분할 체크 및 실행
+   * 타이머에 의해 주기적으로 호출됩니다.
+   */
+  const checkAndForceSplit = useCallback(() => {
+    const buffer = partialBufferRef.current;
+    
+    // 버퍼가 비어있으면 스킵
+    if (!buffer.resultId || !buffer.text) {
+      return;
+    }
+
+    const now = Date.now();
+    const { shouldSplit, reason } = shouldForceSplit(buffer, selectedLanguage, now);
+
+    if (shouldSplit) {
+      console.log(`[ForceSplit] 🎯 Timer split: "${buffer.text.substring(0, 30)}..." (reason: ${reason}, splitCount: ${buffer.forceSplitCount})`);
+
+      // 표시 ID 생성 (첫 분할은 원본 ID로 기존 partial 업데이트, 후속은 연속 ID)
+      const forcedResultId = getDisplayId(buffer.resultId, buffer.forceSplitCount);
+
+      // 강제 분할 전송
+      sendForcedFinal({
+        resultId: forcedResultId,
+        transcript: buffer.text,
+        startTimeMs: buffer.startTimeMs,
+        endTimeMs: buffer.endTimeMs,
+      }, reason);
+
+      // 버퍼 초기화 (새로운 partial을 받을 준비)
+      // splitTextLength 업데이트: 현재까지 분할된 텍스트 길이 누적
+      const currentResultId = buffer.resultId;
+      const newSplitTextLength = buffer.splitTextLength + buffer.text.length;
+      
+      partialBufferRef.current = {
+        resultId: currentResultId,
+        text: '',
+        startTime: now,
+        lastUpdateTime: now,
+        startTimeMs: buffer.endTimeMs,
+        endTimeMs: buffer.endTimeMs,
+        forceSplitCount: buffer.forceSplitCount + 1,
+        splitTextLength: newSplitTextLength, // 분할된 텍스트 길이 누적
+      };
+    }
+  }, [selectedLanguage, sendForcedFinal]);
+
+  /**
+   * 강제 분할 타이머 시작
+   */
+  const startForceSplitTimer = useCallback(() => {
+    if (forceSplitTimerRef.current) {
+      clearInterval(forceSplitTimerRef.current);
+    }
+    
+    forceSplitTimerRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        checkAndForceSplit();
+      }
+    }, FORCE_SPLIT_CONFIG.CHECK_INTERVAL_MS);
+    
+    console.log('[ForceSplit] ⏱️ Timer started');
+  }, [checkAndForceSplit]);
+
+  /**
+   * 강제 분할 타이머 중지
+   */
+  const stopForceSplitTimer = useCallback(() => {
+    if (forceSplitTimerRef.current) {
+      clearInterval(forceSplitTimerRef.current);
+      forceSplitTimerRef.current = null;
+      console.log('[ForceSplit] ⏱️ Timer stopped');
+    }
+  }, []);
+
   // 트랜스크립션 결과 처리
   const handleTranscriptResult = useCallback((result: TranscriptResult) => {
+    const now = Date.now();
+    
+    // ==========================================
+    // 강제 분할을 위한 Partial 버퍼 관리
+    // ==========================================
+    if (result.isPartial) {
+      const buffer = partialBufferRef.current;
+      
+      // 새로운 resultId면 버퍼 초기화
+      if (buffer.resultId !== result.resultId) {
+        partialBufferRef.current = {
+          resultId: result.resultId,
+          text: result.transcript,
+          startTime: now,
+          lastUpdateTime: now,
+          startTimeMs: result.startTimeMs,
+          endTimeMs: result.endTimeMs,
+          forceSplitCount: 0,
+          splitTextLength: 0,
+        };
+        console.log(`[ForceSplit] 📝 New partial buffer: "${result.transcript.substring(0, 30)}..."`);
+      } else {
+        // 같은 resultId - 이미 분할된 부분을 제외한 새 텍스트만 추출
+        // AWS Transcribe는 전체 텍스트를 계속 보내므로, 이미 처리된 부분 제외
+        const newText = result.transcript.substring(buffer.splitTextLength);
+        
+        // 새 텍스트가 없거나 너무 짧으면 UI 업데이트만 하고 분할 체크 스킵
+        if (newText.trim().length < 3) {
+          // UI에는 표시하되 분할 체크는 하지 않음
+          partialBufferRef.current = {
+            ...buffer,
+            lastUpdateTime: now,
+            endTimeMs: result.endTimeMs,
+          };
+          // 기존 로직으로 진행 (UI 표시용)
+        } else {
+          partialBufferRef.current = {
+            ...buffer,
+            text: newText,
+            lastUpdateTime: now,
+            endTimeMs: result.endTimeMs,
+          };
+          
+          // 즉시 분할 체크 (새 텍스트에 대해서만)
+          const { shouldSplit, reason } = shouldForceSplit(partialBufferRef.current, selectedLanguage, now);
+          if (shouldSplit) {
+            const analysis = analyzeSentence(newText, selectedLanguage);
+            // 높은 신뢰도의 문장 완료일 때만 즉시 분할
+            if (analysis.isComplete && analysis.confidence >= FORCE_SPLIT_CONFIG.SENTENCE_CONFIDENCE_THRESHOLD) {
+              console.log(`[ForceSplit] 🎯 Immediate split: "${newText.substring(0, 30)}..." (reason: ${reason}, splitCount: ${buffer.forceSplitCount})`);
+
+              // 표시 ID 생성 (첫 분할은 원본 ID로 기존 partial 업데이트, 후속은 연속 ID)
+              const forcedResultId = getDisplayId(result.resultId, buffer.forceSplitCount);
+              sendForcedFinal({
+                resultId: forcedResultId,
+                transcript: newText,
+                startTimeMs: buffer.startTimeMs,
+                endTimeMs: result.endTimeMs,
+              }, reason);
+              
+              // 버퍼 업데이트: 분할된 텍스트 길이 기록
+              partialBufferRef.current = {
+                resultId: result.resultId,
+                text: '',
+                startTime: now,
+                lastUpdateTime: now,
+                startTimeMs: result.endTimeMs,
+                endTimeMs: result.endTimeMs,
+                forceSplitCount: buffer.forceSplitCount + 1,
+                splitTextLength: result.transcript.length, // 전체 텍스트 길이 기록
+              };
+              
+              // partial이 강제 분할되었으므로 이번 결과는 UI에 표시하지 않음
+              return;
+            }
+          }
+        }
+      }
+    } else {
+      // Final 결과 수신
+      const buffer = partialBufferRef.current;
+
+      // 강제 분할 정보 저장 (버퍼 초기화 전에 저장)
+      const hadForceSplit = buffer.resultId === result.resultId && buffer.splitTextLength > 0;
+      const savedForceSplitCount = hadForceSplit ? buffer.forceSplitCount : 0;
+
+      // 이미 강제 분할로 처리된 텍스트가 있는지 체크
+      if (hadForceSplit) {
+        // 강제 분할 후 남은 새 텍스트만 처리
+        const remainingText = result.transcript.substring(buffer.splitTextLength);
+
+        if (remainingText.trim().length < 3) {
+          console.log(`[ForceSplit] 📋 Final received, but already fully split (${buffer.forceSplitCount} splits)`);
+          // 버퍼 초기화하고 종료 (중복 방지)
+          partialBufferRef.current = {
+            resultId: '',
+            text: '',
+            startTime: 0,
+            lastUpdateTime: 0,
+            startTimeMs: 0,
+            endTimeMs: 0,
+            forceSplitCount: 0,
+            splitTextLength: 0,
+          };
+          return;
+        }
+
+        console.log(`[ForceSplit] 📋 Final with remainder: "${remainingText.substring(0, 30)}..." (will use cont-${savedForceSplitCount})`);
+        // 남은 텍스트로 result 수정하여 계속 처리
+        // resultId도 연속 ID로 변경하여 기존 강제 분할과 충돌 방지
+        result = {
+          ...result,
+          resultId: getDisplayId(result.resultId, savedForceSplitCount),
+          transcript: remainingText,
+        };
+      }
+
+      // 버퍼 완전 초기화
+      partialBufferRef.current = {
+        resultId: '',
+        text: '',
+        startTime: 0,
+        lastUpdateTime: 0,
+        startTimeMs: 0,
+        endTimeMs: 0,
+        forceSplitCount: 0,
+        splitTextLength: 0,
+      };
+    }
+
+    // ==========================================
+    // 기존 로직: attendeeId 검증
+    // ==========================================
     // attendeeId가 유효하지 않으면 로그만 남기고 계속 진행
     // (백엔드에서 참가자 조회 실패해도 트랜스크립트는 저장/브로드캐스트됨)
     if (!currentSpeakerInfo.attendeeId || currentSpeakerInfo.attendeeId === 'local-user') {
       console.warn('[BrowserTranscription] attendeeId not set, using fallback:', currentSpeakerInfo.attendeeId);
     }
 
-    // 임시 타임스탬프 (서버에서 보정됨)
-    const elapsedMs = meetingStartTime
-      ? Date.now() - meetingStartTime
-      : result.startTimeMs;
+    // 표시용 ID 및 텍스트 결정
+    // - partial이고 이미 강제 분할이 발생한 경우: 연속 ID 사용 및 새 텍스트만 표시
+    // - final이거나 첫 번째 partial: 원본 ID와 전체 텍스트 사용
+    const buffer = partialBufferRef.current;
+    const hasForceSplit = buffer.forceSplitCount > 0 && buffer.resultId === result.resultId;
+
+    const displayId = result.isPartial && hasForceSplit
+      ? getDisplayId(result.resultId, buffer.forceSplitCount)
+      : result.resultId;
+
+    // 분할 후 partial인 경우 새 텍스트만 표시 (이미 분할된 부분 제외)
+    const displayText = result.isPartial && hasForceSplit
+      ? result.transcript.substring(buffer.splitTextLength)
+      : result.transcript;
+
+    // 표시할 텍스트가 없으면 UI 업데이트 스킵 (빈 partial 방지)
+    if (!displayText.trim()) {
+      return;
+    }
+
+    // 타임스탬프 계산 (sendForcedFinal과 동일한 방식 사용하여 일관성 보장)
+    // 강제 분할 후 Partial은 버퍼의 startTimeMs 사용 (이전 분할의 endTimeMs)
+    // 그렇지 않으면 AWS의 startTimeMs 사용
+    const timestampBaseMs = hasForceSplit ? buffer.startTimeMs : result.startTimeMs;
+    const elapsedMs = sessionStartTimeRef.current && meetingStartTime
+      ? (sessionStartTimeRef.current + timestampBaseMs) - meetingStartTime
+      : timestampBaseMs;
 
     const newItem: TranscriptItem = {
-      id: result.resultId,
+      id: displayId,
       speakerName: currentSpeakerInfo.name,
       speakerId: currentSpeakerInfo.attendeeId,
       speakerProfileImage: currentSpeakerInfo.profileImage,
-      text: result.transcript,
+      text: displayText,
       timestamp: elapsedMs > 0 ? elapsedMs : 0,
       isPartial: result.isPartial,
       attendeeId: currentSpeakerInfo.attendeeId,
@@ -329,9 +994,12 @@ export function useBrowserTranscription({
         if (existingIndex >= 0) {
           const updated = [...prev];
           updated[existingIndex] = newItem;
-          return updated;
+          // 항상 정렬 (강제 분할 시 순서 보장)
+          return sortTranscripts(updated);
         }
-        return [...prev, newItem];
+        // 새로 추가 후 항상 정렬
+        const result = [...prev, newItem];
+        return sortTranscripts(result);
       });
     }
 
@@ -431,7 +1099,7 @@ export function useBrowserTranscription({
     if (transcriptContainerRef.current) {
       transcriptContainerRef.current.scrollTop = transcriptContainerRef.current.scrollHeight;
     }
-  }, [meetingStartTime, sessionId, selectedLanguage, currentSpeakerInfo, onLocalTranscript, onTimestampCorrection]);
+  }, [meetingStartTime, sessionId, selectedLanguage, currentSpeakerInfo, onLocalTranscript, onTimestampCorrection, sendForcedFinal]);
 
   // 트랜스크립션 시작
   const startTranscription = useCallback(async () => {
@@ -464,6 +1132,9 @@ export function useBrowserTranscription({
           sessionStartTimeRef.current = Date.now();
           lastSuccessfulConnectionRef.current = Date.now();
           reconnectAttemptsRef.current = 0; // 연결 성공 시 즉시 리셋
+          
+          // 강제 분할 타이머 시작
+          startForceSplitTimer();
 
           // 무음 감지 타이머 시작
           if (silenceTimerRef.current) {
@@ -566,7 +1237,7 @@ export function useBrowserTranscription({
       setError(err instanceof Error ? err : new Error(String(err)));
       setSessionState('error');
     }
-  }, [enabled, sessionId, sessionState, selectedLanguage, getPresignedUrl, getMicrophoneStream, handleTranscriptResult]);
+  }, [enabled, sessionId, sessionState, selectedLanguage, getPresignedUrl, getMicrophoneStream, handleTranscriptResult, startForceSplitTimer]);
 
   // 트랜스크립션 중지
   const stopTranscription = useCallback(() => {
@@ -584,6 +1255,21 @@ export function useBrowserTranscription({
       clientRef.current = null;
     }
 
+    // 강제 분할 타이머 정리
+    stopForceSplitTimer();
+    
+    // Partial 버퍼 초기화
+    partialBufferRef.current = {
+      resultId: '',
+      text: '',
+      startTime: 0,
+      lastUpdateTime: 0,
+      startTimeMs: 0,
+      endTimeMs: 0,
+      forceSplitCount: 0,
+      splitTextLength: 0,
+    };
+
     // 타이머 정리 (에러 발생해도 계속 진행)
     try {
       if (silenceTimerRef.current) {
@@ -598,7 +1284,7 @@ export function useBrowserTranscription({
     setSessionState('idle');
     setSilenceSeconds(0);
     setIsSpeaking(false);
-  }, []);
+  }, [stopForceSplitTimer]);
 
   // 언어 변경
   const setSelectedLanguage = useCallback(async (languageCode: string) => {
@@ -820,15 +1506,17 @@ export function useBrowserTranscription({
 
   // enabled 변경, 언뮤트, 또는 룸 참가 완료 시 자동 시작/중지
   useEffect(() => {
-    console.log('[BrowserTranscription] Auto-start effect running:', {
-      isMuted,
-      isRoomJoined,
-      enabled,
-      sessionId: !!sessionId,
-      hasAudioVideo: !!meetingManager.audioVideo,
-      sessionState,
-      autoStartTriggered: autoStartTriggeredRef.current,
-    });
+    // idle 상태일 때만 상세 로그 출력 (상태 변경 시 중복 로그 방지)
+    if (sessionState === 'idle') {
+      console.log('[BrowserTranscription] Auto-start effect (idle):', {
+        isMuted,
+        isRoomJoined,
+        enabled,
+        sessionId: !!sessionId,
+        hasAudioVideo: !!meetingManager.audioVideo,
+        autoStartTriggered: autoStartTriggeredRef.current,
+      });
+    }
 
     // 1. 먼저 중지 조건 체크 (비활성화 시 스트리밍 중지)
     if (!enabled && sessionState === 'streaming') {
@@ -893,17 +1581,18 @@ export function useBrowserTranscription({
       });
     }
 
-    // Cleanup: 의존성 변경 시 타이머 취소 및 플래그 리셋
+    // Cleanup: 의존성 변경 시 타이머만 취소 (플래그는 유지)
+    // autoStartTriggeredRef는 sessionState가 idle이 될 때만 리셋됨
     return () => {
       if (autoStartTimerRef.current) {
         console.log('[BrowserTranscription] Cleanup: cancelling pending auto-start timer');
         clearTimeout(autoStartTimerRef.current);
         autoStartTimerRef.current = null;
-        // 타이머가 취소되면 다음 effect 실행에서 다시 시작할 수 있도록 리셋
-        autoStartTriggeredRef.current = false;
+        // 주의: 여기서 autoStartTriggeredRef를 리셋하지 않음
+        // - sessionState가 idle이 아닌 상태에서 리셋하면 중복 시작 발생 가능
+        // - sessionState === 'idle' effect에서 안전하게 리셋됨
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- startTranscription은 ref로 관리됨
   }, [enabled, sessionId, meetingManager.audioVideo, sessionState, isMuted, isRoomJoined, stopTranscription]);
 
   // sessionState가 idle로 리셋되면 autoStartTriggered도 리셋
@@ -950,6 +1639,12 @@ export function useBrowserTranscription({
         autoStartTimerRef.current = null;
       }
       autoStartTriggeredRef.current = false;
+
+      // 강제 분할 타이머 정리
+      if (forceSplitTimerRef.current) {
+        clearInterval(forceSplitTimerRef.current);
+        forceSplitTimerRef.current = null;
+      }
 
       // 상태 리셋 플래그
       hasLoadedHistoryRef.current = false;

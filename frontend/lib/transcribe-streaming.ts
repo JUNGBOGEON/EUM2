@@ -374,6 +374,15 @@ registerProcessor('pcm-processor', PCMProcessor);
           // 너무 자주 찍히지 않도록 로그 조정 가능
           // console.log(`[TranscribeStreaming] Audio level ...`);
         }
+        rms = Math.sqrt(rms / inputData.length);
+
+        // 오디오 레벨이 너무 낮으면 경고
+        if (rms < 0.001) {
+          console.warn(`[TranscribeStreaming] ⚠️ Audio level very low - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)} - 마이크가 제대로 작동하는지 확인하세요`);
+        } else {
+          console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+        }
+      }
 
         // 다운샘플링
         const downsampledData = downsampleBuffer(

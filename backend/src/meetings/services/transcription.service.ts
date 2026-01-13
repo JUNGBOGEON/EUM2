@@ -22,6 +22,7 @@ import { ChimeService } from './chime.service';
 import { TranslationService } from './translation.service';
 import { TranscriptionBufferService } from './transcription-buffer.service';
 import { TranscriptionQueryService } from './transcription-query.service';
+import { TextChunkingService } from './text-chunking.service';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
 import { CACHE_TTL } from '../../common/constants';
 
@@ -46,6 +47,7 @@ export class TranscriptionService {
     private workspaceGateway: WorkspaceGateway,
     private transcriptionBufferService: TranscriptionBufferService,
     private transcriptionQueryService: TranscriptionQueryService,
+    private textChunkingService: TextChunkingService,
   ) {}
 
   // ==========================================
@@ -242,65 +244,129 @@ export class TranscriptionService {
       }
     }
 
-    // 모든 세션 참가자에게 트랜스크립트 브로드캐스트 (실시간 동기화)
-    // Partial 트랜스크립트도 브로드캐스트하여 실시간 타이핑 효과 제공
-    this.workspaceGateway.broadcastNewTranscript(sessionId, {
-      type: 'new_transcript',
-      resultId: dto.resultId,
-      sessionId,
-      speakerId: dto.attendeeId,
-      speakerUserId: participant?.userId || '',
-      speakerName: participant?.user?.name || '참가자',
-      speakerProfileImage: participant?.user?.profileImage,
-      text: dto.transcript,
-      timestamp: serverTimestamp, // 서버 계산 타임스탬프
-      isPartial: dto.isPartial,
-      languageCode: dto.languageCode || 'ko-KR',
-    });
-
-    // Partial 결과는 버퍼에 저장하지 않음
+    // Partial 트랜스크립트는 청킹 없이 그대로 브로드캐스트 (실시간 타이핑 효과)
     if (dto.isPartial) {
+      this.workspaceGateway.broadcastNewTranscript(sessionId, {
+        type: 'new_transcript',
+        resultId: dto.resultId,
+        sessionId,
+        speakerId: dto.attendeeId,
+        speakerUserId: participant?.userId || '',
+        speakerName: participant?.user?.name || '참가자',
+        speakerProfileImage: participant?.user?.profileImage,
+        text: dto.transcript,
+        timestamp: serverTimestamp,
+        isPartial: dto.isPartial,
+        languageCode: dto.languageCode || 'ko-KR',
+      });
       return { buffered: false, bufferSize: 0, serverTimestamp };
     }
 
-    const bufferSize = await this.redisService.addTranscriptionToBuffer(
-      sessionId,
-      {
-        resultId: dto.resultId,
-        isPartial: dto.isPartial,
-        transcript: dto.transcript,
-        attendeeId: dto.attendeeId,
-        externalUserId: dto.externalUserId,
-        startTimeMs: dto.startTimeMs,
-        endTimeMs: dto.endTimeMs,
-        languageCode: dto.languageCode,
-        confidence: dto.confidence,
-        isStable: dto.isStable,
-        // 발화자 정보 추가 (히스토리 조회 시 사용)
-        userId: participant?.userId,
-        speakerName: participant?.user?.name || '참가자',
-      },
+    // 최종 결과에 대해 청킹 처리 (화면 표시 + 번역 모두 적용)
+    const chunks = this.textChunkingService.chunkText(
+      dto.transcript,
+      dto.languageCode || 'ko-KR',
     );
 
-    // 최종 결과에 대해 번역 트리거 (비동기)
-    // session과 participant를 전달하여 중복 쿼리 방지
-    this.triggerTranslation(sessionId, dto, session, participant).catch(
-      (err) => {
-        this.logger.warn(`Translation trigger failed: ${err.message}`);
-      },
+    if (chunks.length > 1) {
+      this.logger.log(
+        `[saveTranscription] 📝 Text chunked into ${chunks.length} parts for display`,
+      );
+    }
+
+    // 각 청크에 대해 개별 처리
+    const chunkDuration = Math.floor(
+      (dto.endTimeMs - dto.startTimeMs) / chunks.length,
     );
+    let totalBufferSize = 0;
+    let flushed = false;
+
+    for (const chunk of chunks) {
+      const chunkResultId =
+        chunks.length > 1
+          ? `${dto.resultId}-chunk-${chunk.index}`
+          : dto.resultId;
+      const chunkTimestamp = serverTimestamp + chunk.index * chunkDuration;
+      const chunkStartTimeMs = dto.startTimeMs + chunk.index * chunkDuration;
+      const chunkEndTimeMs = chunk.isLast
+        ? dto.endTimeMs
+        : dto.startTimeMs + (chunk.index + 1) * chunkDuration;
+
+      // 청크 브로드캐스트 (화면 표시용)
+      this.workspaceGateway.broadcastNewTranscript(sessionId, {
+        type: 'new_transcript',
+        resultId: chunkResultId,
+        sessionId,
+        speakerId: dto.attendeeId,
+        speakerUserId: participant?.userId || '',
+        speakerName: participant?.user?.name || '참가자',
+        speakerProfileImage: participant?.user?.profileImage,
+        text: chunk.text,
+        timestamp: chunkTimestamp,
+        isPartial: false,
+        languageCode: dto.languageCode || 'ko-KR',
+      });
+
+      // 청크를 버퍼에 저장
+      const bufferSize = await this.redisService.addTranscriptionToBuffer(
+        sessionId,
+        {
+          resultId: chunkResultId,
+          isPartial: false,
+          transcript: chunk.text,
+          attendeeId: dto.attendeeId,
+          externalUserId: dto.externalUserId,
+          startTimeMs: chunkStartTimeMs,
+          endTimeMs: chunkEndTimeMs,
+          languageCode: dto.languageCode,
+          confidence: dto.confidence,
+          isStable: dto.isStable,
+          userId: participant?.userId,
+          speakerName: participant?.user?.name || '참가자',
+        },
+      );
+      totalBufferSize = bufferSize;
+
+      // 각 청크에 대해 번역 트리거 (비동기, 이미 청킹됨)
+      this.triggerTranslationForChunk(
+        sessionId,
+        {
+          ...dto,
+          resultId: chunkResultId,
+          transcript: chunk.text,
+          startTimeMs: chunkStartTimeMs,
+          endTimeMs: chunkEndTimeMs,
+        },
+        session,
+        participant,
+      ).catch((err) => {
+        this.logger.warn(
+          `Translation trigger failed for chunk: ${err.message}`,
+        );
+      });
+
+      // 청크 사이에 약간의 딜레이 (순차적 표시 + 번역 문맥 업데이트)
+      if (!chunk.isLast) {
+        await this.delay(50);
+      }
+    }
 
     const shouldFlush = await this.transcriptionBufferService.shouldAutoFlush(
       sessionId,
-      bufferSize,
+      totalBufferSize,
     );
 
     if (shouldFlush) {
       await this.transcriptionBufferService.flushTranscriptionBuffer(sessionId);
-      return { buffered: true, bufferSize: 0, flushed: true, serverTimestamp };
+      flushed = true;
     }
 
-    return { buffered: true, bufferSize, serverTimestamp };
+    return {
+      buffered: true,
+      bufferSize: totalBufferSize,
+      flushed,
+      serverTimestamp,
+    };
   }
 
   /**
@@ -363,21 +429,103 @@ export class TranscriptionService {
       );
     }
 
-    this.logger.log(
-      `[Translation Trigger] ➡️ Calling processTranslation with sourceLanguage=${sourceLanguage}`,
+    // 긴 텍스트 청킹 처리
+    const chunks = this.textChunkingService.chunkText(
+      dto.transcript,
+      sourceLanguage,
     );
 
-    // 번역 요청 생성
+    if (chunks.length > 1) {
+      this.logger.log(
+        `[Translation Trigger] 📝 Text chunked into ${chunks.length} parts`,
+      );
+    }
+
+    // 각 청크에 대해 번역 요청 (순차 처리로 문맥 유지)
+    const baseTimestamp = dto.startTimeMs - sessionStartMs;
+    const chunkDuration = Math.floor(
+      (dto.endTimeMs - dto.startTimeMs) / chunks.length,
+    );
+
+    for (const chunk of chunks) {
+      this.logger.log(
+        `[Translation Trigger] ➡️ Processing chunk ${chunk.index + 1}/${chunks.length}: "${chunk.text.substring(0, 30)}..."`,
+      );
+
+      // 번역 요청 생성
+      await this.translationService.processTranslation({
+        sessionId,
+        speakerUserId: participant.userId,
+        speakerAttendeeId: dto.attendeeId,
+        speakerName: participant.user?.name || '참가자',
+        originalText: chunk.text,
+        sourceLanguage, // 자동 감지된 언어 또는 개인 설정
+        resultId: `${dto.resultId}-${chunk.index}`, // 청크별 고유 ID
+        timestamp: baseTimestamp + chunk.index * chunkDuration,
+      });
+
+      // 청크 사이에 약간의 딜레이 (문맥 인식 번역이 문맥을 업데이트할 시간)
+      if (!chunk.isLast) {
+        await this.delay(100);
+      }
+    }
+  }
+
+  /**
+   * 이미 청킹된 텍스트에 대해 번역을 트리거합니다.
+   * saveTranscription에서 청킹된 각 조각에 대해 호출됩니다.
+   */
+  private async triggerTranslationForChunk(
+    sessionId: string,
+    dto: SaveTranscriptionDto,
+    session: MeetingSession,
+    participant: SessionParticipant | null,
+  ): Promise<void> {
+    if (!participant) {
+      this.logger.warn(
+        `[Translation Chunk] ⚠️ Participant not found for attendeeId: ${dto.attendeeId}`,
+      );
+      return;
+    }
+
+    // 세션 시작 시간 계산
+    let sessionStartMs: number;
+    if (session.startedAt) {
+      sessionStartMs =
+        typeof session.startedAt === 'string'
+          ? new Date(session.startedAt).getTime()
+          : session.startedAt.getTime();
+    } else {
+      sessionStartMs = Date.now();
+    }
+
+    // 소스 언어 결정
+    let sourceLanguage = dto.languageCode;
+    if (!sourceLanguage) {
+      sourceLanguage = await this.translationService.getUserLanguage(
+        sessionId,
+        participant.userId,
+      );
+    }
+
+    // 번역 요청 (이미 청킹된 텍스트이므로 재청킹 불필요)
     await this.translationService.processTranslation({
       sessionId,
       speakerUserId: participant.userId,
       speakerAttendeeId: dto.attendeeId,
       speakerName: participant.user?.name || '참가자',
       originalText: dto.transcript,
-      sourceLanguage, // 자동 감지된 언어 또는 개인 설정
+      sourceLanguage,
       resultId: dto.resultId,
       timestamp: dto.startTimeMs - sessionStartMs,
     });
+  }
+
+  /**
+   * 비동기 딜레이 유틸리티
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async saveTranscriptionBatch(dto: SaveTranscriptionBatchDto): Promise<{

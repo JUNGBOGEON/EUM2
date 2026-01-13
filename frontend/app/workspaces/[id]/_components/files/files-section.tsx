@@ -44,6 +44,9 @@ const splitFilename = (filename: string) => {
   };
 };
 
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function FilesSection({
   files,
   isLoading,
@@ -57,6 +60,7 @@ export function FilesSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useLanguage();
 
   // Dialog states
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -151,19 +155,11 @@ export function FilesSection({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Folder className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">파일</h2>
+            <h2 className="text-lg font-semibold">{t('files.title')}</h2>
           </div>
         </div>
         <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-border">
-              <Skeleton className="h-10 w-10 rounded-xl" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-[200px]" />
-                <Skeleton className="h-3 w-[100px]" />
-              </div>
-            </div>
-          ))}
+// ...
         </div>
       </div>
     );
@@ -176,7 +172,7 @@ export function FilesSection({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Folder className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">파일</h2>
+            <h2 className="text-lg font-semibold">{t('files.title')}</h2>
             <Badge variant="secondary">{files.length}개</Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -192,7 +188,7 @@ export function FilesSection({
                   </Toggle>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {viewMode === 'grid' ? '리스트 보기' : '그리드 보기'}
+                  {viewMode === 'grid' ? t('files.view_list') : t('files.view_grid')}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -204,12 +200,12 @@ export function FilesSection({
               {isUploading ? (
                 <>
                   <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
-                  업로드 중...
+                  {t('files.uploading')}
                 </>
               ) : (
                 <>
                   <Upload className="h-4 w-4 mr-2" />
-                  업로드
+                  {t('files.upload')}
                 </>
               )}
             </Button>
@@ -229,7 +225,7 @@ export function FilesSection({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="파일 검색..."
+            placeholder={t('files.search_placeholder')}
             className="pl-9"
           />
         </div>
@@ -239,14 +235,14 @@ export function FilesSection({
           <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-border rounded-xl">
             <Folder className="h-12 w-12 text-muted-foreground mb-3" />
             <p className="text-muted-foreground text-lg">
-              아직 업로드된 파일이 없습니다
+              {t('files.empty')}
             </p>
             <Button
               variant="link"
               className="mt-2"
               onClick={handleUploadClick}
             >
-              파일 업로드하기
+              {t('files.upload_btn')}
             </Button>
           </div>
         ) : filteredFiles.length === 0 ? (

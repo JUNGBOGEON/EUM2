@@ -24,22 +24,12 @@ interface SessionDetailModalProps {
   onClose: () => void;
 }
 
-const formatDuration = (start: string, end?: string) => {
-  if (!end) return '-';
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const diff = endDate.getTime() - startDate.getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(minutes / 60);
-  if (hours > 0) {
-    return `${hours}시간 ${minutes % 60}분`;
-  }
-  return `${minutes}분`;
-};
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
 
-const formatFullDate = (dateStr: string) => {
+const formatFullDate = (dateStr: string, locale: string = 'ko-KR') => {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('ko-KR', {
+  return date.toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -51,6 +41,34 @@ const formatFullDate = (dateStr: string) => {
 
 export function SessionDetailModal({ session, onClose }: SessionDetailModalProps) {
   const [isFullViewOpen, setIsFullViewOpen] = useState(false);
+  const { language, t } = useLanguage();
+
+  // Map language code to locale for date formatting
+  const getLocale = (lang: string) => {
+    switch (lang) {
+      case 'en': return 'en-US';
+      case 'ja': return 'ja-JP';
+      case 'zh-CN': return 'zh-CN';
+      default: return 'ko-KR';
+    }
+  };
+
+  const formatDuration = (start: string, end?: string) => {
+    if (!end) return '-';
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diff = endDate.getTime() - startDate.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return t('summary.duration_hours')
+        .replace('{hours}', hours.toString())
+        .replace('{minutes}', (minutes % 60).toString());
+    }
+    return t('summary.duration_minutes')
+      .replace('{minutes}', minutes.toString());
+  };
 
   const {
     sessionDetail,
@@ -72,11 +90,11 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
           <div className="p-6 border-b border-border flex-shrink-0">
             <DialogHeader className="space-y-1">
               <DialogTitle className="text-xl">
-                {session.title || '제목 없는 회의'}
+                {session.title || t('meeting.enter_title')}
               </DialogTitle>
               <DialogDescription className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4" />
-                {formatFullDate(session.startedAt)}
+                {formatFullDate(session.startedAt, getLocale(language))}
               </DialogDescription>
             </DialogHeader>
 
@@ -91,28 +109,28 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
-                  {sessionDetail?.participants?.length || session.participantCount || 1}명 참가
+                  {sessionDetail?.participants?.length || session.participantCount || 1}{t('sidebar.members')}
                 </span>
               </div>
               {summaryData?.status === 'completed' && (
                 <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-none">
-                  요약 완료
+                  {t('summary.completed')}
                 </Badge>
               )}
               {(summaryData?.status === 'pending' || summaryData?.status === 'processing') && (
                 <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  요약 생성 중
+                  {t('summary.creating')}
                 </Badge>
               )}
               {summaryData?.status === 'failed' && (
                 <Badge variant="secondary" className="bg-red-500/10 text-red-600 border-none">
-                  요약 실패
+                  {t('summary.failed')}
                 </Badge>
               )}
               {transcripts.length > 0 && (
                 <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
-                  자막 {transcripts.length}개
+                  {t('history.title')} {transcripts.length}
                 </Badge>
               )}
             </div>
@@ -123,8 +141,8 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
             <Tabs defaultValue="summary" className="h-full flex flex-col">
               <div className="px-6 pt-4 flex-shrink-0">
                 <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="summary">회의 요약</TabsTrigger>
-                  <TabsTrigger value="transcript">전체 내용</TabsTrigger>
+                  <TabsTrigger value="summary">{t('meeting.title')}</TabsTrigger>
+                  <TabsTrigger value="transcript">{t('summary.full_content')}</TabsTrigger>
                 </TabsList>
               </div>
 
@@ -157,7 +175,7 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1">
                 <Download className="h-4 w-4 mr-2" />
-                다운로드
+                {t('summary.download')}
               </Button>
               <Button
                 className="flex-1"
@@ -165,7 +183,7 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
                 disabled={!summaryData?.structuredSummary}
               >
                 <Eye className="h-4 w-4 mr-2" />
-                전체 보기
+                {t('summary.view_all')}
               </Button>
             </div>
           </div>

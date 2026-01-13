@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/eventstream-codec": "^3.370.0",
+    "@pixi/graphics-extras": "^7.4.3",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-context-menu": "^2.2.16",

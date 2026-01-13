@@ -1,7 +1,9 @@
 'use client';
 
 import { memo, useState, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { useWhiteboardStore, WhiteboardTool } from './store';
+import { getProxiedUrl } from './utils/urlUtils';
 import { PEN_COLORS, TOOL_SETTINGS } from './constants';
 import { StorageModal } from './StorageModal';
 
@@ -11,6 +13,8 @@ interface WhiteboardToolbarProps {
     onClear: () => void;
     onMouseEnter?: () => void;
     onMouseLeave?: () => void;
+    isSettingsOpen: boolean;
+    onSettingsOpenChange: (isOpen: boolean) => void;
 }
 
 function WhiteboardToolbarComponent({
@@ -19,6 +23,8 @@ function WhiteboardToolbarComponent({
     onClear,
     onMouseEnter,
     onMouseLeave,
+    isSettingsOpen,
+    onSettingsOpenChange,
 }: WhiteboardToolbarProps) {
     const {
         tool,
@@ -42,64 +48,111 @@ function WhiteboardToolbarComponent({
         fileInputRef.current?.click();
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const params = useParams(); // Need useParams to get workspaceId
+    const workspaceId = params?.id as string;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            if (!ev.target?.result) return;
-            const dataUrl = ev.target.result as string;
+        let finalUrl: string | null = null;
 
-            const img = new Image();
-            img.onload = () => {
-                // Limit Max Size (e.g., 500px)
-                const MAX_SIZE = 500;
-                let w = img.width;
-                let h = img.height;
+        // 1. Try Uploading to Workspace Storage
+        if (workspaceId) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const uploadRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
 
-                if (w > MAX_SIZE || h > MAX_SIZE) {
-                    const ratio = w / h;
-                    if (w > h) {
-                        w = MAX_SIZE;
-                        h = MAX_SIZE / ratio;
-                    } else {
-                        h = MAX_SIZE;
-                        w = MAX_SIZE * ratio;
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    const uploadedFile = Array.isArray(uploadData) ? uploadData[0] : (uploadData.files?.[0] || uploadData);
+
+                    if (uploadedFile && uploadedFile.id) {
+                        // Get Presigned URL
+                        const urlRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files/${uploadedFile.id}/download`, {
+                            credentials: 'include'
+                        });
+                        if (urlRes.ok) {
+                            const urlData = await urlRes.json();
+                            finalUrl = urlData.presignedUrl;
+                        }
                     }
                 }
+            } catch (err) {
+                console.error("Upload failed, falling back to local", err);
+            }
+        }
 
-                setPendingImage({
-                    url: dataUrl,
-                    width: w,
-                    height: h,
-                    file: file
-                });
-                setTool('image');
-                setShowToolSettings(false);
+        // 2. Setup Pending Image (Fallback to Data URL if upload failed/skipped)
+        if (!finalUrl) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                if (!ev.target?.result) return;
+                const dataUrl = ev.target.result as string;
+                setupPendingImage(dataUrl, file);
             };
-            img.src = dataUrl;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        } else {
+            setupPendingImage(finalUrl, file);
+        }
+
         e.target.value = ''; // Reset
     };
 
+    const setupPendingImage = (url: string, file: File) => {
+        const img = new Image();
+        img.onload = () => {
+            // Limit Max Size
+            const MAX_SIZE = 500;
+            let w = img.width;
+            let h = img.height;
+
+            if (w > MAX_SIZE || h > MAX_SIZE) {
+                const ratio = w / h;
+                if (w > h) {
+                    w = MAX_SIZE;
+                    h = MAX_SIZE / ratio;
+                } else {
+                    h = MAX_SIZE;
+                    w = MAX_SIZE * ratio;
+                }
+            }
+
+            setPendingImage({
+                url: url,
+                width: w,
+                height: h,
+                file: file
+            });
+            setTool('image');
+            onSettingsOpenChange(false);
+        };
+        img.crossOrigin = "anonymous";
+        // Use proxy for loading to avoid CORS issues
+        img.src = getProxiedUrl(url);
+    };
+
     const [isToolbarOpen, setIsToolbarOpen] = useState(true);
-    const [showToolSettings, setShowToolSettings] = useState(false);
     const [showImageMenu, setShowImageMenu] = useState(false);
     const [showStorageModal, setShowStorageModal] = useState(false);
 
     const handleToolClick = (t: WhiteboardTool) => {
         if (t === 'pen' || t === 'eraser' || t === 'magic-pen') {
             if (tool === t) {
-                setShowToolSettings(!showToolSettings);
+                onSettingsOpenChange(!isSettingsOpen);
             } else {
                 setTool(t);
-                setShowToolSettings(true);
+                onSettingsOpenChange(true);
             }
         } else {
             setTool(t);
-            setShowToolSettings(false);
+            onSettingsOpenChange(false);
         }
     };
 
@@ -109,6 +162,7 @@ function WhiteboardToolbarComponent({
             <div
                 onMouseEnter={onMouseEnter}
                 onMouseLeave={onMouseLeave}
+                onPointerDown={(e) => e.stopPropagation()}
                 className={`absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-all duration-500 ease-in-out ${isToolbarOpen ? 'translate-y-[-20px]' : 'translate-y-[calc(100%-32px)]'
                     }`}
             >
@@ -132,7 +186,7 @@ function WhiteboardToolbarComponent({
                 {/* Toolbar & Settings Panel */}
                 <div className="flex flex-col items-center gap-4 p-4 pt-0 bg-transparent">
                     {/* Tool Settings Popup */}
-                    {showToolSettings && (
+                    {isSettingsOpen && (
                         <div className="bg-white/90 backdrop-blur-2xl rounded-[2rem] shadow-2xl p-6 border border-white/50 flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 mb-4 w-80 ring-1 ring-black/[0.03]">
                             {/* Size */}
                             <div className="flex items-center gap-3">

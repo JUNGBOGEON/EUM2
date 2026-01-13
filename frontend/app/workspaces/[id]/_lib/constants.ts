@@ -3,12 +3,12 @@ import { Video, FileText, History, Settings, Users, Calendar } from 'lucide-reac
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export const NAV_ITEMS = [
-  { icon: Video, label: '회의', id: 'meeting' },
-  { icon: Calendar, label: '일정', id: 'calendar' },
-  { icon: FileText, label: '파일', id: 'files' },
-  { icon: History, label: '히스토리', id: 'history' },
-  { icon: Users, label: '멤버', id: 'members' },
-  { icon: Settings, label: '설정', id: 'settings' },
+  { icon: Video, label: 'meeting.title', id: 'meeting' },
+  { icon: Calendar, label: 'calendar.title', id: 'calendar' },
+  { icon: FileText, label: 'files.title', id: 'files' },
+  { icon: History, label: 'history.title', id: 'history' },
+  { icon: Users, label: 'members.title', id: 'members' },
+  { icon: Settings, label: 'menu.settings', id: 'settings' },
 ] as const;
 
 export type NavItemId = typeof NAV_ITEMS[number]['id'];

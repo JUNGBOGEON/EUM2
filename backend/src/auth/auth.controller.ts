@@ -11,12 +11,28 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  async googleAuth() {
+  async googleAuth(@Res() res: Response) {
     // Guard가 Google OAuth 페이지로 리다이렉트
+    console.log('DEBUG: googleAuth endpoint reached (Guard failed to redirect?)');
+
+    // If we are here, the Guard failed to redirect.
+    const clientId = this.configService.get('GOOGLE_CLIENT_ID');
+    const callbackUrl = this.configService.get('GOOGLE_CALLBACK_URL');
+
+    res.status(200).send(`
+      <h1>Login Error</h1>
+      <p>Google Auth Redirect Failed.</p>
+      <p>Debug Info:</p>
+      <ul>
+        <li>Client ID Present: ${clientId ? 'Yes' : 'No'}</li>
+        <li>Callback URL: ${callbackUrl}</li>
+      </ul>
+      <p>Check server logs.</p>
+    `);
   }
 
   @Get('google/callback')

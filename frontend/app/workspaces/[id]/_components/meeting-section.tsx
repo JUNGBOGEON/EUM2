@@ -16,6 +16,8 @@ interface MeetingSectionProps {
   isJoining: boolean;
 }
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function MeetingSection({
   activeSessions,
   onStartMeeting,
@@ -24,6 +26,7 @@ export function MeetingSection({
   isJoining,
 }: MeetingSectionProps) {
   const [meetingTitle, setMeetingTitle] = useState('');
+  const { t } = useLanguage();
 
   const handleStart = () => {
     onStartMeeting(meetingTitle.trim() || undefined);
@@ -41,10 +44,14 @@ export function MeetingSection({
     const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
     const hours = Math.floor(diff / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
+
     if (hours > 0) {
-      return `${hours}시간 ${minutes}분 진행 중`;
+      return t('meeting.duration_format')
+        .replace('{hours}', hours.toString())
+        .replace('{minutes}', minutes.toString());
     }
-    return `${minutes}분 진행 중`;
+    return t('meeting.duration_format_min')
+      .replace('{minutes}', minutes.toString());
   };
 
   return (
@@ -55,7 +62,7 @@ export function MeetingSection({
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <h3 className="text-sm font-medium text-muted-foreground">
-              진행 중인 회의 ({activeSessions.length}개)
+              {t('meeting.active_title')} ({activeSessions.length})
             </h3>
           </div>
 
@@ -77,23 +84,23 @@ export function MeetingSection({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-semibold text-foreground truncate">
-                          {session.title || '진행 중인 회의'}
+                          {session.title || t('meeting.active_title')}
                         </h4>
                         <Badge variant="secondary" className="bg-green-500/20 text-green-600 border-none flex-shrink-0">
-                          LIVE
+                          {t('meeting.live')}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <Users className="h-3.5 w-3.5" />
-                          {session.participantCount || 1}명
+                          {session.participantCount || 1}
                         </span>
                         <span className="text-border">•</span>
                         <span>{formatDuration(session.startedAt)}</span>
                         {session.host && (
                           <>
                             <span className="text-border">•</span>
-                            <span className="truncate">호스트: {session.host.name}</span>
+                            <span className="truncate">{t('sidebar.host')}: {session.host.name}</span>
                           </>
                         )}
                       </div>
@@ -107,11 +114,11 @@ export function MeetingSection({
                     {isJoining ? (
                       <>
                         <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                        참가 중...
+                        {t('meeting.participating')}
                       </>
                     ) : (
                       <>
-                        참가하기
+                        {t('meeting.join_btn')}
                         <ArrowRight className="h-4 w-4 ml-1.5" />
                       </>
                     )}
@@ -130,9 +137,9 @@ export function MeetingSection({
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">새 회의 시작</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t('meeting.start_new')}</h2>
             <p className="text-sm text-muted-foreground">
-              실시간 자막과 AI 회의록이 자동으로 생성됩니다
+              {t('meeting.start_desc')}
             </p>
           </div>
         </div>
@@ -142,7 +149,7 @@ export function MeetingSection({
             value={meetingTitle}
             onChange={(e) => setMeetingTitle(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="회의 제목을 입력하세요 (선택사항)"
+            placeholder={t('meeting.enter_title')}
             className="flex-1 h-12 text-base"
           />
           <Button
@@ -154,12 +161,12 @@ export function MeetingSection({
             {isStarting ? (
               <>
                 <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
-                시작 중...
+                {t('meeting.starting')}
               </>
             ) : (
               <>
                 <Play className="h-4 w-4 mr-2" />
-                회의 시작
+                {t('meeting.start_btn')}
               </>
             )}
           </Button>

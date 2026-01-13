@@ -20,15 +20,21 @@ interface DragState {
     initialLocalCenters?: Map<string, { x: number, y: number }>;
     isOBB?: boolean;
     rotationOffset?: number;
+    rotation?: number;
+    halfW?: number;
+    halfH?: number;
 }
 
-export function useWhiteboardInteraction(renderManager: RenderManager | null) {
-    const params = useParams();
-    const meetingId = params?.meetingId as string || 'default';
+export function useWhiteboardInteraction(
+    renderManager: RenderManager | null,
+    meetingId: string,
+    broadcastEvent?: (type: string, data: any) => void,
+    onContextMenu?: (state: { x: number, y: number } | null) => void
+) {
     const {
         tool, zoom, pan, selectedIds, items,
         selectItem, clearSelection, updateItem, pushHistory,
-        pendingImage, setPendingImage, setTool, addItem
+        pendingImage, setPendingImage, setTool, addItem, setSelectedIds
     } = useWhiteboardStore();
 
     // Stable state ref
@@ -39,7 +45,7 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
 
     const isDragging = useRef<DragState | null>(null);
 
-    const getLocalPoint = useCallback((e: PointerEvent) => {
+    const getLocalPoint = useCallback((e: PointerEvent | MouseEvent) => {
         if (!renderManager) return { x: 0, y: 0 };
         const rect = renderManager.app.canvas.getBoundingClientRect();
         const { pan: currentPan, zoom: currentZoom } = stateRef.current;
@@ -49,116 +55,290 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
         };
     }, [renderManager]);
 
-    const getGroupHandleAtPoint = useCallback((point: { x: number, y: number }) => {
-        const selectedIds = useWhiteboardStore.getState().selectedIds;
+    // Helper: Calculate Selection Bounds (OBB or AABB)
+    const getSelectionBounds = useCallback(() => {
+        const { selectedIds, items } = stateRef.current;
         if (selectedIds.size === 0) return null;
 
-        const { items } = useWhiteboardStore.getState();
-        const currentZoom = renderManager?.currentZoom || 1;
-        const resizeRadius = 8 / currentZoom;
-        const rotateOuterRadius = 24 / currentZoom;
-
-        // 1. Single Selection: OBB (Oriented Bounding Box)
+        // 1. Single Selection
         if (selectedIds.size === 1) {
             const id = Array.from(selectedIds)[0];
             const item = items.get(id);
-            if (item) {
-                const lBounds = renderManager!.getLocalBounds(item);
-                const sx = item.transform.scaleX || 1;
-                const sy = item.transform.scaleY || 1;
-                const rot = item.transform.rotation || 0;
+            if (!item || !renderManager) return null;
 
-                const halfW = (lBounds.width * sx) / 2;
-                const halfH = (lBounds.height * sy) / 2;
+            const lBounds = renderManager.getLocalBounds(item);
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const rot = item.transform.rotation || 0;
 
-                // World Center
-                const cx = lBounds.x + lBounds.width / 2;
-                const cy = lBounds.y + lBounds.height / 2;
-                const wcX = item.transform.x + cx;
-                const wcY = item.transform.y + cy;
+            // Half Dimensions
+            const halfW = (lBounds.width * sx) / 2;
+            const halfH = (lBounds.height * sy) / 2;
 
-                const cos = Math.cos(rot);
-                const sin = Math.sin(rot);
+            // World Center
+            const cx = lBounds.x + lBounds.width / 2;
+            const cy = lBounds.y + lBounds.height / 2;
+            const wcX = item.transform.x + cx;
+            const wcY = item.transform.y + cy;
 
-                const rotate = (x: number, y: number) => ({
-                    x: wcX + (x * cos - y * sin),
-                    y: wcY + (x * sin + y * cos)
-                });
-
-                const corners = {
-                    tl: { ...rotate(-halfW, -halfH), cursor: 'nwse-resize' },
-                    tr: { ...rotate(halfW, -halfH), cursor: 'nesw-resize' },
-                    bl: { ...rotate(-halfW, halfH), cursor: 'nesw-resize' },
-                    br: { ...rotate(halfW, halfH), cursor: 'nwse-resize' }
-                };
-
-                // Check distance
-                for (const [key, c] of Object.entries(corners)) {
-                    const dist = Math.sqrt(Math.pow(point.x - c.x, 2) + Math.pow(point.y - c.y, 2));
-                    if (dist <= resizeRadius) {
-                        return { handle: key, cursor: c.cursor, bounds: null, isOBB: true, item, center: { x: wcX, y: wcY }, halfW, halfH, rotation: rot };
-                    }
-                }
-
-                // Rotation Handle
-                // Top center extended
-                const topCenter = rotate(0, -halfH - (15 / currentZoom));
-                const dist = Math.sqrt(Math.pow(point.x - topCenter.x, 2) + Math.pow(point.y - topCenter.y, 2));
-                if (dist <= resizeRadius) {
-                    return { handle: 'rotate', cursor: 'alias', bounds: null, isOBB: true, item, center: { x: wcX, y: wcY }, halfW, halfH, rotation: rot };
-                }
-
-                return null;
-            }
+            return {
+                isOBB: true,
+                center: { x: wcX, y: wcY },
+                halfW,
+                halfH,
+                rotation: rot,
+                items: [item]
+            };
         }
 
-        // 2. Multi Selection: AABB (Axis Aligned)
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        // 2. Multi Selection
+        const selectedItems: any[] = [];
+        let commonRotation: number | null = null;
+        let isCommon = true;
 
         selectedIds.forEach(id => {
             const item = items.get(id);
             if (item) {
-                const lBounds = renderManager!.getLocalBounds(item);
-                const sx = item.transform.scaleX || 1;
-                const sy = item.transform.scaleY || 1;
-                const cx = lBounds.x + lBounds.width / 2;
-                const cy = lBounds.y + lBounds.height / 2;
-                const worldCenterX = item.transform.x + cx;
-                const worldCenterY = item.transform.y + cy;
-                const halfW = (lBounds.width * sx) / 2;
-                const halfH = (lBounds.height * sy) / 2;
-                const boundsX = worldCenterX - halfW;
-                const boundsY = worldCenterY - halfH;
-                const boundsW = lBounds.width * sx;
-                const boundsH = lBounds.height * sy;
-
-                if (boundsX < minX) minX = boundsX;
-                if (boundsY < minY) minY = boundsY;
-                if (boundsX + boundsW > maxX) maxX = boundsX + boundsW;
-                if (boundsY + boundsH > maxY) maxY = boundsY + boundsH;
+                selectedItems.push(item);
+                const rot = item.transform.rotation || 0;
+                if (commonRotation === null) {
+                    commonRotation = rot;
+                } else {
+                    let diff = Math.abs(commonRotation - rot) % (2 * Math.PI);
+                    diff = Math.min(diff, 2 * Math.PI - diff);
+                    if (diff > 0.1) isCommon = false;
+                }
             }
         });
 
-        if (minX === Infinity) return null;
+        if (selectedItems.length === 0 || !renderManager) return null;
 
-        const corners = {
-            tl: { x: minX, y: minY, cursor: 'nwse-resize' },
-            tr: { x: maxX, y: minY, cursor: 'nesw-resize' },
-            bl: { x: minX, y: maxY, cursor: 'nesw-resize' },
-            br: { x: maxX, y: maxY, cursor: 'nwse-resize' }
-        };
+        if (isCommon && commonRotation !== null) {
+            // OBB Group
+            const cos = Math.cos(-commonRotation);
+            const sin = Math.sin(-commonRotation);
+            let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
 
-        for (const [key, c] of Object.entries(corners)) {
-            const dist = Math.sqrt(Math.pow(point.x - c.x, 2) + Math.pow(point.y - c.y, 2));
-            if (dist <= resizeRadius) {
-                return { handle: key, cursor: c.cursor, bounds: { minX, minY, maxX, maxY } };
+            selectedItems.forEach(item => {
+                const b = renderManager.getLocalBounds(item);
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+                const cx = b.x + b.width / 2;
+                const cy = b.y + b.height / 2;
+                const wcX = t.x + cx;
+                const wcY = t.y + cy;
+                const hw = (b.width * (t.scaleX || 1)) / 2;
+                const hh = (b.height * (t.scaleY || 1)) / 2;
+
+                const u = wcX * cos - wcY * sin;
+                const v = wcX * sin + wcY * cos;
+
+                if (u - hw < minU) minU = u - hw;
+                if (u + hw > maxU) maxU = u + hw;
+                if (v - hh < minV) minV = v - hh;
+                if (v + hh > maxV) maxV = v + hh;
+            });
+
+            const w = maxU - minU;
+            const h = maxV - minV;
+            const centerU = minU + w / 2;
+            const centerV = minV + h / 2;
+
+            const rCos = Math.cos(commonRotation);
+            const rSin = Math.sin(commonRotation);
+            const wcX = centerU * rCos - centerV * rSin;
+            const wcY = centerU * rSin + centerV * rCos;
+
+            return {
+                isOBB: true,
+                center: { x: wcX, y: wcY },
+                halfW: w / 2,
+                halfH: h / 2,
+                rotation: commonRotation,
+                items: selectedItems
+            };
+        } else {
+            // AABB Fallback
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            selectedItems.forEach(item => {
+                const b = renderManager.getLocalBounds(item);
+                const sx = item.transform.scaleX || 1;
+                const sy = item.transform.scaleY || 1;
+                const cx = b.x + b.width / 2;
+                const cy = b.y + b.height / 2;
+                const wcX = item.transform.x + cx;
+                const wcY = item.transform.y + cy; // Fix: was missing definition in old code, assuming simple transform
+                const rot = item.transform.rotation || 0;
+
+                // Calculate AABB of rotated item
+                // transform 4 corners
+                const hw = (b.width * sx) / 2;
+                const hh = (b.height * sy) / 2;
+                const iCos = Math.cos(rot);
+                const iSin = Math.sin(rot);
+
+                const corners = [
+                    { x: -hw, y: -hh }, { x: hw, y: -hh },
+                    { x: hw, y: hh }, { x: -hw, y: hh }
+                ];
+
+                corners.forEach(p => {
+                    const wx = wcX + (p.x * iCos - p.y * iSin);
+                    const wy = wcY + (p.x * iSin + p.y * iCos);
+                    if (wx < minX) minX = wx;
+                    if (wy < minY) minY = wy;
+                    if (wx > maxX) maxX = wx;
+                    if (wy > maxY) maxY = wy;
+                });
+            });
+
+            if (minX === Infinity) return null;
+
+            const w = maxX - minX;
+            const h = maxY - minY;
+
+            return {
+                isOBB: false,
+                bounds: { minX, minY, maxX, maxY },
+                center: { x: minX + w / 2, y: minY + h / 2 },
+                halfW: w / 2,
+                halfH: h / 2
+            };
+        }
+    }, [renderManager]);
+
+    const isPointInSelection = useCallback((point: { x: number, y: number }) => {
+        const bounds = getSelectionBounds();
+        if (!bounds) return false;
+
+        const { isOBB, center, halfW, halfH, rotation, bounds: aabb } = bounds;
+        const padding = 10 / (renderManager?.currentZoom || 1); // Helper padding
+
+        if (isOBB && center) {
+            // Inverse rotate point
+            const dx = point.x - center.x;
+            const dy = point.y - center.y;
+            const rot = rotation || 0;
+            const cos = Math.cos(-rot);
+            const sin = Math.sin(-rot);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+
+            return Math.abs(localX) <= halfW! + padding && Math.abs(localY) <= halfH! + padding;
+        } else if (aabb) {
+            return point.x >= aabb.minX - padding && point.x <= aabb.maxX + padding &&
+                point.y >= aabb.minY - padding && point.y <= aabb.maxY + padding;
+        }
+        return false;
+    }, [getSelectionBounds, renderManager]);
+
+    const getGroupHandleAtPoint = useCallback((point: { x: number, y: number }) => {
+        const boundsInfo = getSelectionBounds();
+        if (!boundsInfo) return null;
+
+        const currentZoom = renderManager?.currentZoom || 1;
+        const resizeRadius = 12 / currentZoom;
+
+        const { isOBB, center, halfW, halfH, rotation, bounds, items } = boundsInfo;
+
+        if (isOBB && center) {
+            const rot = rotation || 0;
+            const cos = Math.cos(rot);
+            const sin = Math.sin(rot);
+
+            const rotate = (x: number, y: number) => ({
+                x: center.x + (x * cos - y * sin),
+                y: center.y + (x * sin + y * cos)
+            });
+
+            // Adaptive Cursor Logic
+            const getCursorForHandle = (h: string, r: number) => {
+                let base = 0;
+                if (h === 't') base = 0; else if (h === 'tr') base = 45;
+                else if (h === 'r') base = 90; else if (h === 'br') base = 135;
+                else if (h === 'b') base = 180; else if (h === 'bl') base = 225;
+                else if (h === 'l') base = 270; else if (h === 'tl') base = 315;
+
+                const deg = (r * 180) / Math.PI;
+                const total = ((base + deg) % 360 + 360) % 360;
+                const sector = Math.round(total / 45) % 4;
+
+                switch (sector) {
+                    case 0: return 'ns-resize';
+                    case 1: return 'nesw-resize';
+                    case 2: return 'ew-resize';
+                    case 3: return 'nwse-resize';
+                }
+                return 'move';
+            };
+
+            const hW = halfW!;
+            const hH = halfH!;
+
+            const handles = {
+                tl: { ...rotate(-hW, -hH) },
+                tr: { ...rotate(hW, -hH) },
+                bl: { ...rotate(-hW, hH) },
+                br: { ...rotate(hW, hH) },
+                t: { ...rotate(0, -hH) },
+                b: { ...rotate(0, hH) },
+                l: { ...rotate(-hW, 0) },
+                r: { ...rotate(hW, 0) }
+            };
+
+            for (const [key, c] of Object.entries(handles)) {
+                const dist = Math.sqrt(Math.pow(point.x - c.x, 2) + Math.pow(point.y - c.y, 2));
+                if (dist <= resizeRadius) {
+                    return {
+                        handle: key,
+                        cursor: getCursorForHandle(key, rot),
+                        bounds: null,
+                        isOBB: true,
+                        item: items && items.length === 1 ? items[0] : null,
+                        center,
+                        halfW: hW,
+                        halfH: hH,
+                        rotation: rot
+                    };
+                }
             }
-            if (dist <= rotateOuterRadius) {
-                return { handle: 'rotate', cursor: 'alias', bounds: { minX, minY, maxX, maxY } };
+
+            const topCenter = rotate(0, -hH - (24 / currentZoom));
+            const dist = Math.sqrt(Math.pow(point.x - topCenter.x, 2) + Math.pow(point.y - topCenter.y, 2));
+            if (dist <= resizeRadius) {
+                return { handle: 'rotate', cursor: 'alias', bounds: null, isOBB: true, center, halfW: hW, halfH: hH, rotation: rot };
+            }
+
+        } else if (bounds) {
+            // AABB Handles
+            const { minX, minY, maxX, maxY } = bounds;
+            const midX = (minX + maxX) / 2;
+            const midY = (minY + maxY) / 2;
+
+            const corners = {
+                tl: { x: minX, y: minY, cursor: 'nwse-resize' },
+                tr: { x: maxX, y: minY, cursor: 'nesw-resize' },
+                bl: { x: minX, y: maxY, cursor: 'nesw-resize' },
+                br: { x: maxX, y: maxY, cursor: 'nwse-resize' }
+                // Add side handles for AABB if desired, but 4 corners is standard for groups in some apps.
+                // Replicating old logic:
+            };
+
+            for (const [key, c] of Object.entries(corners)) {
+                const dist = Math.sqrt(Math.pow(point.x - c.x, 2) + Math.pow(point.y - c.y, 2));
+                if (dist <= resizeRadius) {
+                    return { handle: key, cursor: c.cursor, bounds };
+                }
+            }
+            // Rotate Handle for AABB Group (Top Center)
+            const topY = minY - (24 / currentZoom);
+            const dist = Math.sqrt(Math.pow(point.x - midX, 2) + Math.pow(point.y - topY, 2));
+            if (dist <= resizeRadius) {
+                return { handle: 'rotate', cursor: 'alias', bounds };
             }
         }
         return null;
-    }, [renderManager]);
+    }, [renderManager, getSelectionBounds]);
+
 
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
@@ -168,24 +348,20 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
 
         // Image Placement
         if (currentTool === 'image' && currentPendingImage) {
+            // ... (keep logic)
             const placeImage = (url: string) => {
-                addItem({
+                const newItem = {
                     id: uuidv4(),
-                    type: 'image',
-                    data: {
-                        url,
-                        width: currentPendingImage.width,
-                        height: currentPendingImage.height
-                    },
-                    transform: {
-                        x: point.x - currentPendingImage.width / 2,
-                        y: point.y - currentPendingImage.height / 2,
-                        scaleX: 1,
-                        scaleY: 1,
-                        rotation: 0
-                    },
-                    zIndex: 1
-                });
+                    type: 'image' as const,
+                    data: { url, width: currentPendingImage.width, height: currentPendingImage.height },
+                    transform: { x: point.x - currentPendingImage.width / 2, y: point.y - currentPendingImage.height / 2, scaleX: 1, scaleY: 1, rotation: 0 },
+                    zIndex: Date.now(),
+                    isDeleted: false,
+                    meetingId: meetingId,
+                    userId: 'user'
+                };
+                addItem(newItem);
+                if (broadcastEvent) broadcastEvent('add_item', newItem);
                 setPendingImage(null);
                 setTool('select');
                 renderManager.renderGhost(null, 0, 0, 0, 0);
@@ -195,9 +371,7 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 const formData = new FormData();
                 formData.append('file', currentPendingImage.file);
                 formData.append('meetingName', meetingId);
-
                 const uploadUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/whiteboard/upload`;
-
                 fetch(uploadUrl, { method: 'POST', body: formData })
                     .then(res => res.json())
                     .then(data => { if (data.url) placeImage(data.url); })
@@ -210,17 +384,15 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
 
         if (currentTool !== 'select') return;
 
-        // 1. Check Handles (Using consolidated logic)
+        // 1. Check Handles
         const hitHandle = getGroupHandleAtPoint(point);
 
         if (hitHandle) {
             const { handle, bounds, isOBB, center, rotation } = hitHandle;
-
+            // ... (Handle logic setup)
             pushHistory();
-
             const initialTransforms = new Map();
             const initialLocalCenters = new Map();
-
             currentSelectedIds.forEach(id => {
                 const item = currentItems.get(id);
                 if (item) {
@@ -233,7 +405,6 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
             });
 
             let groupCenter, initialAngle, groupBounds;
-
             if (isOBB) {
                 groupCenter = center;
                 initialAngle = Math.atan2(point.y - groupCenter.y, point.x - groupCenter.x);
@@ -257,37 +428,20 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 initialAngle,
                 // @ts-ignore
                 isOBB: isOBB,
-                rotationOffset: isOBB ? rotation : 0
+                rotationOffset: isOBB ? rotation : 0,
+                rotation: isOBB ? rotation : 0,
+                halfW: (hitHandle as any).halfW,
+                halfH: (hitHandle as any).halfH
             };
             canvas.setPointerCapture(e.pointerId);
             return;
         }
 
-        // 2. Hit Test for Items (Move - Only for ALREADY SELECTED items)
-        const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
-        const hits: any[] = [];
-        renderManager.quadTree.retrieve(hits, hitArea);
-
-        const clickedItem = hits.find(item => {
-            const b = item.getBounds();
-            const bx = Math.min(b.x, b.x + b.width);
-            const by = Math.min(b.y, b.y + b.height);
-            const bw = Math.abs(b.width);
-            const bh = Math.abs(b.height);
-
-            const hitL = point.x - 5 / renderManager.currentZoom;
-            const hitR = point.x + 5 / renderManager.currentZoom;
-            const hitT = point.y - 5 / renderManager.currentZoom;
-            const hitB = point.y + 5 / renderManager.currentZoom;
-
-            return hitL < bx + bw && hitR > bx &&
-                hitT < by + bh && hitB > by;
-        });
-
-        if (clickedItem && currentSelectedIds.has(clickedItem.id)) {
+        // 2. CHECK IF INSIDE SELECTION BOX (New Feature)
+        if (currentSelectedIds.size > 0 && isPointInSelection(point)) {
+            // Drag entire selection
             const initialTransforms = new Map();
-            const updatedSelectedIds = useWhiteboardStore.getState().selectedIds;
-            updatedSelectedIds.forEach(id => {
+            currentSelectedIds.forEach(id => {
                 const item = currentItems.get(id);
                 if (item) initialTransforms.set(id, { ...item.transform });
             });
@@ -298,7 +452,84 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 initialItemTransforms: initialTransforms
             };
             canvas.setPointerCapture(e.pointerId);
+            return;
+        }
+
+        // 3. Hit Test for Items (Select new item)
+        const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+
+        const clickedItem = hits.find(item => {
+            const b = item.getBounds();
+            // Basic AABB check first
+            const bx = Math.min(b.x, b.x + b.width);
+            const by = Math.min(b.y, b.y + b.height);
+            const bw = Math.abs(b.width);
+            const bh = Math.abs(b.height);
+            const hitL = point.x - 5 / renderManager.currentZoom;
+            const hitR = point.x + 5 / renderManager.currentZoom;
+            const hitT = point.y - 5 / renderManager.currentZoom;
+            const hitB = point.y + 5 / renderManager.currentZoom;
+            if (!(hitL < bx + bw && hitR > bx && hitT < by + bh && hitB > by)) return false;
+
+            // Strict OBB check for precision (especially for lines)
+            const lb = renderManager.getLocalBounds(item);
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const rot = item.transform.rotation || 0;
+            const cx = lb.x + lb.width / 2;
+            const cy = lb.y + lb.height / 2;
+
+            // Inverse rotate point to local
+            const wcX = item.transform.x + cx;
+            const wcY = item.transform.y + cy;
+            const dx = point.x - wcX;
+            const dy = point.y - wcY;
+            const cos = Math.cos(-rot);
+            const sin = Math.sin(-rot);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+
+            const halfW = (lb.width * sx) / 2;
+            const halfH = (lb.height * sy) / 2;
+
+            const padding = 10 / renderManager.currentZoom; // Larger padding for easy selection
+            return Math.abs(localX) <= halfW + padding && Math.abs(localY) <= halfH + padding;
+        });
+
+        if (clickedItem) {
+            const initialTransforms = new Map();
+            // Shift key logic handled in 'box' branch or here?
+            // Standard behavior: Click unselected -> select only it. Click selected -> ready to move. 
+            // We checked 'selected' already via `isPointInSelection` effectively.
+            // If we are here, it means we clicked an item that is NOT covered by the current selection box (or no selection exists).
+            // OR it's a new item.
+
+            if (e.shiftKey) {
+                // Add to selection
+                const newSelected = new Set(currentSelectedIds);
+                if (newSelected.has(clickedItem.id)) newSelected.delete(clickedItem.id);
+                else newSelected.add(clickedItem.id);
+                setSelectedIds(newSelected);
+                // Don't drag immediately on shift-select usually
+            } else {
+                // Select ONLY this item
+                selectItem(clickedItem.id);
+
+                // And START DRAG immediately
+                const item = currentItems.get(clickedItem.id);
+                if (item) initialTransforms.set(clickedItem.id, { ...item.transform });
+                pushHistory();
+                isDragging.current = {
+                    type: 'move',
+                    initialPoint: point,
+                    initialItemTransforms: initialTransforms
+                };
+                canvas.setPointerCapture(e.pointerId);
+            }
         } else {
+            // Box Select
             let baseSelection = new Set<string>();
             if (!e.shiftKey) {
                 clearSelection();
@@ -314,13 +545,17 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
             };
             canvas.setPointerCapture(e.pointerId);
         }
-    }, [renderManager, getLocalPoint, selectItem, clearSelection, pushHistory, getGroupHandleAtPoint]);
+    }, [renderManager, getLocalPoint, selectItem, clearSelection, pushHistory, getGroupHandleAtPoint, isPointInSelection, getSelectionBounds, addItem, setPendingImage, setTool, broadcastEvent, meetingId, setSelectedIds]);
 
     const onPointerMove = useCallback((e: PointerEvent) => {
         const point = getLocalPoint(e);
 
         if (!isDragging.current) {
-            const { tool, selectedIds, pendingImage } = stateRef.current;
+            // ... (Ghost rendering)
+            const CurrentState = useWhiteboardStore.getState();
+            const tool = CurrentState.tool;
+            const selectedIds = CurrentState.selectedIds;
+            const pendingImage = CurrentState.pendingImage;
 
             if (tool === 'image' && pendingImage && renderManager) {
                 renderManager.renderGhost(pendingImage.url, point.x, point.y, pendingImage.width, pendingImage.height, 0.5);
@@ -332,32 +567,55 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
 
             if (renderManager && tool === 'select') {
                 const canvas = renderManager.app.canvas;
+                // Cursor Logic
                 if (selectedIds.size > 0) {
+                    // Check Handle
                     const hitHandle = getGroupHandleAtPoint(point);
                     if (hitHandle) {
                         canvas.style.cursor = hitHandle.cursor;
                         return;
                     }
+                    // Check Body (Box)
+                    if (isPointInSelection(point)) {
+                        canvas.style.cursor = 'move';
+                        return;
+                    }
                 }
+
+                // Check Hover Item (if not in selection)
                 const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
                 const hits: any[] = [];
                 renderManager.quadTree.retrieve(hits, hitArea);
-
                 const hoveredItem = hits.find(item => {
+                    // Reuse logic from pointer down or simpler AABB for hover efficiency
                     const b = item.getBounds();
-                    const bx = Math.min(b.x, b.x + b.width);
-                    const by = Math.min(b.y, b.y + b.height);
-                    const bw = Math.abs(b.width);
-                    const bh = Math.abs(b.height);
-                    const hitL = point.x - 5 / renderManager.currentZoom;
-                    const hitR = point.x + 5 / renderManager.currentZoom;
-                    const hitT = point.y - 5 / renderManager.currentZoom;
-                    const hitB = point.y + 5 / renderManager.currentZoom;
-                    return hitL < bx + bw && hitR > bx && hitT < by + bh && hitB > by;
+                    // Simple checks... (Copied from existing code)
+                    // ...
+                    // Let's rely on just AABB for cursor hover to save perf, or reuse helper?
+                    // The existing code did OBB. Let's keep existing code block but simplified here for brevity in replacement?
+                    // No, must preserve logic.
+
+                    const lb = renderManager.getLocalBounds(item);
+                    const t = item.transform || { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+                    const cx = lb.x + lb.width / 2;
+                    const cy = lb.y + lb.height / 2;
+                    const wcX = t.x + cx;
+                    const wcY = t.y + cy;
+                    const dx = point.x - wcX;
+                    const dy = point.y - wcY;
+                    const rot = t.rotation || 0;
+                    const cos = Math.cos(-rot);
+                    const sin = Math.sin(-rot);
+                    const localX = dx * cos - dy * sin;
+                    const localY = dx * sin + dy * cos;
+                    const halfW = (lb.width * (t.scaleX || 1)) / 2;
+                    const halfH = (lb.height * (t.scaleY || 1)) / 2;
+                    const padding = 10 / renderManager.currentZoom;
+                    return Math.abs(localX) <= halfW + padding && Math.abs(localY) <= halfH + padding;
                 });
 
-                if (hoveredItem && selectedIds.has(hoveredItem.id)) {
-                    canvas.style.cursor = 'move';
+                if (hoveredItem) {
+                    canvas.style.cursor = 'pointer'; // Indicating selectable
                 } else {
                     canvas.style.cursor = 'default';
                 }
@@ -380,6 +638,11 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 });
             });
         } else if (type === 'handle' && groupCenter) {
+            // ... (Keep existing Handle Logic)
+            // Copy-pasting the complex rotation/resize logic from existing file...
+            // Since I am replacing the whole file content mostly, I should ensure I don't lose the detailed math.
+            // I will assume I need to write it out.
+
             if (handle === 'rotate' && initialAngle !== undefined) {
                 const currentAngle = Math.atan2(point.y - groupCenter.y, point.x - groupCenter.x);
                 let deltaAngle = currentAngle - initialAngle;
@@ -391,22 +654,16 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
 
                 if (!isOBB) {
                     const { minX, minY, maxX, maxY } = groupBounds!;
-                    const w = maxX - minX;
-                    const h = maxY - minY;
-                    renderManager?.setSelectionOverride({ cx: groupCenter.x, cy: groupCenter.y, w, h, rotation: deltaAngle });
+                    renderManager?.setSelectionOverride({ cx: groupCenter.x, cy: groupCenter.y, w: maxX - minX, h: maxY - minY, rotation: deltaAngle });
                 }
 
                 initialItemTransforms.forEach((initialTransform: any, id: string) => {
                     const localCenter = initialLocalCenters?.get(id) || { x: 0, y: 0 };
+                    const isSingle = useWhiteboardStore.getState().selectedIds.size === 1;
 
-                    if (isOBB) {
+                    if (isOBB && isSingle) {
                         const newRotation = (initialTransform.rotation || 0) + deltaAngle;
-                        updateItem(id, {
-                            transform: {
-                                ...initialTransform,
-                                rotation: newRotation
-                            }
-                        });
+                        updateItem(id, { transform: { ...initialTransform, rotation: newRotation } });
                         return;
                     }
 
@@ -423,21 +680,18 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 });
 
             } else {
-                // RESIZE LOGIC
-                if (isOBB) {
+                // RESIZE LOGIC (Simplified OBB/AABB Handling)
+                if (initialItemTransforms.size === 1 && isOBB) {
+                    // ... Single logic
                     const id = Array.from(initialItemTransforms.keys())[0] as string;
                     const initTx = initialItemTransforms.get(id);
                     if (initTx) {
                         const rot = initTx.rotation || 0;
                         const cos = Math.cos(-rot);
                         const sin = Math.sin(-rot);
-
                         const localDx = dx * cos - dy * sin;
                         const localDy = dx * sin + dy * cos;
-
-                        let dW = 0;
-                        let dH = 0;
-
+                        let dW = 0; let dH = 0;
                         if (handle?.includes('l')) dW = -localDx;
                         if (handle?.includes('r')) dW = localDx;
                         if (handle?.includes('t')) dH = -localDy;
@@ -447,41 +701,28 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                         if (!item) return;
 
                         const lBounds = renderManager?.getLocalBounds(item);
-                        const baseW = lBounds?.width || 100;
-                        const baseH = lBounds?.height || 100;
-
+                        const baseW = Math.max(lBounds?.width || 0, 1);
+                        const baseH = Math.max(lBounds?.height || 0, 1);
                         const initScaleX = initTx.scaleX || 1;
                         const initScaleY = initTx.scaleY || 1;
-
                         const curW = baseW * initScaleX;
                         const curH = baseH * initScaleY;
-
-                        let newW = Math.max(10, curW + dW);
-                        let newH = Math.max(10, curH + dH);
-
+                        let newW = Math.max(1, curW + dW);
+                        let newH = Math.max(1, curH + dH);
                         if (e.shiftKey) {
                             const s = Math.max(newW / curW, newH / curH);
-                            newW = curW * s;
-                            newH = curH * s;
+                            newW = curW * s; newH = curH * s;
                         }
-
                         const newScaleX = newW / baseW;
                         const newScaleY = newH / baseH;
-
-                        let centerShiftX = 0;
-                        let centerShiftY = 0;
-
+                        let centerShiftX = 0; let centerShiftY = 0;
                         if (handle?.includes('l')) centerShiftX = - (newW - curW) / 2;
                         if (handle?.includes('r')) centerShiftX = (newW - curW) / 2;
                         if (handle?.includes('t')) centerShiftY = - (newH - curH) / 2;
                         if (handle?.includes('b')) centerShiftY = (newH - curH) / 2;
-
-                        const wCos = Math.cos(rot);
-                        const wSin = Math.sin(rot);
-
+                        const wCos = Math.cos(rot); const wSin = Math.sin(rot);
                         const worldShiftX = centerShiftX * wCos - centerShiftY * wSin;
                         const worldShiftY = centerShiftX * wSin + centerShiftY * wCos;
-
                         updateItem(id, {
                             transform: {
                                 ...initTx,
@@ -492,42 +733,32 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                             }
                         });
                     }
-
                 } else {
-                    // AABB GROUP RESIZE
+                    // Multi logic
                     const { minX, minY, maxX, maxY } = groupBounds!;
                     const groupW = maxX - minX;
                     const groupH = maxY - minY;
-
-                    let anchorX = minX;
-                    let anchorY = minY;
-
-                    if (handle?.includes('l')) anchorX = maxX;
-                    if (handle?.includes('r')) anchorX = minX;
-                    if (handle?.includes('t')) anchorY = maxY;
-                    if (handle?.includes('b')) anchorY = minY;
+                    const anchorX = handle?.includes('l') ? maxX : minX;
+                    const anchorY = handle?.includes('t') ? maxY : minY;
 
                     let newW = groupW;
                     let newH = groupH;
+                    if (handle?.includes('l')) newW = groupW - dx;
+                    else if (handle?.includes('r')) newW = groupW + dx;
+                    if (handle?.includes('t')) newH = groupH - dy;
+                    else if (handle?.includes('b')) newH = groupH + dy;
 
-                    if (handle?.includes('l')) newW -= dx;
-                    if (handle?.includes('r')) newW += dx;
-                    if (handle?.includes('t')) newH -= dy;
-                    if (handle?.includes('b')) newH += dy;
-
-                    newW = Math.max(10, newW);
-                    newH = Math.max(10, newH);
-
+                    // Keep Aspect Ratio
                     if (e.shiftKey) {
-                        const scaleX = newW / groupW;
-                        const scaleY = newH / groupH;
-                        const scale = Math.max(scaleX, scaleY);
+                        const scale = Math.max(newW / groupW, newH / groupH);
                         newW = groupW * scale;
                         newH = groupH * scale;
                     }
 
-                    const sx = newW / groupW;
-                    const sy = newH / groupH;
+                    let sx = newW / groupW;
+                    let sy = newH / groupH;
+                    if (!Number.isFinite(sx)) sx = 1;
+                    if (!Number.isFinite(sy)) sy = 1;
 
                     initialItemTransforms.forEach((initialTransform: any, id: string) => {
                         const localCenter = initialLocalCenters?.get(id) || { x: 0, y: 0 };
@@ -535,9 +766,10 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                         const oldWorldCenterY = initialTransform.y + localCenter.y;
                         const newWorldCenterX = anchorX + (oldWorldCenterX - anchorX) * sx;
                         const newWorldCenterY = anchorY + (oldWorldCenterY - anchorY) * sy;
-                        const newScaleX = (initialTransform.scaleX || 1) * sx;
-                        const newScaleY = (initialTransform.scaleY || 1) * sy;
-
+                        let newScaleX = (initialTransform.scaleX || 1) * sx;
+                        let newScaleY = (initialTransform.scaleY || 1) * sy;
+                        if (!Number.isFinite(newScaleX)) newScaleX = 1;
+                        if (!Number.isFinite(newScaleY)) newScaleY = 1;
                         updateItem(id, {
                             transform: {
                                 ...initialTransform,
@@ -551,7 +783,7 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                 }
             }
         } else if (type === 'box') {
-            // ... (Box Select Logic Same)
+            // ... Box logic
             const x = Math.min(initialPoint.x, point.x);
             const y = Math.min(initialPoint.y, point.y);
             const width = Math.abs(point.x - initialPoint.x);
@@ -579,42 +811,101 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
                     const b = item.getBounds();
                     if (x < b.x + b.width && x + width > b.x &&
                         y < b.y + b.height && y + height > b.y) {
-                        if (initialSelectedIds.has(item.id)) {
-                            finalSelection.add(item.id);
-                        } else {
-                            finalSelection.add(item.id);
-                        }
+                        finalSelection.add(item.id);
                     } else {
                         if (initialSelectedIds.has(item.id)) {
-                            finalSelection.delete(item.id);
+                            // Keep original if not in box? No, logic is toggling or additive?
+                            // Standard shift drag: Add to selection.
+                            // Logic here: If in box, ADD. If NOT in box, keep original selection.
+                            // But what if we want to deselect?
+                            // Let's stick to additive.
                         }
                     }
                 });
-                useWhiteboardStore.getState().setSelectedIds(finalSelection);
+                setSelectedIds(finalSelection);
                 renderManager?.renderSelection(finalSelection, useWhiteboardStore.getState().items);
             } else {
-                useWhiteboardStore.getState().setSelectedIds(newSelectedIds);
+                setSelectedIds(newSelectedIds);
                 renderManager?.renderSelection(newSelectedIds, useWhiteboardStore.getState().items);
             }
         }
-    }, [getLocalPoint, updateItem, renderManager]);
+    }, [getLocalPoint, updateItem, renderManager, isPointInSelection, getGroupHandleAtPoint, setSelectedIds]);
 
     const onPointerUp = useCallback((e: PointerEvent) => {
-        // Clear any visual overrides
         renderManager?.setSelectionOverride(null);
-
-        // Restore standard selection UI
-        const { selectedIds, items } = useWhiteboardStore.getState();
-        renderManager?.renderSelection(selectedIds, items);
+        renderManager?.renderSelection(useWhiteboardStore.getState().selectedIds, useWhiteboardStore.getState().items);
 
         if (isDragging.current) {
+            if ((isDragging.current.type === 'move' || isDragging.current.type === 'handle') && broadcastEvent) {
+                const affectedIds = Array.from(isDragging.current.initialItemTransforms.keys());
+                const currentItems = useWhiteboardStore.getState().items;
+                affectedIds.forEach(id => {
+                    const finalItem = currentItems.get(id);
+                    if (finalItem) {
+                        try {
+                            broadcastEvent('update_item', {
+                                id: finalItem.id,
+                                changes: { transform: finalItem.transform }
+                            });
+                        } catch (err) { }
+                    }
+                });
+            }
             if (isDragging.current.type === 'box') {
                 renderManager?.updateSelectionBox(null);
             }
             isDragging.current = null;
             renderManager?.app.canvas.releasePointerCapture(e.pointerId);
         }
-    }, [renderManager]);
+    }, [renderManager, broadcastEvent]);
+
+    const handleContextMenu = useCallback((e: MouseEvent) => {
+        e.preventDefault();
+        if (!renderManager || !onContextMenu) return;
+
+        const point = getLocalPoint(e);
+        const { selectedIds, items } = stateRef.current;
+
+        // 1. Check if inside existing selection box
+        if (selectedIds.size > 0 && isPointInSelection(point)) {
+            onContextMenu({ x: e.clientX, y: e.clientY });
+            return;
+        }
+
+        // 2. Check for item hit (Select and Open)
+        // Reuse QuadTree check logic
+        const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+
+        const clickedItem = hits.find(item => {
+            const lb = renderManager.getLocalBounds(item);
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const rot = item.transform.rotation || 0;
+            const cx = lb.x + lb.width / 2;
+            const cy = lb.y + lb.height / 2;
+            const wcX = item.transform.x + cx;
+            const wcY = item.transform.y + cy;
+            const dx = point.x - wcX;
+            const dy = point.y - wcY;
+            const cos = Math.cos(-rot);
+            const sin = Math.sin(-rot);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            const halfW = (lb.width * sx) / 2;
+            const halfH = (lb.height * sy) / 2;
+            const padding = 10 / renderManager.currentZoom;
+            return Math.abs(localX) <= halfW + padding && Math.abs(localY) <= halfH + padding;
+        });
+
+        if (clickedItem) {
+            selectItem(clickedItem.id);
+            onContextMenu({ x: e.clientX, y: e.clientY });
+        } else {
+            onContextMenu(null);
+        }
+    }, [renderManager, getLocalPoint, isPointInSelection, onContextMenu, selectItem]);
 
     useEffect(() => {
         if (!renderManager) return;
@@ -623,11 +914,14 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null) {
         canvas.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
+        // Add context menu listener
+        canvas.addEventListener('contextmenu', handleContextMenu);
 
         return () => {
             canvas.removeEventListener('pointerdown', onPointerDown);
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
+            canvas.removeEventListener('contextmenu', handleContextMenu);
         };
-    }, [renderManager, onPointerDown, onPointerMove, onPointerUp]);
+    }, [renderManager, onPointerDown, onPointerMove, onPointerUp, handleContextMenu]);
 }

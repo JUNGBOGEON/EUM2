@@ -4,7 +4,7 @@ import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class RedisService {
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
 
   // 미팅 세션 정보 저장
   async setMeetingSession(
@@ -216,5 +216,58 @@ export class RedisService {
     const key = `transcription:lastFlush:${meetingId}`;
     const data = await this.cacheManager.get<string>(key);
     return data ? JSON.parse(data) : null;
+  }
+  // ==========================================
+  // 화이트보드 데이터 관리
+  // ==========================================
+
+  /**
+   * 화이트보드 아이템 추가 (Append)
+   * Redis Key: whiteboard:items:{meetingId} -> List of JSON strings? Or one huge JSON array?
+   * For simplicity and atomicity with cache-manager's simpler API, we will read-modify-write the full array
+   * or usage a specific redis command if possible. 
+   * Given the constraints, we will store the items as a single JSON array for now. 
+   * Optimization: In a high-traffic scenario, we should use a Hash or List structure directly.
+   */
+  async addWhiteboardItem(meetingId: string, item: any): Promise<void> {
+    const key = `whiteboard:items:${meetingId}`;
+    // TODO: Lock or atomic operation would be better, but for MVP we assume low race condition probability on single item append
+    const items = (await this.get<any[]>(key)) || [];
+    items.push(item);
+    // 24 hours TTL for whiteboard data
+    await this.set(key, items, 24 * 60 * 60 * 1000);
+  }
+
+  async getWhiteboardItems(meetingId: string): Promise<any[]> {
+    const key = `whiteboard:items:${meetingId}`;
+    return (await this.get<any[]>(key)) || [];
+  }
+
+  async updateWhiteboardItem(meetingId: string, itemId: string, updateData: any): Promise<void> {
+    const key = `whiteboard:items:${meetingId}`;
+    const items = (await this.get<any[]>(key)) || [];
+    const index = items.findIndex((i) => i.id === itemId);
+    if (index !== -1) {
+      items[index] = { ...items[index], ...updateData };
+      await this.set(key, items, 24 * 60 * 60 * 1000);
+    }
+  }
+
+  async removeWhiteboardItem(meetingId: string, itemId: string): Promise<void> {
+    const key = `whiteboard:items:${meetingId}`;
+    let items = (await this.get<any[]>(key)) || [];
+    // Soft delete or hard delete? The repo uses soft delete (isDeleted=true).
+    // optimizing: actually remove from redis if we want to save space, OR mark isDeleted.
+    // Let's mark isDeleted to match DB logic.
+    const index = items.findIndex((i) => i.id === itemId);
+    if (index !== -1) {
+      items[index].isDeleted = true;
+      await this.set(key, items, 24 * 60 * 60 * 1000);
+    }
+  }
+
+  async clearWhiteboardItems(meetingId: string): Promise<void> {
+    const key = `whiteboard:items:${meetingId}`;
+    await this.del(key);
   }
 }

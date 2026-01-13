@@ -5,12 +5,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
   MeetingSession,
   SessionStatus,
+  SummaryStatus,
 } from '../entities/meeting-session.entity';
 import {
   SessionParticipant,
@@ -41,7 +42,7 @@ export class ChimeService {
     private redisService: RedisService,
     private workspaceGateway: WorkspaceGateway,
     private chimeSdkService: ChimeSdkService,
-  ) {}
+  ) { }
 
   /**
    * 워크스페이스에서 새 미팅 세션 시작
@@ -344,10 +345,10 @@ export class ChimeService {
    */
   private async getHostInfo(hostId: string): Promise<
     | {
-        id: string;
-        name: string;
-        profileImage?: string;
-      }
+      id: string;
+      name: string;
+      profileImage?: string;
+    }
     | undefined
   > {
     const participant = await this.participantRepository.findOne({
@@ -504,7 +505,10 @@ export class ChimeService {
    */
   async getSessionHistory(workspaceId: string): Promise<MeetingSession[]> {
     return this.sessionRepository.find({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        summaryStatus: Not(SummaryStatus.SKIPPED),
+      },
       relations: ['host'],
       order: { createdAt: 'DESC' },
     });

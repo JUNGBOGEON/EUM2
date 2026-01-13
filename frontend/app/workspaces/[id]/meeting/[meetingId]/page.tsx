@@ -61,6 +61,12 @@ function MeetingRoomContent() {
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
 
+  // Debug logging for Whiteboard entry point
+  useEffect(() => {
+    console.log('[MeetingPage] showWhiteboard state changed:', showWhiteboard);
+    console.log('[MeetingPage] meetingId:', meetingId);
+  }, [showWhiteboard, meetingId]);
+
   // stopTranscription ref (useBrowserTranscription보다 먼저 정의된 콜백에서 사용)
   const stopTranscriptionRef = useRef<(() => void) | null>(null);
   // Custom hooks
@@ -234,11 +240,11 @@ function MeetingRoomContent() {
 
   // Convert roster to participants array (with proper typing)
   const participants = Object.entries(roster).map(([attendeeId, attendee]) => {
-    const typedAttendee = attendee as ChimeRosterAttendee;
+    const info = getParticipantByAttendeeId(attendeeId);
     return {
       id: attendeeId,
-      name: typedAttendee.name || 'Unknown',
-      profileImage: typedAttendee.profileImage,
+      name: info.name || (attendee as any).name || 'Unknown',
+      profileImage: info.profileImage,
     };
   });
   // Camera toggle handler (includes permission request)
@@ -321,7 +327,12 @@ function MeetingRoomContent() {
         <div className="flex-1 relative flex flex-col h-full">
           {showWhiteboard ? (
             <div className="absolute inset-0 z-10 bg-white">
-              <WhiteboardCanvas />
+              <div className="absolute inset-0 z-10 bg-white">
+                <WhiteboardCanvas
+                  meetingId={meetingId}
+                  currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+                />
+              </div>
             </div>
           ) : (
             <>
@@ -384,7 +395,10 @@ function MeetingRoomContent() {
         onToggleScreenShare={() => toggleContentShare()}
         onToggleTranslation={toggleTranslation}
         onToggleVoiceFocus={toggleVoiceFocus}
-        onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
+        onToggleWhiteboard={() => {
+          console.log('[MeetingPage] Toggling whiteboard click. Previous state:', showWhiteboard);
+          setShowWhiteboard(!showWhiteboard);
+        }}
         onToggleTTS={toggleTTS}
         onToggleDelay={() => setDelayEnabled(!delayEnabled)}
         onDelayMsChange={setDelayMs}

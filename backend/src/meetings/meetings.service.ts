@@ -260,8 +260,8 @@ export class MeetingsService {
   // 요약 기능 (SummaryService 위임)
   // ==========================================
 
-  async getSummary(sessionId: string) {
-    return this.summaryService.getSummary(sessionId);
+  async getSummary(sessionId: string, languageCode?: string) {
+    return this.summaryService.getSummary(sessionId, languageCode);
   }
 
   async regenerateSummary(sessionId: string) {

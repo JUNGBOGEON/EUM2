@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { WorkspaceEvent } from '../../_lib/types';
 
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
+
 interface CalendarGridProps {
   currentDate: Date;
   events: WorkspaceEvent[];
@@ -15,8 +18,6 @@ interface CalendarGridProps {
   onNextMonth: () => void;
   onToday: () => void;
 }
-
-const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 const getEventColor = (event: WorkspaceEvent) => {
   if (event.color) return event.color;
@@ -42,6 +43,32 @@ export function CalendarGrid({
   onNextMonth,
   onToday,
 }: CalendarGridProps) {
+  const { language, t } = useLanguage();
+
+  // Get locale from language code
+  const getLocale = (lang: string) => {
+    switch (lang) {
+      case 'en': return 'en-US';
+      case 'ja': return 'ja-JP';
+      case 'zh-CN': return 'zh-CN';
+      default: return 'ko-KR';
+    }
+  };
+
+  const locale = getLocale(language);
+
+  // Generate localized week days
+  const weekDays = useMemo(() => {
+    const days = [];
+    // Start from Sunday (which is a known date, e.g. 2024-01-07)
+    // Actually just use any Sunday. 2021-01-03 was a Sunday.
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(2021, 0, 3 + i);
+      days.push(new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date));
+    }
+    return days;
+  }, [locale]);
+
   const calendarDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -97,12 +124,12 @@ export function CalendarGrid({
     <div className="lg:col-span-2 border border-border rounded-xl p-4">
       {/* Calendar Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">
-          {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+        <h3 className="text-lg font-semibold capitalize">
+          {new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(currentDate)}
         </h3>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={onToday}>
-            오늘
+            {t('calendar.today')}
           </Button>
           <Button variant="ghost" size="icon" onClick={onPreviousMonth}>
             <ChevronLeft className="h-4 w-4" />
@@ -115,9 +142,9 @@ export function CalendarGrid({
 
       {/* Days of Week */}
       <div className="grid grid-cols-7 gap-1 mb-2">
-        {DAYS_OF_WEEK.map((day, idx) => (
+        {weekDays.map((day, idx) => (
           <div
-            key={day}
+            key={idx}
             className={cn(
               'text-center text-sm font-medium py-2',
               idx === 0 && 'text-red-500',

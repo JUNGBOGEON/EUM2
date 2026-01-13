@@ -39,7 +39,7 @@ export class SummaryService {
     private workspaceFilesService: WorkspaceFilesService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
-  ) {}
+  ) { }
 
   /**
    * 회의 요약을 생성하고 S3에 저장합니다.
@@ -93,7 +93,7 @@ export class SummaryService {
 
     this.logger.log(
       `[Summary] Found ${transcriptData.transcripts.length} transcripts, ` +
-        `${transcriptData.speakers.length} speakers for session ${sessionId}`,
+      `${transcriptData.speakers.length} speakers for session ${sessionId}`,
     );
 
     // 상태 업데이트: PROCESSING (발화 기록이 있을 때만)
@@ -208,9 +208,10 @@ export class SummaryService {
   /**
    * 세션의 요약을 조회합니다.
    * @param sessionId 세션 ID
+   * @param languageCode 언어 코드 (옵션)
    * @returns 요약 정보 (구조화된 요약 포함)
    */
-  async getSummary(sessionId: string): Promise<{
+  async getSummary(sessionId: string, languageCode?: string): Promise<{
     status: SummaryStatus;
     content: string | null;
     structuredSummary: StructuredSummary | null;
@@ -236,13 +237,49 @@ export class SummaryService {
       };
     }
 
+    // Default to Korean if not specified
+    const targetLang = languageCode || 'ko';
+    // If target is Korean (source language), use original key
+    let targetKey = session.summaryS3Key;
+
+    // If target is different, construct localized key
+    if (targetLang !== 'ko') {
+      targetKey = session.summaryS3Key.replace('.json', `_${targetLang}.json`);
+    }
+
     try {
-      // S3에서 콘텐츠 가져오기
-      const rawContent = await this.s3StorageService.getSummaryContent(
-        session.summaryS3Key,
-      );
+      // 1. Try to fetch from S3 (Original or Localized)
+      let rawContent: string;
+      try {
+        rawContent = await this.s3StorageService.getSummaryContent(targetKey);
+      } catch (e) {
+        // If file not found and it's a localized request, generate translation
+        if (targetLang !== 'ko') {
+          this.logger.log(`Localized summary not found for ${targetLang}, generating...`);
+
+          // Fetch original content
+          const originalContent = await this.s3StorageService.getSummaryContent(session.summaryS3Key);
+          const originalJson = JSON.parse(originalContent);
+
+          // Translate
+          const translatedSummary = await this.bedrockService.translateSummary(originalJson, targetLang);
+          const translatedJson = JSON.stringify(translatedSummary, null, 2);
+
+          // Upload localized file
+          await this.s3StorageService.uploadFile(
+            targetKey,
+            Buffer.from(translatedJson, 'utf-8'),
+            'application/json; charset=utf-8'
+          );
+
+          rawContent = translatedJson;
+        } else {
+          throw e; // If original missing, throw error
+        }
+      }
+
       const presignedUrl = await this.s3StorageService.getPresignedUrl(
-        session.summaryS3Key,
+        targetKey,
       );
 
       // JSON 파싱 시도 (새 형식)
@@ -352,7 +389,7 @@ export class SummaryService {
 
         this.logger.log(
           `[EventExtraction] Auto-created ${result.created} events, ` +
-            `${result.pending} pending for session ${sessionId}`,
+          `${result.pending} pending for session ${sessionId}`,
         );
       } else {
         this.logger.log(

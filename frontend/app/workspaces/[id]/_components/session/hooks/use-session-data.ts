@@ -44,7 +44,10 @@ interface UseSessionDataOptions {
   session: MeetingSession | null;
 }
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function useSessionData({ session }: UseSessionDataOptions) {
+  const { language } = useLanguage();
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [transcripts, setTranscripts] = useState<LocalTranscriptItem[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
@@ -57,7 +60,7 @@ export function useSessionData({ session }: UseSessionDataOptions) {
   const fetchSummary = useCallback(async (sessionId: string) => {
     setIsLoadingSummary(true);
     try {
-      const response = await fetch(`${API_URL}/api/meetings/${sessionId}/summary`, {
+      const response = await fetch(`${API_URL}/api/meetings/${sessionId}/summary?lang=${language}`, {
         credentials: 'include',
       });
       if (response.ok) {
@@ -71,7 +74,7 @@ export function useSessionData({ session }: UseSessionDataOptions) {
       setIsLoadingSummary(false);
     }
     return null;
-  }, []);
+  }, [language]);
 
   // Regenerate summary
   const handleRegenerateSummary = useCallback(async () => {

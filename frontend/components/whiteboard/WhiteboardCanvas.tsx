@@ -45,6 +45,8 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
     const containerRef = useRef<HTMLDivElement>(null);
     const [renderManager, setRenderManager] = useState<RenderManager | null>(null);
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+    const [isToolbarSettingsOpen, setIsToolbarSettingsOpen] = useState(false);
 
     // Zustand Selectors
     const tool = useWhiteboardStore((state) => state.tool);
@@ -295,7 +297,7 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
     useWhiteboardDrawing(renderManager, meetingId, broadcastEvent, broadcastCursor);
 
     // Hook: Interaction Logic (Select, Move)
-    useWhiteboardInteraction(renderManager, meetingId, broadcastEvent);
+    useWhiteboardInteraction(renderManager, meetingId, broadcastEvent, setContextMenu);
 
     // Hook: Panning & Zooming
     useWhiteboardPanning(renderManager);
@@ -564,8 +566,7 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
         setZoom(newZoom);
     };
 
-    const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-    const [isToolbarSettingsOpen, setIsToolbarSettingsOpen] = useState(false);
+
 
     // Delete Key Handler
     useEffect(() => {
@@ -594,84 +595,6 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
 
     // Context Menu Handler
 
-    const handleContextMenu = (e: React.MouseEvent) => {
-        e.preventDefault();
-
-        // 1. Strict Restriction: Must have items selected
-        // Correctly retrieve store state inside handler
-        const currentSelectedIds = useWhiteboardStore.getState().selectedIds;
-
-        if (currentSelectedIds.size === 0) {
-            setContextMenu(null);
-            return;
-        }
-
-        // Hit test setup
-        if (!renderManager) return;
-
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        const worldX = (x - pan.x) / zoom;
-        const worldY = (y - pan.y) / zoom;
-
-        // 2. Only check against CURRENTLY SELECTED items
-        const items = useWhiteboardStore.getState().items;
-        let hitSelected = false;
-
-        // Iterate selected items to see if we clicked inside one of them
-        for (const id of currentSelectedIds) {
-            const item = items.get(id);
-            if (!item) continue;
-
-            const localBounds = renderManager.getLocalBounds(item);
-
-            // Filter out invalid/invisible items just in case
-            const color = item.data?.color;
-            if (color === 'eraser' || color === '#ffffff' || color === 0xffffff) continue;
-            if (localBounds.width <= 0 || localBounds.height <= 0) continue;
-
-            // OBB Logic
-            const cx = localBounds.x + localBounds.width / 2;
-            const cy = localBounds.y + localBounds.height / 2;
-
-            const centerX = item.transform.x + cx;
-            const centerY = item.transform.y + cy;
-
-            const dx = worldX - centerX;
-            const dy = worldY - centerY;
-
-            const r = -(item.transform.rotation || 0);
-            const rx = dx * Math.cos(r) - dy * Math.sin(r);
-            const ry = dx * Math.sin(r) + dy * Math.cos(r);
-
-            const sx = item.transform.scaleX || 1;
-            const sy = item.transform.scaleY || 1;
-
-            const localX = rx / sx;
-            const localY = ry / sy;
-
-            const checkX = localX + cx;
-            const checkY = localY + cy;
-
-            // console.log(`HitTest ID=${id}: World(${worldX.toFixed(0)},${worldY.toFixed(0)}) -> Local(${checkX.toFixed(0)},${checkY.toFixed(0)}) in Bounds[${localBounds.x}, ${localBounds.y}, ${localBounds.width}, ${localBounds.height}]`);
-
-            if (checkX >= localBounds.x && checkX <= localBounds.x + localBounds.width &&
-                checkY >= localBounds.y && checkY <= localBounds.y + localBounds.height) {
-                hitSelected = true;
-                break; // Found a hit on a selected item
-            }
-        }
-
-        if (hitSelected) {
-            setContextMenu({ x: e.clientX, y: e.clientY });
-        } else {
-            setContextMenu(null);
-        }
-    };
 
     const handleMenuAction = async (action: 'delete' | 'duplicate' | 'rotate-45') => {
         console.log("Menu Action Triggered:", action);
@@ -728,7 +651,6 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
             onDrop={handleDropReal}
             onDragOver={(e) => e.preventDefault()}
             onPointerDown={() => { setIsToolbarSettingsOpen(false); setContextMenu(null); }}
-            onContextMenu={handleContextMenu}
         >
             {/* Grid Background */}
             <div

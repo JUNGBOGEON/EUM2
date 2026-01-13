@@ -23,7 +23,8 @@
             "delete": "삭제",
             "edit": "수정",
             "leave": "나가기",
-            "list": "목록"
+            "list": "목록",
+            "others": "기타"
         },
         "sidebar": {
             "connected": "연결됨",
@@ -69,16 +70,46 @@
         },
         "calendar": {
             "title": "일정",
+            "today": "오늘",
             "add_event": "일정 추가",
             "manage_types": "유형 관리",
+            "today_title": "오늘의 일정",
+            "no_events_today": "오늘 일정이 없습니다",
             "delete_title": "일정 삭제",
-            "delete_confirm": "\"{title}\" 일정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
-        },
-        "files": {
-            "title": "파일"
-        },
-        "history": {
-            "title": "회의 기록"
+            "delete_confirm": "\"{title}\" 일정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+            "event": {
+                "new_title": "새 일정",
+                "edit_title": "일정 수정",
+                "new_desc": "새로운 일정을 추가하세요.",
+                "edit_desc": "일정 정보를 수정하세요.",
+                "title_label": "제목",
+                "title_placeholder": "일정 제목",
+                "type_label": "유형",
+                "type_placeholder": "유형 선택",
+                "all_day_label": "종일",
+                "start_label": "시작",
+                "end_label": "종료",
+                "recurrence_label": "반복",
+                "desc_label": "설명",
+                "desc_placeholder": "일정에 대한 설명 (선택)",
+                "created_by": "{name}님이 등록",
+                "recurrence": {
+                    "none": "반복 안함",
+                    "daily": "매일",
+                    "weekly": "매주",
+                    "monthly": "매월"
+                },
+                "add_btn": "추가",
+                "edit_btn": "수정"
+            },
+            "manage_types_dialog": {
+                "title": "이벤트 유형 관리",
+                "desc": "커스텀 이벤트 유형을 추가하거나 수정하세요.",
+                "new_type_placeholder": "새 유형 이름",
+                "default_badge": "기본",
+                "save": "저장",
+                "edit": "수정"
+            }
         },
         "settings_title": "워크스페이스 설정",
         "save": "저장",
@@ -103,7 +134,43 @@
         "recommended_size": "권장 크기: 400x400px",
         "language_settings": "언어 설정",
         "select_language": "언어 선택",
-        "app_settings": "앱 설정"
+        "app_settings": "앱 설정",
+        "summary": {
+            "completed": "AI 요약 완료",
+            "regenerating": "재생성 중...",
+            "regenerate_format": "새 형식으로 다시 요약",
+            "view_all": "전체 보기",
+            "legacy_notice": "이전 형식의 요약입니다. \"전체 보기\" 기능을 사용하려면 새 형식으로 다시 요약해주세요.",
+            "failed": "요약 생성에 실패했습니다",
+            "retry_desc": "다시 시도해 주세요",
+            "regenerate": "다시 생성하기",
+            "skipped": "요약할 내용이 없습니다",
+            "skipped_desc": "회의 중 기록된 자막이 없어 요약을 생성하지 않았습니다",
+            "empty_title": "회의 요약이 없습니다",
+            "empty_desc": "AI가 회의 내용을 요약해 드립니다",
+            "create": "요약 생성하기",
+            "creating": "생성 중...",
+            "download": "다운로드",
+            "full_content": "전체 내용",
+            "duration_hours": "{hours}시간 {minutes}분",
+            "duration_minutes": "{minutes}분"
+        },
+        "history": {
+            "title": "회의 기록",
+            "empty": "아직 진행된 회의가 없습니다",
+            "empty_desc": "새 회의를 시작해 보세요!",
+            "load_more": "더 보기"
+        },
+        "files": {
+            "title": "파일",
+            "empty": "아직 업로드된 파일이 없습니다",
+            "upload_btn": "파일 업로드하기",
+            "search_placeholder": "파일 검색...",
+            "uploading": "업로드 중...",
+            "upload": "업로드",
+            "view_list": "리스트 보기",
+            "view_grid": "그리드 보기"
+        }
     },
     "en": {
         "menu": {
@@ -129,7 +196,8 @@
             "delete": "Delete",
             "edit": "Edit",
             "leave": "Leave",
-            "list": "Back"
+            "list": "Back",
+            "others": "Others"
         },
         "sidebar": {
             "connected": "Connected",
@@ -175,16 +243,46 @@
         },
         "calendar": {
             "title": "Calendar",
+            "today": "Today",
             "add_event": "Add Event",
             "manage_types": "Manage Types",
+            "today_title": "Today's Schedule",
+            "no_events_today": "No events today",
             "delete_title": "Delete Event",
-            "delete_confirm": "Are you sure you want to delete \"{title}\"? This action cannot be undone."
-        },
-        "files": {
-            "title": "Files"
-        },
-        "history": {
-            "title": "History"
+            "delete_confirm": "Are you sure you want to delete \"{title}\"? This action cannot be undone.",
+            "event": {
+                "new_title": "New Event",
+                "edit_title": "Edit Event",
+                "new_desc": "Add a new event.",
+                "edit_desc": "Edit event details.",
+                "title_label": "Title",
+                "title_placeholder": "Event Title",
+                "type_label": "Type",
+                "type_placeholder": "Select Type",
+                "all_day_label": "All Day",
+                "start_label": "Start",
+                "end_label": "End",
+                "recurrence_label": "Repeat",
+                "desc_label": "Description",
+                "desc_placeholder": "Event Description (Optional)",
+                "created_by": "Created by {name}",
+                "recurrence": {
+                    "none": "None",
+                    "daily": "Daily",
+                    "weekly": "Weekly",
+                    "monthly": "Monthly"
+                },
+                "add_btn": "Add",
+                "edit_btn": "Update"
+            },
+            "manage_types_dialog": {
+                "title": "Manage Event Types",
+                "desc": "Add or edit custom event types.",
+                "new_type_placeholder": "New Type Name",
+                "default_badge": "Default",
+                "save": "Save",
+                "edit": "Edit"
+            }
         },
         "settings_title": "Workspace Settings",
         "save": "Save",
@@ -209,7 +307,43 @@
         "recommended_size": "Recommended size: 400x400px",
         "language_settings": "Language Settings",
         "select_language": "Select Language",
-        "app_settings": "App Settings"
+        "app_settings": "App Settings",
+        "summary": {
+            "completed": "AI Summary Completed",
+            "regenerating": "Regenerating...",
+            "regenerate_format": "Regenerate in New Format",
+            "view_all": "View All",
+            "legacy_notice": "This is a legacy summary. To use \"View All\", please regenerate in the new format.",
+            "failed": "Failed to generate summary",
+            "retry_desc": "Please try again",
+            "regenerate": "Regenerate",
+            "skipped": "No content to summarize",
+            "skipped_desc": "No transcripts were recorded during the meeting.",
+            "empty_title": "No Meeting Summary",
+            "empty_desc": "AI will summarize the meeting content",
+            "create": "Generate Summary",
+            "creating": "Generating...",
+            "download": "Download",
+            "full_content": "Full Content",
+            "duration_hours": "{hours}h {minutes}m",
+            "duration_minutes": "{minutes}m"
+        },
+        "history": {
+            "title": "History",
+            "empty": "No meetings held yet",
+            "empty_desc": "Start a new meeting!",
+            "load_more": "Load More"
+        },
+        "files": {
+            "title": "Files",
+            "empty": "No files uploaded yet",
+            "upload_btn": "Upload File",
+            "search_placeholder": "Search files...",
+            "uploading": "Uploading...",
+            "upload": "Upload",
+            "view_list": "List View",
+            "view_grid": "Grid View"
+        }
     },
     "zh-CN": {
         "menu": {
@@ -235,7 +369,8 @@
             "delete": "删除",
             "edit": "编辑",
             "leave": "离开",
-            "list": "列表"
+            "list": "列表",
+            "others": "其他"
         },
         "sidebar": {
             "connected": "已连接",
@@ -281,16 +416,46 @@
         },
         "calendar": {
             "title": "日历",
+            "today": "今天",
             "add_event": "添加日程",
             "manage_types": "管理类型",
+            "today_title": "今日日程",
+            "no_events_today": "今天没有日程",
             "delete_title": "删除日程",
-            "delete_confirm": "您确定要删除“{title}”吗？此操作无法撤销。"
-        },
-        "files": {
-            "title": "文件"
-        },
-        "history": {
-            "title": "会议记录"
+            "delete_confirm": "您确定要删除“{title}”吗？此操作无法撤销。",
+            "event": {
+                "new_title": "新日程",
+                "edit_title": "编辑日程",
+                "new_desc": "添加新的日程。",
+                "edit_desc": "编辑日程信息。",
+                "title_label": "标题",
+                "title_placeholder": "日程标题",
+                "type_label": "类型",
+                "type_placeholder": "选择类型",
+                "all_day_label": "全天",
+                "start_label": "开始",
+                "end_label": "结束",
+                "recurrence_label": "重复",
+                "desc_label": "描述",
+                "desc_placeholder": "日程描述（可选）",
+                "created_by": "由 {name} 创建",
+                "recurrence": {
+                    "none": "不重复",
+                    "daily": "每天",
+                    "weekly": "每周",
+                    "monthly": "每月"
+                },
+                "add_btn": "添加",
+                "edit_btn": "更新"
+            },
+            "manage_types_dialog": {
+                "title": "管理事件类型",
+                "desc": "添加或编辑自定义事件类型。",
+                "new_type_placeholder": "新类型名称",
+                "default_badge": "默认",
+                "save": "保存",
+                "edit": "编辑"
+            }
         },
         "settings_title": "工作区设置",
         "save": "保存",
@@ -315,7 +480,43 @@
         "recommended_size": "推荐尺寸：400x400px",
         "language_settings": "语言设置",
         "select_language": "选择语言",
-        "app_settings": "应用设置"
+        "app_settings": "应用设置",
+        "summary": {
+            "completed": "AI 摘要完成",
+            "regenerating": "重新生成中...",
+            "regenerate_format": "以新格式重新摘要",
+            "view_all": "查看全部",
+            "legacy_notice": "这是旧格式的摘要。如需使用“查看全部”功能，请以新格式重新生成。",
+            "failed": "摘要生成失败",
+            "retry_desc": "请重试",
+            "regenerate": "重新生成",
+            "skipped": "无可摘要内容",
+            "skipped_desc": "会议期间未记录字幕，因此未生成摘要。",
+            "empty_title": "无会议摘要",
+            "empty_desc": "AI 将为您摘要会议内容",
+            "create": "生成摘要",
+            "creating": "生成中...",
+            "download": "下载",
+            "full_content": "全部内容",
+            "duration_hours": "{hours}小时 {minutes}分",
+            "duration_minutes": "{minutes}分"
+        },
+        "history": {
+            "title": "会议记录",
+            "empty": "尚无已进行的会议",
+            "empty_desc": "尝试开始新的会议吧！",
+            "load_more": "加载更多"
+        },
+        "files": {
+            "title": "文件",
+            "empty": "尚无已上传的文件",
+            "upload_btn": "上传文件",
+            "search_placeholder": "搜索文件...",
+            "uploading": "上传中...",
+            "upload": "上传",
+            "view_list": "列表视图",
+            "view_grid": "网格视图"
+        }
     },
     "ja": {
         "menu": {
@@ -341,7 +542,8 @@
             "delete": "削除",
             "edit": "編集",
             "leave": "退出",
-            "list": "一覧"
+            "list": "一覧",
+            "others": "その他"
         },
         "sidebar": {
             "connected": "接続済み",
@@ -387,16 +589,46 @@
         },
         "calendar": {
             "title": "カレンダー",
+            "today": "今日",
             "add_event": "予定を追加",
             "manage_types": "タイプ管理",
+            "today_title": "今日の予定",
+            "no_events_today": "今日の予定はありません",
             "delete_title": "予定削除",
-            "delete_confirm": "\"{title}\" の予定を削除しますか？この操作は元に戻せません。"
-        },
-        "files": {
-            "title": "ファイル"
-        },
-        "history": {
-            "title": "会議履歴"
+            "delete_confirm": "\"{title}\" の予定を削除しますか？この操作は元に戻せません。",
+            "event": {
+                "new_title": "新しい予定",
+                "edit_title": "予定編集",
+                "new_desc": "新しい予定を追加してください。",
+                "edit_desc": "予定情報を修正してください。",
+                "title_label": "タイトル",
+                "title_placeholder": "予定のタイトル",
+                "type_label": "タイプ",
+                "type_placeholder": "タイプ選択",
+                "all_day_label": "終日",
+                "start_label": "開始",
+                "end_label": "終了",
+                "recurrence_label": "繰り返し",
+                "desc_label": "説明",
+                "desc_placeholder": "予定の説明（オプション）",
+                "created_by": "{name}さんが登録",
+                "recurrence": {
+                    "none": "繰り返さない",
+                    "daily": "毎日",
+                    "weekly": "毎週",
+                    "monthly": "毎月"
+                },
+                "add_btn": "追加",
+                "edit_btn": "修正"
+            },
+            "manage_types_dialog": {
+                "title": "イベントタイプ管理",
+                "desc": "カスタムイベントタイプを追加または修正してください。",
+                "new_type_placeholder": "新しいタイプ名",
+                "default_badge": "基本",
+                "save": "保存",
+                "edit": "修正"
+            }
         },
         "settings_title": "ワークスペース設定",
         "save": "保存",
@@ -421,6 +653,41 @@
         "recommended_size": "推奨サイズ：400x400px",
         "language_settings": "言語設定",
         "select_language": "言語選択",
-        "app_settings": "アプリ設定"
+        "summary": {
+            "completed": "AI 要約完了",
+            "regenerating": "再生成中...",
+            "regenerate_format": "新しい形式で再要約",
+            "view_all": "すべて表示",
+            "legacy_notice": "以前の形式の要約です。「すべて表示」機能を使用するには、新しい形式で再要約してください。",
+            "failed": "要約の生成に失敗しました",
+            "retry_desc": "もう一度お試しください",
+            "regenerate": "再生成する",
+            "skipped": "要約する内容がありません",
+            "skipped_desc": "会議中に記録された字幕がないため、要約を作成しませんでした",
+            "empty_title": "会議の要約がありません",
+            "empty_desc": "AIが会議の内容を要約します",
+            "create": "要約を作成する",
+            "creating": "生成中...",
+            "download": "ダウンロード",
+            "full_content": "全文",
+            "duration_hours": "{hours}時間 {minutes}分",
+            "duration_minutes": "{minutes}分"
+        },
+        "history": {
+            "title": "会議履歴",
+            "empty": "まだ行われた会議がありません",
+            "empty_desc": "新しい会議を開始してみてください！",
+            "load_more": "もっと見る"
+        },
+        "files": {
+            "title": "ファイル",
+            "empty": "まだアップロードされたファイルがありません",
+            "upload_btn": "ファイルをアップロードする",
+            "search_placeholder": "ファイル検索...",
+            "uploading": "アップロード中...",
+            "upload": "アップロード",
+            "view_list": "リスト表示",
+            "view_grid": "グリッド表示"
+        }
     }
 }

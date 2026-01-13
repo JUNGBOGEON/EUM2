@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 
-import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
+import { WorkspaceGateway, TTSReadyPayload } from '../../workspaces/workspace.gateway';
 import { ParticipantPreferenceService } from './participant-preference.service';
 import { TranslationCacheService } from './translation-cache.service';
 import { TranslationContextService } from './translation-context.service';
@@ -8,6 +8,8 @@ import {
   SentenceDetectorService,
   SentenceAnalysis,
 } from './sentence-detector.service';
+import { TTSPreferenceService } from './tts-preference.service';
+import { PollyCacheService } from './polly-cache.service';
 
 /**
  * 번역 요청 DTO
@@ -55,6 +57,8 @@ export class TranslationService {
     private translationCacheService: TranslationCacheService,
     private translationContextService: TranslationContextService,
     private sentenceDetectorService: SentenceDetectorService,
+    private ttsPreferenceService: TTSPreferenceService,
+    private pollyCacheService: PollyCacheService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
   ) {}
@@ -334,58 +338,18 @@ export class TranslationService {
           `[Translation] Translating to ${targetLanguage} for users: ${userIds.join(', ')}`,
         );
 
-        let translatedText: string;
-        let translationMethod: 'direct' | 'context-aware' = 'direct';
-
-        // 연속 발화이고 문맥이 있으면 문맥 인식 번역 사용
-        if (isContinuous && speakerContext) {
-          const previousText =
-            this.translationContextService.getRecentText(speakerContext);
-          const previousTranslation =
-            this.translationContextService.getRecentTranslation(speakerContext);
-
-          if (previousText) {
-            this.logger.debug(
-              `[Translation] Using context-aware translation. Previous: "${previousText.substring(0, 30)}..."`,
-            );
-
-            const result =
-              await this.translationCacheService.translateWithContext(
-                originalText,
-                sourceLanguage,
-                targetLanguage,
-                previousText,
-                previousTranslation,
-              );
-
-            translatedText = result.translatedText;
-            translationMethod = 'context-aware';
-
-            this.logger.log(
-              `[Translation] Context-aware: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
-            );
-          } else {
-            // 문맥이 비어있으면 직접 번역
-            translatedText =
-              await this.translationCacheService.translateWithCache(
-                originalText,
-                sourceLanguage,
-                targetLanguage,
-              );
-          }
-        } else {
-          // 새로운 발화 시작 - 직접 번역
-          translatedText =
-            await this.translationCacheService.translateWithCache(
-              originalText,
-              sourceLanguage,
-              targetLanguage,
-            );
-
-          this.logger.log(
-            `[Translation] Direct: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
+        // 항상 직접 번역 사용 (문맥 인식 번역은 추출 오류로 비활성화)
+        const translatedText =
+          await this.translationCacheService.translateWithCache(
+            originalText,
+            sourceLanguage,
+            targetLanguage,
           );
-        }
+        const translationMethod = 'direct';
+
+        this.logger.log(
+          `[Translation] Direct: "${originalText.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`,
+        );
 
         // 해당 언어 사용자들에게 WebSocket으로 전송
         const payload: TranslatedTranscriptPayload = {
@@ -412,6 +376,19 @@ export class TranslationService {
         this.logger.log(
           `[Translation] Sent ${targetLanguage} translation (${translationMethod}) to ${userIds.length} user(s)`,
         );
+
+        // TTS 처리 (비동기, 번역 전송과 별개로 처리)
+        this.processTTSForUsers(
+          sessionId,
+          userIds,
+          translatedText,
+          targetLanguage,
+          resultId,
+          speakerName,
+          timestamp,
+        ).catch((err) => {
+          this.logger.error(`[TTS] TTS processing failed: ${err.message}`, err.stack);
+        });
       } catch (error) {
         // 조용히 실패 - 개별 언어 번역 실패해도 다른 언어는 계속 처리
         this.logger.warn(
@@ -438,12 +415,91 @@ export class TranslationService {
           originalText,
           translatedForContext,
         );
-      } catch {
-        // 문맥 업데이트 실패는 무시
+      } catch (error) {
+        // 문맥 번역 캐싱 실패 - 로그 후 번역 없이 원문만으로 문맥 업데이트
+        this.logger.warn(
+          `[Translation] Context caching failed for session ${sessionId}: ${error.message}`,
+        );
         await this.translationContextService.updateContext(
           sessionId,
           speakerUserId,
           originalText,
+        );
+      }
+    }
+  }
+
+  // ==========================================
+  // TTS Processing
+  // ==========================================
+
+  /**
+   * TTS 활성화된 사용자들에게 TTS 오디오 생성 및 전송
+   */
+  private async processTTSForUsers(
+    sessionId: string,
+    userIds: string[],
+    translatedText: string,
+    targetLanguage: string,
+    resultId: string,
+    speakerName: string,
+    timestamp: number,
+  ): Promise<void> {
+    // TTS 활성화된 사용자만 필터링
+    const ttsEnabledUsers = await this.ttsPreferenceService.getTTSEnabledUsers(
+      sessionId,
+      userIds,
+    );
+
+    if (ttsEnabledUsers.length === 0) {
+      this.logger.debug('[TTS] No TTS-enabled users for this translation');
+      return;
+    }
+
+    this.logger.log(
+      `[TTS] Processing TTS for ${ttsEnabledUsers.length} user(s), lang=${targetLanguage}`,
+    );
+
+    // 각 사용자별로 음성 설정에 따라 TTS 생성
+    for (const userId of ttsEnabledUsers) {
+      try {
+        // 사용자의 음성 설정 가져오기
+        const voiceId = await this.ttsPreferenceService.getVoicePreference(
+          sessionId,
+          userId,
+          targetLanguage,
+        );
+
+        // TTS 생성 (캐싱 적용)
+        const ttsResult = await this.pollyCacheService.synthesizeWithCache(
+          translatedText,
+          voiceId,
+          targetLanguage,
+          sessionId,
+        );
+
+        // TTS Ready 이벤트 전송
+        const payload: TTSReadyPayload = {
+          type: 'tts_ready',
+          resultId,
+          audioUrl: ttsResult.audioUrl,
+          durationMs: ttsResult.durationMs,
+          voiceId: ttsResult.voiceId,
+          targetLanguage,
+          speakerName,
+          translatedText,
+          timestamp,
+        };
+
+        this.workspaceGateway.sendTTSReady(userId, payload);
+
+        this.logger.debug(
+          `[TTS] Sent TTS ready to user ${userId}: voice=${voiceId}, duration=${ttsResult.durationMs}ms`,
+        );
+      } catch (error) {
+        // 개별 사용자 TTS 실패는 무시
+        this.logger.warn(
+          `[TTS] Failed to generate TTS for user ${userId}: ${error.message}`,
         );
       }
     }

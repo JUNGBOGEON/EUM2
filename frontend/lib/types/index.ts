@@ -38,6 +38,12 @@ export type {
   TranslatedTranscript,
   TranslationState,
   ChimeRosterAttendee,
+  // TTS types
+  TTSReadyPayload,
+  TTSQueueItem,
+  PollyVoice,
+  TTSPreference,
+  TTSState,
 } from './meeting';
 
 // File 관련 타입

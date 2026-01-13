@@ -18,6 +18,8 @@ import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
 import { SummaryService } from './services/summary.service';
 import { TranslationService } from './services/translation.service';
+import { PollyService } from './services/polly.service';
+import { TTSPreferenceService } from './services/tts-preference.service';
 
 /**
  * MeetingsService
@@ -41,6 +43,8 @@ export class MeetingsService {
     private transcriptionService: TranscriptionService,
     private summaryService: SummaryService,
     private translationService: TranslationService,
+    private pollyService: PollyService,
+    private ttsPreferenceService: TTSPreferenceService,
   ) {}
 
   // ==========================================
@@ -308,5 +312,81 @@ export class MeetingsService {
    */
   async getSessionLanguagePreferences(sessionId: string) {
     return this.translationService.getSessionLanguagePreferences(sessionId);
+  }
+
+  // ==========================================
+  // TTS 관리
+  // ==========================================
+
+  /**
+   * TTS 활성화/비활성화 토글
+   */
+  async toggleTTS(sessionId: string, userId: string, enabled: boolean) {
+    await this.ttsPreferenceService.setTTSEnabled(sessionId, userId, enabled);
+    return { success: true, enabled };
+  }
+
+  /**
+   * TTS 상태 조회
+   */
+  async getTTSStatus(sessionId: string, userId: string) {
+    const enabled = await this.ttsPreferenceService.isTTSEnabled(
+      sessionId,
+      userId,
+    );
+    return { enabled };
+  }
+
+  /**
+   * TTS 전체 설정 조회
+   */
+  async getTTSPreferences(sessionId: string, userId: string) {
+    return this.ttsPreferenceService.getFullPreferences(sessionId, userId);
+  }
+
+  /**
+   * TTS 음성 설정
+   */
+  async setTTSVoice(
+    sessionId: string,
+    userId: string,
+    languageCode: string,
+    voiceId: string,
+  ) {
+    await this.ttsPreferenceService.setVoicePreference(
+      sessionId,
+      userId,
+      languageCode,
+      voiceId,
+    );
+    return { success: true, languageCode, voiceId };
+  }
+
+  /**
+   * TTS 볼륨 설정
+   */
+  async setTTSVolume(sessionId: string, userId: string, volume: number) {
+    await this.ttsPreferenceService.setVolume(sessionId, userId, volume);
+    return { success: true, volume };
+  }
+
+  /**
+   * 특정 언어의 사용 가능한 음성 목록
+   */
+  getTTSVoices(languageCode: string) {
+    return {
+      languageCode,
+      voices: this.pollyService.getAvailableVoices(languageCode),
+      defaultVoice: this.pollyService.getDefaultVoice(languageCode),
+    };
+  }
+
+  /**
+   * TTS 지원 언어 목록
+   */
+  getTTSSupportedLanguages() {
+    return {
+      languages: this.pollyService.getSupportedLanguages(),
+    };
   }
 }

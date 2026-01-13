@@ -23,6 +23,7 @@ import {
   useTranslation,
   useVoiceFocus,
   useTranscriptSync,
+  useTTS,
 } from '@/hooks/meeting';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
@@ -33,6 +34,7 @@ import {
   DeviceSettingsDialog,
   FloatingSubtitle,
   EndMeetingDialog,
+  TTSSettingsDialog,
 } from './_components';
 // Legacy components for loading/error states
 import {
@@ -54,6 +56,7 @@ function MeetingRoomContent() {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
+  const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
 
   // stopTranscription ref (useBrowserTranscription보다 먼저 정의된 콜백에서 사용)
   const stopTranscriptionRef = useRef<(() => void) | null>(null);
@@ -170,6 +173,22 @@ function MeetingRoomContent() {
     getTranslation,
     recentTranslations,
   } = useTranslation({
+    meetingId,
+    userId,
+  });
+
+  // TTS hook (번역된 자막 음성 재생)
+  const {
+    ttsEnabled,
+    isTogglingTTS,
+    isPlaying: isTTSPlaying,
+    volume: ttsVolume,
+    queueLength: ttsQueueLength,
+    selectedVoices,
+    toggleTTS,
+    setVolume: setTTSVolume,
+    selectVoice,
+  } = useTTS({
     meetingId,
     userId,
   });
@@ -328,12 +347,21 @@ function MeetingRoomContent() {
         isVoiceFocusEnabled={isVoiceFocusEnabled}
         isVoiceFocusLoading={isVoiceFocusLoading}
         isWhiteboardEnabled={showWhiteboard}
+        // TTS props
+        ttsEnabled={ttsEnabled}
+        isTogglingTTS={isTogglingTTS}
+        isTTSPlaying={isTTSPlaying}
+        ttsVolume={ttsVolume}
+        ttsQueueLength={ttsQueueLength}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
         onToggleTranslation={toggleTranslation}
         onToggleVoiceFocus={toggleVoiceFocus}
         onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
+        onToggleTTS={toggleTTS}
+        onSetTTSVolume={setTTSVolume}
+        onOpenTTSSettings={() => setShowTTSSettings(true)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeetingClick}
@@ -357,6 +385,14 @@ function MeetingRoomContent() {
         isOpen={showEndMeetingDialog}
         onClose={() => setShowEndMeetingDialog(false)}
         onConfirm={handleEndMeetingConfirm}
+      />
+
+      {/* TTS Settings Dialog */}
+      <TTSSettingsDialog
+        open={showTTSSettings}
+        onOpenChange={setShowTTSSettings}
+        selectedVoices={selectedVoices}
+        onSelectVoice={selectVoice}
       />
     </div>
   );

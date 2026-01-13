@@ -5,3 +5,6 @@ export * from './translation.service';
 export * from './translation-context.service';
 export * from './sentence-detector.service';
 export * from './text-chunking.service';
+export * from './polly.service';
+export * from './polly-cache.service';
+export * from './tts-preference.service';

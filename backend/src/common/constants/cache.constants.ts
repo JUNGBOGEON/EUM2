@@ -15,6 +15,10 @@ export const CACHE_TTL = {
   TRANSLATION_PREFERENCE: 2 * 60 * 60 * 1000, // 2시간 - 사용자 번역 설정 캐시
   TRANSLATION_CHECK_INTERVAL: 30 * 1000, // 30초 - 번역 상태 확인 간격
 
+  // TTS (Text-to-Speech)
+  TTS_AUDIO_CACHE: 24 * 60 * 60 * 1000, // 24시간 - TTS 오디오 캐시
+  TTS_PREFERENCE: 2 * 60 * 60 * 1000, // 2시간 - TTS 사용자 설정 캐시
+
   // General
   DEFAULT: 60 * 60 * 1000, // 1시간 - 기본 TTL
   SHORT: 5 * 60 * 1000, // 5분 - 짧은 TTL
@@ -48,6 +52,8 @@ export const CACHE_KEY_PREFIX = {
   TRANSLATION: 'translation:',
   TRANSLATION_PREF: 'translation:pref:',
   MEETING_CONFIG: 'meeting:config:',
+  TTS_CACHE: 'tts:cache:',
+  TTS_PREFERENCE: 'tts:preference:',
 } as const;
 
 export type CacheTTL = (typeof CACHE_TTL)[keyof typeof CACHE_TTL];

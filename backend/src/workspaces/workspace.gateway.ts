@@ -18,6 +18,7 @@ import {
   NewTranscriptPayload,
   SummaryStatusPayload,
   LanguageChangedPayload,
+  TTSReadyPayload,
 } from './services/gateway-broadcast.service';
 
 // Re-export payload types for external use
@@ -28,6 +29,7 @@ export type {
   NewTranscriptPayload,
   SummaryStatusPayload,
   LanguageChangedPayload,
+  TTSReadyPayload,
 } from './services/gateway-broadcast.service';
 
 @WebSocketGateway({
@@ -265,6 +267,10 @@ export class WorkspaceGateway
 
   broadcastLanguageChange(sessionId: string, payload: LanguageChangedPayload) {
     this.broadcastService.broadcastLanguageChange(sessionId, payload);
+  }
+
+  sendTTSReady(userId: string, payload: TTSReadyPayload) {
+    this.broadcastService.sendTTSReady(userId, payload);
   }
 
   // ==========================================

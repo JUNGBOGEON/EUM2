@@ -20,6 +20,9 @@ interface DragState {
     initialLocalCenters?: Map<string, { x: number, y: number }>;
     isOBB?: boolean;
     rotationOffset?: number;
+    rotation?: number;
+    halfW?: number;
+    halfH?: number;
 }
 
 export function useWhiteboardInteraction(renderManager: RenderManager | null, broadcastEvent?: (type: string, data: any) => void) {
@@ -431,7 +434,10 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                 initialAngle,
                 // @ts-ignore
                 isOBB: isOBB,
-                rotationOffset: isOBB ? rotation : 0
+                rotationOffset: isOBB ? rotation : 0,
+                rotation: isOBB ? rotation : 0,
+                halfW: (hitHandle as any).halfW,
+                halfH: (hitHandle as any).halfH
             };
             canvas.setPointerCapture(e.pointerId);
             return;
@@ -624,7 +630,8 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
 
             } else {
                 // RESIZE LOGIC
-                if (isOBB) {
+                if (initialItemTransforms.size === 1 && isOBB) {
+                    // SINGLE OBJECT OBB RESIZE
                     const id = Array.from(initialItemTransforms.keys())[0] as string;
                     const initTx = initialItemTransforms.get(id);
                     if (initTx) {
@@ -647,8 +654,10 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                         if (!item) return;
 
                         const lBounds = renderManager?.getLocalBounds(item);
-                        const baseW = lBounds?.width || 100;
-                        const baseH = lBounds?.height || 100;
+                        // Ensure base dimensions are at least 1 to avoid Division By Zero and infinite scale.
+                        // Using '|| 100' was a bug for 0-width lines.
+                        const baseW = Math.max(lBounds?.width || 0, 1);
+                        const baseH = Math.max(lBounds?.height || 0, 1);
 
                         const initScaleX = initTx.scaleX || 1;
                         const initScaleY = initTx.scaleY || 1;
@@ -656,8 +665,8 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                         const curW = baseW * initScaleX;
                         const curH = baseH * initScaleY;
 
-                        let newW = Math.max(10, curW + dW);
-                        let newH = Math.max(10, curH + dH);
+                        let newW = Math.max(1, curW + dW);
+                        let newH = Math.max(1, curH + dH);
 
                         if (e.shiftKey) {
                             const s = Math.max(newW / curW, newH / curH);
@@ -692,12 +701,172 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                             }
                         });
                     }
+                } else if (isOBB) {
+                    // MULTI-OBJECT OBB RESIZE (Center-based)
+                    // We treat the group as a single large OBB.
+                    const { groupCenter, halfW, halfH, rotation } = isDragging.current as any;
+
+                    const subPixelShim = 0.1;
+                    const safeHalfW = Math.max(subPixelShim, halfW || 0);
+                    const safeHalfH = Math.max(subPixelShim, halfH || 0);
+
+                    const vx = point.x - groupCenter.x;
+                    const vy = point.y - groupCenter.y;
+
+                    const rCos = Math.cos(-rotation);
+                    const rSin = Math.sin(-rotation);
+                    const localX = vx * rCos - vy * rSin;
+                    const localY = vx * rSin + vy * rCos;
+
+                    let newHalfW = halfW || 0;
+                    let newHalfH = halfH || 0;
+
+                    let sX = 1;
+                    let sY = 1;
+
+                    // Calculates scale based on Fixed Pivot and Mouse Position (localX/Y)
+                    // If we drag Right Handle, Pivot is Left Edge (-halfW). 
+                    // New Width = Mouse - Pivot. Scale = NewWidth / OldWidth.
+
+                    if (handle?.includes('l') || handle?.includes('r')) {
+                        const pivotX = handle.includes('l') ? safeHalfW : -safeHalfW;
+                        // Avoid flipping for now (clamp mouse to minimum width side of pivot)
+                        const minW = subPixelShim * 2;
+                        const mouseX = handle.includes('l')
+                            ? Math.min(localX, pivotX - minW)
+                            : Math.max(localX, pivotX + minW);
+
+                        const newWidth = Math.abs(mouseX - pivotX);
+                        const oldWidth = safeHalfW * 2;
+                        sX = newWidth / oldWidth;
+
+                        // Update newHalfW for Aspect Ratio logic
+                        newHalfW = newWidth / 2;
+                    }
+
+                    if (handle?.includes('t') || handle?.includes('b')) {
+                        const pivotY = handle.includes('t') ? safeHalfH : -safeHalfH;
+                        const minH = subPixelShim * 2;
+                        const mouseY = handle.includes('t')
+                            ? Math.min(localY, pivotY - minH)
+                            : Math.max(localY, pivotY + minH);
+
+                        const newHeight = Math.abs(mouseY - pivotY);
+                        const oldHeight = safeHalfH * 2;
+                        sY = newHeight / oldHeight;
+
+                        // Update newHalfH for Aspect Ratio logic
+                        newHalfH = newHeight / 2;
+                    }
+
+                    if (e.shiftKey) {
+                        // For corner handles, pick the dominant scale to restart aspect ratio
+                        // If side handle, sX or sY is 1, so max works but logic is tricky.
+                        // Actually standard behavior:
+                        // If corner: Uniform scale max(sX, sY).
+                        // If side: Ignore shift or just scale that axis? Usually ignore.
+                        if (handle && handle.length > 1) { // Corner
+                            const s = Math.max(sX, sY);
+                            sX = s;
+                            sY = s;
+                            newHalfW = safeHalfW * s; // Update for debug/consistency
+                            newHalfH = safeHalfH * s;
+                        }
+                    }
+
+                    if (!Number.isFinite(sX)) sX = 1;
+                    if (!Number.isFinite(sY)) sY = 1;
+
+                    // DEBUG LOG
+                    // console.log('[Resize OBB] sX:', sX, 'sY:', sY, 'halfW:', halfW, 'newHalfW:', newHalfW);
+
+                    initialItemTransforms.forEach((initialTransform: any, id: string) => {
+                        const localCenter = initialLocalCenters?.get(id) || { x: 0, y: 0 };
+
+                        const oldWx = initialTransform.x + localCenter.x;
+                        const oldWy = initialTransform.y + localCenter.y;
+                        const relX = oldWx - groupCenter.x;
+                        const relY = oldWy - groupCenter.y;
+                        const relLx = relX * rCos - relY * rSin;
+                        const relLy = relX * rSin + relY * rCos;
+                        const newRelLx = relLx * sX;
+                        const newRelLy = relLy * sY;
+                        const wCos = Math.cos(rotation);
+                        const wSin = Math.sin(rotation);
+
+                        // Pivot Correction Logic
+                        // Fixed Pivot depends on Handle
+                        let pivotLx = 0;
+                        let pivotLy = 0;
+                        if (handle?.includes('l')) pivotLx = halfW;
+                        if (handle?.includes('r')) pivotLx = -halfW;
+                        if (handle?.includes('t')) pivotLy = halfH;
+                        if (handle?.includes('b')) pivotLy = -halfH;
+
+                        const newRelLx_Pinned = pivotLx + (relLx - pivotLx) * sX;
+                        const newRelLy_Pinned = pivotLy + (relLy - pivotLy) * sY;
+
+                        const newRelX_Pinned = newRelLx_Pinned * wCos - newRelLy_Pinned * wSin;
+                        const newRelY_Pinned = newRelLx_Pinned * wSin + newRelLy_Pinned * wCos;
+
+                        const finalWx = groupCenter.x + newRelX_Pinned;
+                        const finalWy = groupCenter.y + newRelY_Pinned;
+
+                        let newScaleX = (initialTransform.scaleX || 1) * sX;
+                        let newScaleY = (initialTransform.scaleY || 1) * sY;
+
+                        // Final Safety Check
+                        if (!Number.isFinite(newScaleX)) newScaleX = 1;
+                        if (!Number.isFinite(newScaleY)) newScaleY = 1;
+                        if (!Number.isFinite(finalWx)) return; // Skip invalid update
+                        if (!Number.isFinite(finalWy)) return;
+
+                        updateItem(id, {
+                            transform: {
+                                ...initialTransform,
+                                x: finalWx - localCenter.x,
+                                y: finalWy - localCenter.y,
+                                scaleX: newScaleX,
+                                scaleY: newScaleY
+                            }
+                        });
+
+                        try {
+                            // Only broadcast if successful
+                            try {
+                                if (broadcastEvent) {
+                                    broadcastEvent('update_item', {
+                                        id,
+                                        changes: {
+                                            transform: {
+                                                x: finalWx - localCenter.x,
+                                                y: finalWy - localCenter.y,
+                                                scaleX: newScaleX,
+                                                scaleY: newScaleY
+                                            }
+                                        }
+                                    });
+                                }
+                            } catch (err) {
+                                console.warn('Broadcast failed, but continuing local interaction:', err);
+                            }
+                        } catch (err) {
+                            // Ignore network errors during move
+                        }
+                    });
 
                 } else {
                     // AABB GROUP RESIZE
                     const { minX, minY, maxX, maxY } = groupBounds!;
-                    const groupW = maxX - minX;
-                    const groupH = maxY - minY;
+                    const rawGroupW = maxX - minX;
+                    const rawGroupH = maxY - minY;
+
+                    // Ensure we don't divide by zero
+                    // Use a minimum of 10 to prevents hyper-sensitivity when resizing thin/zero-width lines.
+                    // If we used 1, a 1px drag would double the scale. 10 is smoother.
+                    const subPixelShim = 0.1; // Allows responding to drags even if dimension is near zero
+                    const groupW = Math.max(rawGroupW, subPixelShim);
+                    const groupH = Math.max(rawGroupH, subPixelShim);
 
                     let anchorX = minX;
                     let anchorY = minY;
@@ -707,16 +876,16 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                     if (handle?.includes('t')) anchorY = maxY;
                     if (handle?.includes('b')) anchorY = minY;
 
-                    let newW = groupW;
-                    let newH = groupH;
+                    let newW = rawGroupW;
+                    let newH = rawGroupH;
 
                     if (handle?.includes('l')) newW -= dx;
                     if (handle?.includes('r')) newW += dx;
                     if (handle?.includes('t')) newH -= dy;
                     if (handle?.includes('b')) newH += dy;
 
-                    newW = Math.max(10, newW);
-                    newH = Math.max(10, newH);
+                    newW = Math.max(subPixelShim, newW);
+                    newH = Math.max(subPixelShim, newH);
 
                     if (e.shiftKey) {
                         const scaleX = newW / groupW;
@@ -726,8 +895,32 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                         newH = groupH * scale;
                     }
 
-                    const sx = newW / groupW;
-                    const sy = newH / groupH;
+                    // Calculate Scale Factors
+                    // If original dimension was effectively 0 (prevented by max(..., 1)), 
+                    // we should probably just keep scale 1 unless we physically expanded it?
+                    // But for lines, we want to allow resizing the non-zero axis.
+                    // The zero axis (e.g. Width 0) will result in newW changing, so scaleX changes.
+                    // But applying scaleX to 0 width has no effect. This is fine.
+                    // BUT if we divide by "1" (from max(0,1)), then scaleX = newW / 1 = newW. 
+                    // That implies massive scale (e.g. 100x).
+                    // If we have a vertical line (Index W=0), and we drag Width to 100.
+                    // groupW = 1. newW = 100. sx = 100.
+                    // Line transform scaleX becomes 100.
+                    // Visual width 0 * 100 = 0.
+                    // This is SAFE visually.
+                    // But if rawGroupW was 0, we should probably treat sx as 1 to avoid dirty writes?
+                    // Actually, modifying scale of 0 dimension is harmless but unnecessary.
+                    // Let's stick to simple safety:
+
+                    let sx = newW / groupW;
+                    let sy = newH / groupH;
+
+                    if (!Number.isFinite(sx)) sx = 1;
+                    if (!Number.isFinite(sy)) sy = 1;
+
+                    // DEBUG LOG
+                    // DEBUG LOG
+                    // console.log('[Resize AABB] sx:', sx, 'sy:', sy, 'groupW:', groupW, 'newW:', newW);
 
                     initialItemTransforms.forEach((initialTransform: any, id: string) => {
                         const localCenter = initialLocalCenters?.get(id) || { x: 0, y: 0 };
@@ -735,8 +928,15 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                         const oldWorldCenterY = initialTransform.y + localCenter.y;
                         const newWorldCenterX = anchorX + (oldWorldCenterX - anchorX) * sx;
                         const newWorldCenterY = anchorY + (oldWorldCenterY - anchorY) * sy;
-                        const newScaleX = (initialTransform.scaleX || 1) * sx;
-                        const newScaleY = (initialTransform.scaleY || 1) * sy;
+
+                        let newScaleX = (initialTransform.scaleX || 1) * sx;
+                        let newScaleY = (initialTransform.scaleY || 1) * sy;
+
+                        // Final Safety Check
+                        if (!Number.isFinite(newScaleX)) newScaleX = 1;
+                        if (!Number.isFinite(newScaleY)) newScaleY = 1;
+                        if (!Number.isFinite(newWorldCenterX)) return;
+                        if (!Number.isFinite(newWorldCenterY)) return;
 
                         updateItem(id, {
                             transform: {
@@ -747,6 +947,24 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                                 scaleY: newScaleY
                             }
                         });
+
+                        try {
+                            if (broadcastEvent) {
+                                broadcastEvent('update_item', {
+                                    id,
+                                    changes: {
+                                        transform: {
+                                            x: newWorldCenterX - localCenter.x,
+                                            y: newWorldCenterY - localCenter.y,
+                                            scaleX: newScaleX,
+                                            scaleY: newScaleY
+                                        }
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            // Ignore
+                        }
                     });
                 }
             }
@@ -816,10 +1034,14 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
                 affectedIds.forEach(id => {
                     const finalItem = currentItems.get(id);
                     if (finalItem) {
-                        broadcastEvent('update_item', {
-                            id: finalItem.id,
-                            changes: { transform: finalItem.transform }
-                        });
+                        try {
+                            broadcastEvent('update_item', {
+                                id: finalItem.id,
+                                changes: { transform: finalItem.transform }
+                            });
+                        } catch (err) {
+                            console.warn('Final broadcast failed:', err);
+                        }
                     }
                 });
             }

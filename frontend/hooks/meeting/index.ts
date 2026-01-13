@@ -7,6 +7,9 @@ export { useVoiceFocus } from './useVoiceFocus';
 export { useBrowserTranscription, SUPPORTED_LANGUAGES } from './useBrowserTranscription';
 export { useTranscriptSync } from './useTranscriptSync';
 export { useTTS } from './useTTS';
+export { useMediaDelay, DEFAULT_MEDIA_DELAY_CONFIG } from './useMediaDelay';
+export { useDelayedAudio } from './useDelayedAudio';
+export { useOriginalAudioVolume } from './useOriginalAudioVolume';
 
 export type { UseDeviceManagerReturn } from './useDeviceManager';
 export type { UseTranscriptionReturn, UseTranscriptionOptions } from './useTranscription';
@@ -28,3 +31,8 @@ export type {
   UseTTSReturn,
   UseTTSOptions,
 } from './useTTS';
+export type {
+  UseMediaDelayReturn,
+  UseMediaDelayOptions,
+  MediaDelayConfig,
+} from './useMediaDelay';

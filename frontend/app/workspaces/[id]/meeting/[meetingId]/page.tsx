@@ -24,6 +24,9 @@ import {
   useVoiceFocus,
   useTranscriptSync,
   useTTS,
+  useMediaDelay,
+  useOriginalAudioVolume,
+  DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
@@ -177,6 +180,15 @@ function MeetingRoomContent() {
     userId,
   });
 
+  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
+  const {
+    originalVolume,
+    setOriginalVolume,
+    isFading: isOriginalVolumeFading,
+  } = useOriginalAudioVolume({
+    translationEnabled,
+  });
+
   // TTS hook (번역된 자막 음성 재생)
   const {
     ttsEnabled,
@@ -200,6 +212,16 @@ function MeetingRoomContent() {
     isVoiceFocusLoading,
     toggleVoiceFocus,
   } = useVoiceFocus();
+
+  // Media Delay hook (자막 싱크용 영상/음성 딜레이)
+  const {
+    delayEnabled,
+    delayMs,
+    setDelayEnabled,
+    setDelayMs,
+  } = useMediaDelay({
+    config: DEFAULT_MEDIA_DELAY_CONFIG,
+  });
 
   // Chime SDK hooks
   const { isVideoEnabled, toggleVideo } = useLocalVideo();
@@ -309,6 +331,8 @@ function MeetingRoomContent() {
                 currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
                 participants={participants}
                 currentAttendeeId={currentAttendeeId}
+                delayEnabled={delayEnabled}
+                delayMs={delayMs}
               />
 
               {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
@@ -353,6 +377,8 @@ function MeetingRoomContent() {
         isTTSPlaying={isTTSPlaying}
         ttsVolume={ttsVolume}
         ttsQueueLength={ttsQueueLength}
+        delayEnabled={delayEnabled}
+        delayMs={delayMs}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
@@ -360,7 +386,12 @@ function MeetingRoomContent() {
         onToggleVoiceFocus={toggleVoiceFocus}
         onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
         onToggleTTS={toggleTTS}
+        onToggleDelay={() => setDelayEnabled(!delayEnabled)}
+        onDelayMsChange={setDelayMs}
         onSetTTSVolume={setTTSVolume}
+        originalVolume={originalVolume}
+        isOriginalVolumeFading={isOriginalVolumeFading}
+        onSetOriginalVolume={setOriginalVolume}
         onOpenTTSSettings={() => setShowTTSSettings(true)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}

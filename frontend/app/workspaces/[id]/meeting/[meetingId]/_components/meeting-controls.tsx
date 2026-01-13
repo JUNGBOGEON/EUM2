@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { TranslationControls } from './translation-controls';
+import { DelaySettingsControl } from './delay-settings-control';
 
 interface MeetingControlsProps {
   muted: boolean;
@@ -54,6 +55,12 @@ interface MeetingControlsProps {
   isTTSPlaying?: boolean;
   ttsVolume?: number;
   ttsQueueLength?: number;
+  // Media Delay
+  delayEnabled?: boolean;
+  delayMs?: number;
+  // Original Audio Volume
+  originalVolume?: number;
+  isOriginalVolumeFading?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -63,6 +70,9 @@ interface MeetingControlsProps {
   onToggleTTS?: () => void;
   onSetTTSVolume?: (volume: number) => void;
   onOpenTTSSettings?: () => void;
+  onToggleDelay?: () => void;
+  onDelayMsChange?: (ms: number) => void;
+  onSetOriginalVolume?: (volume: number) => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -84,6 +94,10 @@ export function MeetingControls({
   isTTSPlaying = false,
   ttsVolume = 80,
   ttsQueueLength = 0,
+  delayEnabled = false,
+  delayMs = 1500,
+  originalVolume = 0,
+  isOriginalVolumeFading = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
@@ -93,6 +107,9 @@ export function MeetingControls({
   onToggleTTS,
   onSetTTSVolume,
   onOpenTTSSettings,
+  onToggleDelay,
+  onDelayMsChange,
+  onSetOriginalVolume,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -175,7 +192,7 @@ export function MeetingControls({
         </Tooltip>
 
         {/* Translation & TTS Controls */}
-        {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && (
+        {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && (
           <TranslationControls
             translationEnabled={translationEnabled}
             isTogglingTranslation={isTogglingTranslation}
@@ -188,6 +205,9 @@ export function MeetingControls({
             onToggleTTS={onToggleTTS}
             onSetTTSVolume={onSetTTSVolume}
             onOpenTTSSettings={onOpenTTSSettings}
+            originalVolume={originalVolume}
+            isOriginalVolumeFading={isOriginalVolumeFading}
+            onSetOriginalVolume={onSetOriginalVolume}
           />
         )}
 
@@ -227,6 +247,16 @@ export function MeetingControls({
               </p>
             </TooltipContent>
           </Tooltip>
+        )}
+
+        {/* Media Delay Settings */}
+        {onToggleDelay && onDelayMsChange && (
+          <DelaySettingsControl
+            delayEnabled={delayEnabled}
+            delayMs={delayMs}
+            onToggleDelay={onToggleDelay}
+            onDelayMsChange={onDelayMsChange}
+          />
         )}
 
         {/* Whiteboard Toggle */}

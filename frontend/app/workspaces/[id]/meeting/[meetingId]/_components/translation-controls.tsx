@@ -8,6 +8,7 @@ import {
   Settings2,
   ChevronDown,
   Loader2,
+  Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -41,6 +42,10 @@ interface TranslationControlsProps {
   onToggleTTS: () => void;
   onSetTTSVolume: (volume: number) => void;
   onOpenTTSSettings: () => void;
+  // Original audio volume
+  originalVolume: number;
+  isOriginalVolumeFading?: boolean;
+  onSetOriginalVolume: (volume: number) => void;
 }
 
 export function TranslationControls({
@@ -55,6 +60,9 @@ export function TranslationControls({
   onToggleTTS,
   onSetTTSVolume,
   onOpenTTSSettings,
+  originalVolume,
+  isOriginalVolumeFading = false,
+  onSetOriginalVolume,
 }: TranslationControlsProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -148,11 +156,11 @@ export function TranslationControls({
               />
             </div>
 
-            {/* Volume Slider (when TTS enabled) */}
+            {/* TTS Volume Slider (when TTS enabled) */}
             {ttsEnabled && (
               <div className="px-3 py-2">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-white/60">볼륨</span>
+                  <span className="text-xs text-white/60">번역 음성 볼륨</span>
                   <span className="text-xs text-white/60">{ttsVolume}%</span>
                 </div>
                 <Slider
@@ -164,6 +172,33 @@ export function TranslationControls({
                 />
               </div>
             )}
+
+            <DropdownMenuSeparator className="bg-white/10" />
+
+            {/* Original Audio Volume */}
+            <div className="px-3 py-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Mic className="h-4 w-4 text-white/70" />
+                <span className="text-sm text-white">원본 음성</span>
+                {isOriginalVolumeFading && (
+                  <Loader2 className="h-3 w-3 animate-spin text-white/50" />
+                )}
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-white/60">
+                  {originalVolume === 0 ? '음소거' : `${originalVolume}%`}
+                </span>
+                <span className="text-xs text-white/40">기본: 음소거</span>
+              </div>
+              <Slider
+                value={[originalVolume]}
+                onValueChange={([v]: number[]) => onSetOriginalVolume(v)}
+                max={100}
+                step={5}
+                className="w-full"
+                disabled={isOriginalVolumeFading}
+              />
+            </div>
 
             <DropdownMenuSeparator className="bg-white/10" />
 

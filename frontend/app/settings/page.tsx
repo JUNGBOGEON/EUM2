@@ -1,11 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Settings, ArrowLeft, Construction } from 'lucide-react';
+import { Settings, ArrowLeft, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { t, language, setLanguage } = useLanguage();
 
   return (
     <div className="min-h-screen bg-background">
@@ -21,20 +31,36 @@ export default function SettingsPage() {
           </Button>
           <div className="flex items-center gap-2">
             <Settings className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">설정</h1>
+            <h1 className="text-2xl font-bold">{t('app_settings')}</h1>
           </div>
         </div>
 
-        {/* Coming Soon */}
-        <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-border rounded-xl">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-            <Construction className="h-10 w-10 text-primary" />
+        {/* Settings Content */}
+        <div className="space-y-6">
+          {/* Language Settings */}
+          <div className="p-6 rounded-xl border border-border bg-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Globe className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-semibold">{t('language_settings')}</h2>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">{t('select_language')}</Label>
+              <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+                <SelectTrigger className="w-full sm:w-[300px]">
+                  <SelectValue placeholder={t('select_language')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ko">한국어</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="zh-CN">中文 (简体)</SelectItem>
+                  <SelectItem value="ja">日本語</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <h2 className="text-xl font-semibold text-foreground mb-2">준비 중입니다</h2>
-          <p className="text-muted-foreground max-w-sm">
-            설정 기능은 곧 제공될 예정입니다.
-            프로필과 알림 설정을 관리할 수 있습니다.
-          </p>
         </div>
       </div>
     </div>

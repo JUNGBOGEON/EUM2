@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SummaryLoadingAnimation } from '../summary-loading-animation';
 import type { SummaryData } from './hooks/use-session-data';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SummarySectionProps {
   summaryData: SummaryData | null;
@@ -24,6 +25,8 @@ export function SummarySection({
   isRegenerating,
   onRegenerate,
 }: SummarySectionProps) {
+  const { t } = useLanguage();
+
   if (isLoading) {
     return (
       <div className="py-4 space-y-4">
@@ -40,7 +43,7 @@ export function SummarySection({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="text-sm text-green-600 font-medium">AI 요약 완료</span>
+            <span className="text-sm text-green-600 font-medium">{t('summary.completed')}</span>
           </div>
           {!summaryData.structuredSummary && (
             <Button
@@ -52,12 +55,12 @@ export function SummarySection({
               {isRegenerating ? (
                 <>
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  재생성 중...
+                  {t('summary.regenerating')}
                 </>
               ) : (
                 <>
                   <RefreshCw className="h-3 w-3 mr-1" />
-                  새 형식으로 다시 요약
+                  {t('summary.regenerate_format')}
                 </>
               )}
             </Button>
@@ -65,7 +68,7 @@ export function SummarySection({
         </div>
         {!summaryData.structuredSummary && (
           <div className="bg-muted/50 rounded-lg p-3 mb-4 text-sm text-muted-foreground">
-            이전 형식의 요약입니다. "전체 보기" 기능을 사용하려면 새 형식으로 다시 요약해주세요.
+            {t('summary.legacy_notice')}
           </div>
         )}
         <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground prose-table:text-foreground prose-th:text-foreground prose-td:text-foreground prose-th:border prose-td:border prose-th:border-border prose-td:border-border prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-table:border-collapse">
@@ -88,10 +91,10 @@ export function SummarySection({
           <XCircle className="h-7 w-7 text-red-500" />
         </div>
         <p className="text-foreground font-medium">
-          요약 생성에 실패했습니다
+          {t('summary.failed')}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          다시 시도해 주세요
+          {t('summary.retry_desc')}
         </p>
         <Button
           variant="outline"
@@ -103,12 +106,12 @@ export function SummarySection({
           {isRegenerating ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              재생성 중...
+              {t('summary.regenerating')}
             </>
           ) : (
             <>
               <RefreshCw className="h-4 w-4 mr-2" />
-              다시 생성하기
+              {t('summary.regenerate')}
             </>
           )}
         </Button>
@@ -123,10 +126,10 @@ export function SummarySection({
           <AlertCircle className="h-7 w-7 text-yellow-500" />
         </div>
         <p className="text-foreground font-medium">
-          요약할 내용이 없습니다
+          {t('summary.skipped')}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          회의 중 기록된 자막이 없어 요약을 생성하지 않았습니다
+          {t('summary.skipped_desc')}
         </p>
       </div>
     );
@@ -139,10 +142,10 @@ export function SummarySection({
         <FileText className="h-7 w-7 text-muted-foreground" />
       </div>
       <p className="text-muted-foreground font-medium">
-        회의 요약이 없습니다
+        {t('summary.empty_title')}
       </p>
       <p className="text-sm text-muted-foreground mt-1">
-        AI가 회의 내용을 요약해 드립니다
+        {t('summary.empty_desc')}
       </p>
       <Button
         variant="outline"
@@ -154,12 +157,12 @@ export function SummarySection({
         {isRegenerating ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            생성 중...
+            {t('summary.creating')}
           </>
         ) : (
           <>
             <FileText className="h-4 w-4 mr-2" />
-            요약 생성하기
+            {t('summary.create')}
           </>
         )}
       </Button>

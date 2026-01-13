@@ -24,6 +24,9 @@ import {
 } from '@/components/ui/select';
 import type { WorkspaceEvent, WorkspaceEventType, CreateEventDto, RecurrenceType } from '../../_lib/types';
 
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
+
 interface EventDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,24 +39,6 @@ interface EventDialogProps {
   onShowDeleteDialog: () => void;
 }
 
-const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
-  none: '반복 안함',
-  daily: '매일',
-  weekly: '매주',
-  monthly: '매월',
-};
-
-const formatCreatedAt = (dateStr: string) => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
 export function EventDialog({
   isOpen,
   onOpenChange,
@@ -65,23 +50,50 @@ export function EventDialog({
   onSubmit,
   onShowDeleteDialog,
 }: EventDialogProps) {
+  const { language, t } = useLanguage();
+
+  // Map language code to locale for date formatting
+  const getLocale = (lang: string) => {
+    switch (lang) {
+      case 'en': return 'en-US';
+      case 'ja': return 'ja-JP';
+      case 'zh-CN': return 'zh-CN';
+      default: return 'ko-KR';
+    }
+  };
+
+  const formatCreatedAt = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(getLocale(language), {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getRecurrenceLabel = (type: RecurrenceType) => {
+    return t(`calendar.event.recurrence.${type}`);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{editingEvent ? '일정 수정' : '새 일정'}</DialogTitle>
+          <DialogTitle>{editingEvent ? t('calendar.event.edit_title') : t('calendar.event.new_title')}</DialogTitle>
           <DialogDescription>
-            {editingEvent ? '일정 정보를 수정하세요.' : '새로운 일정을 추가하세요.'}
+            {editingEvent ? t('calendar.event.edit_desc') : t('calendar.event.new_desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="title">제목</Label>
+            <Label htmlFor="title">{t('calendar.event.title_label')}</Label>
             <Input
               id="title"
-              placeholder="일정 제목"
+              placeholder={t('calendar.event.title_placeholder')}
               value={formData.title}
               onChange={(e) => onFormDataChange({ ...formData, title: e.target.value })}
             />
@@ -89,13 +101,13 @@ export function EventDialog({
 
           {/* Event Type */}
           <div className="space-y-2">
-            <Label>유형</Label>
+            <Label>{t('calendar.event.type_label')}</Label>
             <Select
               value={formData.eventTypeId || ''}
               onValueChange={(value) => onFormDataChange({ ...formData, eventTypeId: value })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="유형 선택" />
+                <SelectValue placeholder={t('calendar.event.type_placeholder')} />
               </SelectTrigger>
               <SelectContent>
                 {eventTypes.map((type) => (
@@ -115,7 +127,7 @@ export function EventDialog({
 
           {/* All Day */}
           <div className="flex items-center justify-between">
-            <Label htmlFor="isAllDay">종일</Label>
+            <Label htmlFor="isAllDay">{t('calendar.event.all_day_label')}</Label>
             <Switch
               id="isAllDay"
               checked={formData.isAllDay}
@@ -125,7 +137,7 @@ export function EventDialog({
 
           {/* Start Time */}
           <div className="space-y-2">
-            <Label htmlFor="startTime">시작</Label>
+            <Label htmlFor="startTime">{t('calendar.event.start_label')}</Label>
             <Input
               id="startTime"
               type={formData.isAllDay ? 'date' : 'datetime-local'}
@@ -137,7 +149,7 @@ export function EventDialog({
           {/* End Time */}
           {!formData.isAllDay && (
             <div className="space-y-2">
-              <Label htmlFor="endTime">종료</Label>
+              <Label htmlFor="endTime">{t('calendar.event.end_label')}</Label>
               <Input
                 id="endTime"
                 type="datetime-local"
@@ -149,7 +161,7 @@ export function EventDialog({
 
           {/* Recurrence */}
           <div className="space-y-2">
-            <Label>반복</Label>
+            <Label>{t('calendar.event.recurrence_label')}</Label>
             <Select
               value={formData.recurrence}
               onValueChange={(value: RecurrenceType) =>
@@ -160,9 +172,9 @@ export function EventDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(RECURRENCE_LABELS).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {label}
+                {(['none', 'daily', 'weekly', 'monthly'] as RecurrenceType[]).map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {getRecurrenceLabel(type)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -171,10 +183,10 @@ export function EventDialog({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">설명</Label>
+            <Label htmlFor="description">{t('calendar.event.desc_label')}</Label>
             <Textarea
               id="description"
-              placeholder="일정에 대한 설명 (선택)"
+              placeholder={t('calendar.event.desc_placeholder')}
               value={formData.description}
               onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
               rows={3}
@@ -196,7 +208,7 @@ export function EventDialog({
                 ) : (
                   <User className="h-4 w-4" />
                 )}
-                <span>{editingEvent.createdBy.name}님이 등록</span>
+                <span>{t('calendar.event.created_by').replace('{name}', editingEvent.createdBy.name)}</span>
                 <span>({formatCreatedAt(editingEvent.createdAt)})</span>
               </div>
             </div>
@@ -211,18 +223,18 @@ export function EventDialog({
               disabled={isSubmitting}
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              삭제
+              {t('common.delete')}
             </Button>
           )}
           <div className="flex gap-2 ml-auto">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-              취소
+              {t('common.cancel')}
             </Button>
             <Button onClick={onSubmit} disabled={isSubmitting || !formData.title.trim()}>
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
-              {editingEvent ? '수정' : '추가'}
+              {editingEvent ? t('calendar.event.edit_btn') : t('calendar.event.add_btn')}
             </Button>
           </div>
         </DialogFooter>

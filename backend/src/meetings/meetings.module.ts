@@ -23,6 +23,9 @@ import { TranslationContextService } from './services/translation-context.servic
 import { SentenceDetectorService } from './services/sentence-detector.service';
 import { TextChunkingService } from './services/text-chunking.service';
 import { TranscribeUrlService } from './services/transcribe-url.service';
+import { PollyService } from './services/polly.service';
+import { PollyCacheService } from './services/polly-cache.service';
+import { TTSPreferenceService } from './services/tts-preference.service';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { TranscribeUrlService } from './services/transcribe-url.service';
     SentenceDetectorService,
     TextChunkingService,
     TranscribeUrlService,
+    PollyService,
+    PollyCacheService,
+    TTSPreferenceService,
   ],
   exports: [
     MeetingsService,

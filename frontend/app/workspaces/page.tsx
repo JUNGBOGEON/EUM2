@@ -17,6 +17,7 @@ import {
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
 import { useInvitations } from './_hooks/use-invitations';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function WorkspacesPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -62,6 +63,8 @@ export default function WorkspacesPage() {
     await refreshWorkspaces();
   }, [acceptInvitation, refreshWorkspaces]);
 
+  const { t } = useLanguage();
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -89,16 +92,16 @@ export default function WorkspacesPage() {
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h1 className="text-3xl font-bold text-foreground">
-                    반가워요, <span className="text-primary">{user?.name}</span>님!
+                    {t('workspaces.welcome').replace('{name}', user?.name || '')}
                   </h1>
-                  <p className="text-muted-foreground mt-1">오늘도 좋은 하루 되세요</p>
+                  <p className="text-muted-foreground mt-1">{t('workspaces.greeting')}</p>
                 </div>
                 <Button
                   onClick={() => setCreateModalOpen(true)}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  새 워크스페이스 만들기
+                  {t('workspaces.create_new')}
                 </Button>
               </div>
 
@@ -109,17 +112,17 @@ export default function WorkspacesPage() {
                     <FolderOpen className="h-8 w-8 text-primary" />
                   </div>
                   <h3 className="text-lg font-semibold text-foreground mb-2">
-                    아직 워크스페이스가 없습니다
+                    {t('workspaces.no_workspaces')}
                   </h3>
                   <p className="text-muted-foreground mb-6">
-                    첫 번째 워크스페이스를 만들어 팀과 협업을 시작하세요
+                    {t('workspaces.empty_guide')}
                   </p>
                   <Button
                     onClick={() => setCreateModalOpen(true)}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    첫 워크스페이스 만들기
+                    {t('workspaces.create_first')}
                   </Button>
                 </div>
               ) : (

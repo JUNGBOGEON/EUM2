@@ -17,6 +17,9 @@ interface SessionHistoryProps {
   hasMore?: boolean;
 }
 
+// ... imports
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function SessionHistory({
   sessions,
   isLoading,
@@ -25,13 +28,14 @@ export function SessionHistory({
   hasMore,
 }: SessionHistoryProps) {
   const [selectedSession, setSelectedSession] = useState<MeetingSession | null>(null);
+  const { t } = useLanguage();
 
   if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">회의 기록</h2>
+          <h2 className="text-lg font-semibold">{t('history.title')}</h2>
         </div>
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -54,17 +58,17 @@ export function SessionHistory({
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">회의 기록</h2>
+          <h2 className="text-lg font-semibold">{t('history.title')}</h2>
         </div>
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
             <Play className="h-10 w-10 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground text-lg">
-            아직 진행된 회의가 없습니다
+            {t('history.empty')}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            새 회의를 시작해 보세요!
+            {t('history.empty_desc')}
           </p>
         </div>
       </div>
@@ -77,7 +81,7 @@ export function SessionHistory({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">회의 기록</h2>
+            <h2 className="text-lg font-semibold">{t('history.title')}</h2>
             <Badge variant="secondary">{sessions.length}개</Badge>
           </div>
         </div>
@@ -95,7 +99,7 @@ export function SessionHistory({
         {/* Load More */}
         {hasMore && (
           <Button variant="ghost" className="w-full" onClick={onLoadMore}>
-            더 보기
+            {t('history.load_more')}
           </Button>
         )}
       </div>

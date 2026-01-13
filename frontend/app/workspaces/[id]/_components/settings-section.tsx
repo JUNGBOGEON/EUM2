@@ -10,12 +10,20 @@ import {
   Loader2,
   Trash2,
   AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import type { Workspace } from '../_lib/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SettingsSectionProps {
   workspace: Workspace;
@@ -47,6 +56,7 @@ export function SettingsSection({
   onUpdateWorkspace,
   onDeleteWorkspace,
 }: SettingsSectionProps) {
+  const { t, language, setLanguage } = useLanguage();
   const [name, setName] = useState(workspace.name);
   const [description, setDescription] = useState(workspace.description || '');
   const [thumbnail, setThumbnail] = useState(workspace.thumbnail || '');
@@ -123,7 +133,7 @@ export function SettingsSection({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('워크스페이스 이름을 입력해주세요');
+      toast.error(t('workspace_name') + '을 입력해주세요');
       return;
     }
 
@@ -136,7 +146,7 @@ export function SettingsSection({
         banner: banner || undefined,
       });
       setHasChanges(false);
-      toast.success('설정이 저장되었습니다');
+      toast.success(t('save') + '되었습니다');
     } catch (error) {
       toast.error('저장에 실패했습니다');
     } finally {
@@ -167,7 +177,7 @@ export function SettingsSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Settings className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">워크스페이스 설정</h2>
+          <h2 className="text-lg font-semibold">{t('settings_title')}</h2>
         </div>
         {hasChanges && isOwner && (
           <Button onClick={handleSave} disabled={isSaving}>
@@ -176,14 +186,35 @@ export function SettingsSection({
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            저장
+            {t('save')}
           </Button>
         )}
       </div>
 
+      {/* Language Section */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <Globe className="h-4 w-4" />
+          {t('language_settings')}
+        </Label>
+        <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+          <SelectTrigger className="max-w-[200px]">
+            <SelectValue placeholder={t('select_language')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ko">한국어</SelectItem>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="zh-CN">中文 (简体)</SelectItem>
+            <SelectItem value="ja">日本語</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Separator />
+
       {/* Banner Section */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">배너 이미지</Label>
+        <Label className="text-sm font-medium">{t('banner_image')}</Label>
         <div
           className="relative h-40 rounded-xl overflow-hidden bg-muted border border-border cursor-pointer group"
           onClick={() => isOwner && bannerInputRef.current?.click()}
@@ -192,7 +223,7 @@ export function SettingsSection({
             <>
               <img
                 src={banner}
-                alt="배너"
+                alt={t('banner_image')}
                 className="w-full h-full object-cover"
               />
               {isOwner && (
@@ -205,7 +236,7 @@ export function SettingsSection({
             <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
               <ImageIcon className="h-10 w-10 mb-2" />
               <p className="text-sm">
-                {isOwner ? '클릭하여 배너 이미지 추가' : '배너 이미지 없음'}
+                {isOwner ? t('click_to_add_banner') : t('no_banner_image')}
               </p>
             </div>
           )}
@@ -222,7 +253,7 @@ export function SettingsSection({
 
       {/* Profile Image Section */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">프로필 이미지</Label>
+        <Label className="text-sm font-medium">{t('profile_image')}</Label>
         <div className="flex items-center gap-4">
           <div
             className="relative w-24 h-24 rounded-2xl overflow-hidden bg-muted border border-border cursor-pointer group"
@@ -232,7 +263,7 @@ export function SettingsSection({
               <>
                 <img
                   src={thumbnail}
-                  alt="프로필"
+                  alt={t('profile_image')}
                   className="w-full h-full object-cover"
                 />
                 {isOwner && (
@@ -251,7 +282,7 @@ export function SettingsSection({
           </div>
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
-              권장 크기: 400x400px
+              {t('recommended_size')}
             </p>
             {isOwner && thumbnail && (
               <Button
@@ -264,7 +295,7 @@ export function SettingsSection({
                 }}
               >
                 <X className="h-4 w-4 mr-1" />
-                삭제
+                {t('delete')}
               </Button>
             )}
           </div>
@@ -284,13 +315,13 @@ export function SettingsSection({
       {/* Name Section */}
       <div className="space-y-3">
         <Label htmlFor="name" className="text-sm font-medium">
-          워크스페이스 이름
+          {t('workspace_name')}
         </Label>
         <Input
           id="name"
           value={name}
           onChange={handleInputChange(setName)}
-          placeholder="워크스페이스 이름"
+          placeholder={t('workspace_name')}
           disabled={!isOwner}
           className="max-w-md"
         />
@@ -299,13 +330,13 @@ export function SettingsSection({
       {/* Description Section */}
       <div className="space-y-3">
         <Label htmlFor="description" className="text-sm font-medium">
-          설명
+          {t('description')}
         </Label>
         <Textarea
           id="description"
           value={description}
           onChange={handleInputChange(setDescription)}
-          placeholder="워크스페이스에 대한 설명을 입력하세요 (선택사항)"
+          placeholder={t('description_placeholder')}
           disabled={!isOwner}
           className="max-w-md resize-none"
           rows={4}
@@ -316,12 +347,12 @@ export function SettingsSection({
       <Separator />
 
       <div className="space-y-3">
-        <Label className="text-sm font-medium">워크스페이스 정보</Label>
+        <Label className="text-sm font-medium">{t('workspace_info')}</Label>
         <div className="grid gap-4 text-sm max-w-md">
           <div className="flex justify-between py-2 border-b border-border">
-            <span className="text-muted-foreground">생성일</span>
+            <span className="text-muted-foreground">{t('created_at')}</span>
             <span className="text-foreground">
-              {new Date(workspace.createdAt).toLocaleDateString('ko-KR', {
+              {new Date(workspace.createdAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -330,9 +361,9 @@ export function SettingsSection({
           </div>
           {workspace.updatedAt && (
             <div className="flex justify-between py-2 border-b border-border">
-              <span className="text-muted-foreground">마지막 수정</span>
+              <span className="text-muted-foreground">{t('last_updated')}</span>
               <span className="text-foreground">
-                {new Date(workspace.updatedAt).toLocaleDateString('ko-KR', {
+                {new Date(workspace.updatedAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
@@ -341,7 +372,7 @@ export function SettingsSection({
             </div>
           )}
           <div className="flex justify-between py-2 border-b border-border">
-            <span className="text-muted-foreground">관리자</span>
+            <span className="text-muted-foreground">{t('admin')}</span>
             <span className="text-foreground">{workspace.owner?.name || '-'}</span>
           </div>
         </div>
@@ -352,17 +383,16 @@ export function SettingsSection({
         <>
           <Separator />
           <div className="space-y-3">
-            <Label className="text-sm font-medium text-destructive">위험 영역</Label>
+            <Label className="text-sm font-medium text-destructive">{t('danger_zone')}</Label>
             <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
                   <AlertTriangle className="h-5 w-5 text-destructive" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-medium text-foreground">워크스페이스 삭제</h4>
+                  <h4 className="font-medium text-foreground">{t('delete_workspace')}</h4>
                   <p className="text-sm text-muted-foreground mt-1">
-                    워크스페이스를 삭제하면 모든 회의 기록과 파일이 영구적으로 삭제됩니다.
-                    이 작업은 되돌릴 수 없습니다.
+                    {t('delete_warning')}
                   </p>
                   <Button
                     variant="destructive"
@@ -371,7 +401,7 @@ export function SettingsSection({
                     onClick={() => setShowDeleteDialog(true)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    워크스페이스 삭제
+                    {t('delete_workspace')}
                   </Button>
                 </div>
               </div>
@@ -384,16 +414,15 @@ export function SettingsSection({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>워크스페이스 삭제</AlertDialogTitle>
+            <AlertDialogTitle>{t('confirm_delete_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{workspace.name}</strong> 워크스페이스를 정말 삭제하시겠습니까?
+              <strong>{workspace.name}</strong> {t('confirm_delete_desc').replace('이 워크스페이스를', '')}
               <br /><br />
-              모든 회의 기록, 파일, 멤버 정보가 영구적으로 삭제됩니다.
-              이 작업은 되돌릴 수 없습니다.
+              {t('delete_warning')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
@@ -404,7 +433,7 @@ export function SettingsSection({
               ) : (
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
-              삭제
+              {t('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

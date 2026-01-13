@@ -19,6 +19,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { NAV_ITEMS } from '../_lib/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { InvitationNotifications } from './invitation-notifications';
 import type { UserInfo } from '../_lib/types';
 import type { WorkspaceInvitation } from '../_hooks/use-invitations';
@@ -41,6 +42,7 @@ export function AppSidebar({
   onRejectInvitation,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   return (
     <Sidebar collapsible="icon">
@@ -85,10 +87,10 @@ export function AppSidebar({
                 if (isNotificationItem && invitations.length > 0) {
                   return (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={t(item.label)}>
                         <Link href={item.href} className="relative">
                           <item.icon />
-                          <span>{item.label}</span>
+                          <span>{t(item.label)}</span>
                           <Badge
                             variant="destructive"
                             className="absolute right-2 top-1/2 -translate-y-1/2 h-5 min-w-5 p-0 flex items-center justify-center text-xs group-data-[collapsible=icon]:hidden"
@@ -103,10 +105,10 @@ export function AppSidebar({
 
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={t(item.label)}>
                       <Link href={item.href}>
                         <item.icon />
-                        <span>{item.label}</span>
+                        <span>{t(item.label)}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -142,11 +144,11 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={onLogout}
-              tooltip="로그아웃"
+              tooltip={t('menu.logout')}
               className="text-muted-foreground hover:text-destructive"
             >
               <LogOut />
-              <span>로그아웃</span>
+              <span>{t('menu.logout')}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

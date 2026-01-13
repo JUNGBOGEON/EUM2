@@ -29,7 +29,7 @@ export class MeetingsController {
   constructor(
     private readonly meetingsService: MeetingsService,
     private readonly transcribeUrlService: TranscribeUrlService,
-  ) {}
+  ) { }
 
   // ==========================================
   // 세션 관리 API
@@ -267,8 +267,11 @@ export class MeetingsController {
    * - presignedUrl: S3 Presigned URL (completed 상태일 때만)
    */
   @Get(':sessionId/summary')
-  getSummary(@Param('sessionId') sessionId: string) {
-    return this.meetingsService.getSummary(sessionId);
+  getSummary(
+    @Param('sessionId') sessionId: string,
+    @Query('lang') languageCode?: string,
+  ) {
+    return this.meetingsService.getSummary(sessionId, languageCode);
   }
 
   /**
@@ -333,6 +336,95 @@ export class MeetingsController {
   @Get(':sessionId/translation/preferences')
   getLanguagePreferences(@Param('sessionId') sessionId: string) {
     return this.meetingsService.getSessionLanguagePreferences(sessionId);
+  }
+
+  // ==========================================
+  // TTS API
+  // ==========================================
+
+  /**
+   * TTS 활성화/비활성화 토글
+   */
+  @Post(':sessionId/tts/toggle')
+  toggleTTS(
+    @Param('sessionId') sessionId: string,
+    @Body('enabled') enabled: boolean,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.toggleTTS(
+      sessionId,
+      getAuthUser(req).id,
+      enabled,
+    );
+  }
+
+  /**
+   * TTS 상태 조회
+   */
+  @Get(':sessionId/tts/status')
+  getTTSStatus(@Param('sessionId') sessionId: string, @Req() req: any) {
+    return this.meetingsService.getTTSStatus(sessionId, getAuthUser(req).id);
+  }
+
+  /**
+   * TTS 전체 설정 조회
+   */
+  @Get(':sessionId/tts/preferences')
+  getTTSPreferences(@Param('sessionId') sessionId: string, @Req() req: any) {
+    return this.meetingsService.getTTSPreferences(
+      sessionId,
+      getAuthUser(req).id,
+    );
+  }
+
+  /**
+   * TTS 음성 설정
+   */
+  @Post(':sessionId/tts/voice')
+  setTTSVoice(
+    @Param('sessionId') sessionId: string,
+    @Body('languageCode') languageCode: string,
+    @Body('voiceId') voiceId: string,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.setTTSVoice(
+      sessionId,
+      getAuthUser(req).id,
+      languageCode,
+      voiceId,
+    );
+  }
+
+  /**
+   * 특정 언어의 사용 가능한 음성 목록
+   */
+  @Get(':sessionId/tts/voices')
+  getTTSVoices(@Query('languageCode') languageCode: string = 'ko-KR') {
+    return this.meetingsService.getTTSVoices(languageCode);
+  }
+
+  /**
+   * TTS 볼륨 설정
+   */
+  @Post(':sessionId/tts/volume')
+  setTTSVolume(
+    @Param('sessionId') sessionId: string,
+    @Body('volume') volume: number,
+    @Req() req: any,
+  ) {
+    return this.meetingsService.setTTSVolume(
+      sessionId,
+      getAuthUser(req).id,
+      volume,
+    );
+  }
+
+  /**
+   * TTS 지원 언어 목록
+   */
+  @Get(':sessionId/tts/languages')
+  getTTSSupportedLanguages() {
+    return this.meetingsService.getTTSSupportedLanguages();
   }
 
   // ==========================================

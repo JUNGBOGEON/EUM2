@@ -33,6 +33,8 @@ interface WorkspaceSidebarProps {
   isConnected?: boolean;
 }
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function WorkspaceSidebar({
   workspace,
   user,
@@ -42,6 +44,7 @@ export function WorkspaceSidebar({
   isConnected,
 }: WorkspaceSidebarProps) {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <Sidebar className="border-r border-border">
@@ -55,7 +58,7 @@ export function WorkspaceSidebar({
             onClick={() => router.push('/workspaces')}
           >
             <ChevronLeft className="h-4 w-4" />
-            <span className="text-sm">목록</span>
+            <span className="text-sm">{t('common.list')}</span>
           </Button>
           <SidebarTrigger />
         </div>
@@ -86,7 +89,7 @@ export function WorkspaceSidebar({
                 <div className="flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
                   <span className="text-xs text-muted-foreground">
-                    {isConnected ? '연결됨' : '연결 중...'}
+                    {isConnected ? t('sidebar.connected') : t('sidebar.connecting')}
                   </span>
                 </div>
               </div>
@@ -108,7 +111,7 @@ export function WorkspaceSidebar({
                     className="w-full"
                   >
                     <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                    <span>{t(item.label)}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -121,7 +124,7 @@ export function WorkspaceSidebar({
         {/* Members */}
         <SidebarGroup>
           <SidebarGroupLabel className="px-3">
-            <span>멤버</span>
+            <span>{t('sidebar.members')}</span>
             <Badge variant="secondary" className="ml-2">
               {members.length || 1}
             </Badge>
@@ -145,7 +148,7 @@ export function WorkspaceSidebar({
                       {workspace.owner.name}
                     </span>
                     <Badge variant="outline" className="text-[10px] px-1.5">
-                      호스트
+                      {t('sidebar.host')}
                     </Badge>
                   </div>
                 )}

@@ -114,6 +114,22 @@ export interface LanguageChangedPayload {
 }
 
 /**
+ * TTS Ready Payload
+ * Sent to user when TTS audio is ready for playback
+ */
+export interface TTSReadyPayload {
+  type: 'tts_ready';
+  resultId: string;
+  audioUrl: string; // Pre-signed S3 URL
+  durationMs: number;
+  voiceId: string;
+  targetLanguage: string;
+  speakerName: string;
+  translatedText: string;
+  timestamp: number;
+}
+
+/**
  * Gateway Broadcast Service
  * Handles all WebSocket broadcasting operations
  */
@@ -228,6 +244,33 @@ export class GatewayBroadcastService {
     );
 
     this.server.to(roomName).emit('languageChanged', payload);
+  }
+
+  // ==========================================
+  // TTS Broadcasting
+  // ==========================================
+
+  /**
+   * Send TTS ready notification to specific user
+   */
+  sendTTSReady(userId: string, payload: TTSReadyPayload) {
+    if (!this.server) {
+      this.logger.error('[TTS Ready] Server not initialized');
+      return;
+    }
+
+    const roomName = `user:${userId}`;
+    const clientCount = this.getRoomClientCount(roomName);
+
+    this.logger.log(
+      `[TTS Ready] Room: ${roomName}, Clients: ${clientCount}, Voice: ${payload.voiceId}, Lang: ${payload.targetLanguage}`,
+    );
+
+    if (clientCount === 0) {
+      this.logger.warn(`[TTS Ready] No clients in room ${roomName}!`);
+    }
+
+    this.server.to(roomName).emit('ttsReady', payload);
   }
 
   // ==========================================

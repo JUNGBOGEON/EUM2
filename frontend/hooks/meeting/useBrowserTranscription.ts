@@ -37,6 +37,8 @@ const FORCE_SPLIT_CONFIG = {
   CHECK_INTERVAL_MS: 500,
   /** 문장 완료 신뢰도 임계값 (이 이상이면 즉시 분할) */
   SENTENCE_CONFIDENCE_THRESHOLD: 0.7,
+  /** 무음 후 partial 강제 확정 (초) */
+  SILENCE_FINALIZE_SECONDS: 2,
 } as const;
 
 /**
@@ -859,9 +861,14 @@ export function useBrowserTranscription({
           // 즉시 분할 체크 (새 텍스트에 대해서만)
           const { shouldSplit, reason } = shouldForceSplit(partialBufferRef.current, selectedLanguage, now);
           if (shouldSplit) {
+            // 시간 초과 또는 문자 수 초과인 경우 무조건 분할
+            // 문장 완료 감지인 경우에만 confidence 체크
+            const isTimeOrCharExceeded = reason.includes('Max chars') || reason.includes('Max duration');
             const analysis = analyzeSentence(newText, selectedLanguage);
-            // 높은 신뢰도의 문장 완료일 때만 즉시 분할
-            if (analysis.isComplete && analysis.confidence >= FORCE_SPLIT_CONFIG.SENTENCE_CONFIDENCE_THRESHOLD) {
+            const shouldImmediateSplit = isTimeOrCharExceeded ||
+              (analysis.isComplete && analysis.confidence >= FORCE_SPLIT_CONFIG.SENTENCE_CONFIDENCE_THRESHOLD);
+
+            if (shouldImmediateSplit) {
               console.log(`[ForceSplit] 🎯 Immediate split: "${newText.substring(0, 30)}..." (reason: ${reason}, splitCount: ${buffer.forceSplitCount})`);
 
               // 표시 ID 생성 (첫 분할은 원본 ID로 기존 partial 업데이트, 후속은 연속 ID)
@@ -872,7 +879,7 @@ export function useBrowserTranscription({
                 startTimeMs: buffer.startTimeMs,
                 endTimeMs: result.endTimeMs,
               }, reason);
-              
+
               // 버퍼 업데이트: 분할된 텍스트 길이 기록
               partialBufferRef.current = {
                 resultId: result.resultId,
@@ -884,7 +891,7 @@ export function useBrowserTranscription({
                 forceSplitCount: buffer.forceSplitCount + 1,
                 splitTextLength: result.transcript.length, // 전체 텍스트 길이 기록
               };
-              
+
               // partial이 강제 분할되었으므로 이번 결과는 UI에 표시하지 않음
               return;
             }
@@ -1542,10 +1549,16 @@ export function useBrowserTranscription({
   const autoStartTimerRef = useRef<NodeJS.Timeout | null>(null);
   // 최신 startTranscription 함수를 항상 참조하기 위한 ref
   const startTranscriptionRef = useRef(startTranscription);
+  // 최신 sendForcedFinal 함수를 항상 참조하기 위한 ref
+  const sendForcedFinalRef = useRef(sendForcedFinal);
   // startTranscription이 변경될 때마다 ref 업데이트
   useEffect(() => {
     startTranscriptionRef.current = startTranscription;
   }, [startTranscription]);
+  // sendForcedFinal이 변경될 때마다 ref 업데이트
+  useEffect(() => {
+    sendForcedFinalRef.current = sendForcedFinal;
+  }, [sendForcedFinal]);
 
   // enabled 변경, 언뮤트, 또는 룸 참가 완료 시 자동 시작/중지
   useEffect(() => {
@@ -1651,6 +1664,45 @@ export function useBrowserTranscription({
       autoStartTriggeredRef.current = false;
     }
   }, [sessionState]);
+
+  // 무음 감지 시 partial을 강제 확정 (2초 이상 무음이면 현재 partial 확정)
+  useEffect(() => {
+    // 스트리밍 중이 아니거나 무음 시간이 임계값 미만이면 스킵
+    if (sessionState !== 'streaming' || silenceSeconds < FORCE_SPLIT_CONFIG.SILENCE_FINALIZE_SECONDS) {
+      return;
+    }
+
+    // 이미 강제 분할 중이면 스킵 (중복 호출 방지)
+    if (isForceSplittingRef.current) {
+      return;
+    }
+
+    const buffer = partialBufferRef.current;
+    // 버퍼에 확정할 텍스트가 있는지 확인
+    if (buffer.text && buffer.text.trim().length >= FORCE_SPLIT_CONFIG.MIN_CHARS_FOR_SPLIT) {
+      console.log(`[BrowserTranscription] 🔇 Silence finalize: ${silenceSeconds}s silence, finalizing partial: "${buffer.text.substring(0, 30)}..."`);
+
+      const forcedResultId = getDisplayId(buffer.resultId, buffer.forceSplitCount);
+      sendForcedFinalRef.current({
+        resultId: forcedResultId,
+        transcript: buffer.text,
+        startTimeMs: buffer.startTimeMs,
+        endTimeMs: buffer.endTimeMs,
+      }, `Silence finalize (${silenceSeconds}s)`);
+
+      // 버퍼 초기화 (다음 발화를 위해)
+      partialBufferRef.current = {
+        resultId: '',
+        text: '',
+        startTime: 0,
+        lastUpdateTime: 0,
+        startTimeMs: 0,
+        endTimeMs: 0,
+        forceSplitCount: 0,
+        splitTextLength: 0,
+      };
+    }
+  }, [sessionState, silenceSeconds]);
 
   // sessionId 변경 시 상태 초기화
   useEffect(() => {

@@ -734,19 +734,54 @@ export function useWhiteboardInteraction(
                         });
                     }
                 } else {
-                    // Multi logic
-                    const { minX, minY, maxX, maxY } = groupBounds!;
-                    const groupW = maxX - minX;
-                    const groupH = maxY - minY;
-                    const anchorX = handle?.includes('l') ? maxX : minX;
-                    const anchorY = handle?.includes('t') ? maxY : minY;
+                    // Multi logic (OBB or AABB)
+                    const state = isDragging.current as any;
+                    const rot = state.rotation || 0;
 
-                    let newW = groupW;
-                    let newH = groupH;
-                    if (handle?.includes('l')) newW = groupW - dx;
-                    else if (handle?.includes('r')) newW = groupW + dx;
-                    if (handle?.includes('t')) newH = groupH - dy;
-                    else if (handle?.includes('b')) newH = groupH + dy;
+                    // Determine group dimensions
+                    let groupW: number, groupH: number;
+                    let anchorX: number, anchorY: number;
+
+                    if (isOBB && state.halfW !== undefined && state.halfH !== undefined) {
+                        // OBB Group: Use halfW/halfH from drag state
+                        groupW = state.halfW * 2;
+                        groupH = state.halfH * 2;
+
+                        // Anchor is the opposite edge in local space, then rotated to world
+                        const localAnchorX = handle?.includes('l') ? state.halfW : handle?.includes('r') ? -state.halfW : 0;
+                        const localAnchorY = handle?.includes('t') ? state.halfH : handle?.includes('b') ? -state.halfH : 0;
+                        const wCos = Math.cos(rot);
+                        const wSin = Math.sin(rot);
+                        anchorX = (groupCenter?.x || 0) + (localAnchorX * wCos - localAnchorY * wSin);
+                        anchorY = (groupCenter?.y || 0) + (localAnchorX * wSin + localAnchorY * wCos);
+                    } else if (groupBounds) {
+                        // AABB Group
+                        const { minX, minY, maxX, maxY } = groupBounds;
+                        groupW = maxX - minX;
+                        groupH = maxY - minY;
+                        anchorX = handle?.includes('l') ? maxX : minX;
+                        anchorY = handle?.includes('t') ? maxY : minY;
+                    } else {
+                        // Fallback (should not happen)
+                        return;
+                    }
+
+                    // Calculate delta in local space (for OBB) or world space (for AABB)
+                    let dW: number, dH: number;
+                    if (isOBB) {
+                        const cos = Math.cos(-rot);
+                        const sin = Math.sin(-rot);
+                        const localDx = dx * cos - dy * sin;
+                        const localDy = dx * sin + dy * cos;
+                        dW = handle?.includes('l') ? -localDx : handle?.includes('r') ? localDx : 0;
+                        dH = handle?.includes('t') ? -localDy : handle?.includes('b') ? localDy : 0;
+                    } else {
+                        dW = handle?.includes('l') ? -dx : handle?.includes('r') ? dx : 0;
+                        dH = handle?.includes('t') ? -dy : handle?.includes('b') ? dy : 0;
+                    }
+
+                    let newW = Math.max(1, groupW + dW);
+                    let newH = Math.max(1, groupH + dH);
 
                     // Keep Aspect Ratio
                     if (e.shiftKey) {
@@ -764,8 +799,36 @@ export function useWhiteboardInteraction(
                         const localCenter = initialLocalCenters?.get(id) || { x: 0, y: 0 };
                         const oldWorldCenterX = initialTransform.x + localCenter.x;
                         const oldWorldCenterY = initialTransform.y + localCenter.y;
-                        const newWorldCenterX = anchorX + (oldWorldCenterX - anchorX) * sx;
-                        const newWorldCenterY = anchorY + (oldWorldCenterY - anchorY) * sy;
+
+                        // Scale relative to anchor
+                        let newWorldCenterX: number, newWorldCenterY: number;
+                        if (isOBB) {
+                            // For OBB, scale in local space then rotate back
+                            const wCos = Math.cos(rot);
+                            const wSin = Math.sin(rot);
+                            const cos = Math.cos(-rot);
+                            const sin = Math.sin(-rot);
+
+                            // Vector from anchor to item center
+                            const vx = oldWorldCenterX - anchorX;
+                            const vy = oldWorldCenterY - anchorY;
+
+                            // Rotate to local, scale, rotate back
+                            const lVx = vx * cos - vy * sin;
+                            const lVy = vx * sin + vy * cos;
+                            const slVx = lVx * sx;
+                            const slVy = lVy * sy;
+                            const nVx = slVx * wCos - slVy * wSin;
+                            const nVy = slVx * wSin + slVy * wCos;
+
+                            newWorldCenterX = anchorX + nVx;
+                            newWorldCenterY = anchorY + nVy;
+                        } else {
+                            // AABB: Simple scale
+                            newWorldCenterX = anchorX + (oldWorldCenterX - anchorX) * sx;
+                            newWorldCenterY = anchorY + (oldWorldCenterY - anchorY) * sy;
+                        }
+
                         let newScaleX = (initialTransform.scaleX || 1) * sx;
                         let newScaleY = (initialTransform.scaleY || 1) * sy;
                         if (!Number.isFinite(newScaleX)) newScaleX = 1;

@@ -346,36 +346,7 @@ export function useWhiteboardInteraction(renderManager: RenderManager | null, br
         // Image Placement
         if (currentTool === 'image' && currentPendingImage) {
             const placeImage = (url: string) => {
-                addItem({
-                    id: uuidv4(),
-                    type: 'image',
-                    data: {
-                        url,
-                        width: currentPendingImage.width,
-                        height: currentPendingImage.height
-                    },
-                    transform: {
-                        x: point.x - currentPendingImage.width / 2,
-                        y: point.y - currentPendingImage.height / 2,
-                        scaleX: 1,
-                        scaleY: 1,
-                        rotation: 0
-                    },
-                    zIndex: 1,
-                    isDeleted: false,
-                    meetingId: meetingId,
-                    userId: 'user'
-                });
 
-                // Broadcast Image
-                if (broadcastEvent) {
-                    broadcastEvent('add_item', {
-                        id: uuidv4(), // Warning: UUID mismatch if we generate distinct ones. 
-                        // Better to store uuid in var
-                        // I will fix this in logic below
-                    });
-                }
-                // Correction: We need the SAME object.
                 const newItem = {
                     id: uuidv4(),
                     type: 'image' as const,

@@ -147,7 +147,7 @@ export function useWhiteboardDrawing(
     }, [renderManager, getLocalPoint]);
 
     const throttledBroadcast = useRef(throttle((x: number, y: number, t: string) => {
-        broadcastCursorRef.current(x, y, t);
+        broadcastCursorRef.current?.(x, y, t);
     }, 50)).current;
 
     const onPointerMove = useCallback((e: PointerEvent) => {

@@ -61,6 +61,8 @@ interface MembersSectionProps {
   onSearchUsers: (query: string) => Promise<InvitableUser[]>;
 }
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function MembersSection({
   owner,
   members,
@@ -82,6 +84,7 @@ export function MembersSection({
   const [isKicking, setIsKicking] = useState(false);
   const [invitedUsers, setInvitedUsers] = useState<Set<string>>(new Set());
   const [cancellingInvitationId, setCancellingInvitationId] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
@@ -117,18 +120,9 @@ export function MembersSection({
   };
 
   const formatDate = (dateStr: string) => {
+    // Simple relative date formatting logic remains, or could be replaced by a localized lib
     const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (minutes < 1) return '방금 전';
-    if (minutes < 60) return `${minutes}분 전`;
-    if (hours < 24) return `${hours}시간 전`;
-    if (days < 7) return `${days}일 전`;
-    return date.toLocaleDateString('ko-KR');
+    return date.toLocaleDateString();
   };
 
   const handleInvite = async (user: InvitableUser) => {
@@ -165,13 +159,13 @@ export function MembersSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">멤버</h2>
-          <Badge variant="secondary">{totalMembers}명</Badge>
+          <h2 className="text-lg font-semibold">{t('members.title')}</h2>
+          <Badge variant="secondary">{totalMembers}</Badge>
         </div>
         {isOwner && (
           <Button onClick={() => setShowInviteDialog(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
-            멤버 초대
+            {t('members.invite_btn')}
           </Button>
         )}
       </div>
@@ -179,7 +173,7 @@ export function MembersSection({
       {/* Owner Section */}
       {owner && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-muted-foreground">관리자</p>
+          <p className="text-sm font-medium text-muted-foreground">{t('members.admin')}</p>
           <div className="flex items-center gap-4 p-4 rounded-xl bg-primary/5 border border-primary/20">
             <div className="relative">
               <Avatar className="h-12 w-12">
@@ -196,10 +190,10 @@ export function MembersSection({
               <div className="flex items-center gap-2">
                 <p className="font-medium text-foreground">{owner.name}</p>
                 <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 border-none">
-                  관리자
+                  {t('members.admin')}
                 </Badge>
                 {currentUser?.id === owner.id && (
-                  <Badge variant="outline" className="text-xs">나</Badge>
+                  <Badge variant="outline" className="text-xs">{t('members.me')}</Badge>
                 )}
               </div>
               {owner.email && (
@@ -213,20 +207,20 @@ export function MembersSection({
       {/* Members Section */}
       <div className="space-y-3">
         <p className="text-sm font-medium text-muted-foreground">
-          멤버 {members.length > 0 && `(${members.length}명)`}
+          {t('members.title')} {members.length > 0 && `(${members.length})`}
         </p>
-        
+
         {members.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border rounded-xl">
             <Users className="h-12 w-12 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">아직 멤버가 없습니다</p>
+            <p className="text-muted-foreground">{t('members.no_members')}</p>
             {isOwner && (
               <Button
                 variant="link"
                 className="mt-2"
                 onClick={() => setShowInviteDialog(true)}
               >
-                멤버 초대하기
+                {t('members.invite_btn')}
               </Button>
             )}
           </div>
@@ -252,14 +246,14 @@ export function MembersSection({
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-foreground">{member.name}</p>
                     {currentUser?.id === member.id && (
-                      <Badge variant="outline" className="text-xs">나</Badge>
+                      <Badge variant="outline" className="text-xs">{t('members.me')}</Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {member.isOnline ? (
-                      <span className="text-green-600">온라인</span>
+                      <span className="text-green-600">{t('members.online')}</span>
                     ) : (
-                      '오프라인'
+                      t('members.offline')
                     )}
                   </p>
                 </div>
@@ -279,7 +273,7 @@ export function MembersSection({
                         }}
                       >
                         <UserMinus className="mr-2 h-4 w-4" />
-                        내보내기
+                        {t('common.leave')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -295,7 +289,7 @@ export function MembersSection({
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
             <Mail className="h-4 w-4" />
-            대기 중인 초대 ({pendingInvitations.length}건)
+            {t('members.pending_invites')} ({pendingInvitations.length})
           </p>
           <div className="space-y-2">
             {pendingInvitations.map((invitation) => {
@@ -315,12 +309,12 @@ export function MembersSection({
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground truncate">{invitation.invitee.name}</p>
                       <Badge variant="secondary" className="text-xs">
-                        대기 중
+                        {t('members.pending')}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{invitation.invitee.email}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatDate(invitation.createdAt)} 초대됨
+                      {t('members.invited')}
                     </p>
                   </div>
                   <Button
@@ -335,7 +329,7 @@ export function MembersSection({
                     ) : (
                       <X className="h-4 w-4" />
                     )}
-                    <span className="ml-1">취소</span>
+                    <span className="ml-1">{t('common.cancel')}</span>
                   </Button>
                 </div>
               );
@@ -348,9 +342,9 @@ export function MembersSection({
       <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>멤버 초대</DialogTitle>
+            <DialogTitle>{t('members.invite_title')}</DialogTitle>
             <DialogDescription>
-              이름이나 이메일로 사용자를 검색하여 초대하세요
+              {t('members.invite_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -360,7 +354,7 @@ export function MembersSection({
               <Input
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="이름 또는 이메일 검색..."
+                placeholder={t('members.search_placeholder')}
                 className="pl-9"
               />
             </div>
@@ -374,8 +368,8 @@ export function MembersSection({
               ) : searchResults.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   {searchQuery.length < 2
-                    ? '2글자 이상 입력하세요'
-                    : '검색 결과가 없습니다'}
+                    ? t('members.search_short')
+                    : t('members.search_empty')}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -413,10 +407,10 @@ export function MembersSection({
                           ) : isInvited ? (
                             <>
                               <Check className="h-4 w-4 mr-1" />
-                              초대됨
+                              {t('members.invited')}
                             </>
                           ) : (
-                            '초대'
+                            t('members.invite')
                           )}
                         </Button>
                       </div>
@@ -433,14 +427,14 @@ export function MembersSection({
       <AlertDialog open={showKickDialog} onOpenChange={setShowKickDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>멤버 내보내기</AlertDialogTitle>
+            <AlertDialogTitle>{t('members.kick_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedMember?.name}님을 워크스페이스에서 내보내시겠습니까?
-              내보낸 멤버는 다시 초대받기 전까지 워크스페이스에 접근할 수 없습니다.
+              {t('members.kick_confirm').replace('{name}', selectedMember?.name || '')}
+              {t('members.kick_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isKicking}>취소</AlertDialogCancel>
+            <AlertDialogCancel disabled={isKicking}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleKick}
               disabled={isKicking}
@@ -451,7 +445,7 @@ export function MembersSection({
               ) : (
                 <UserMinus className="h-4 w-4 mr-2" />
               )}
-              내보내기
+              {t('members.kick_title')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

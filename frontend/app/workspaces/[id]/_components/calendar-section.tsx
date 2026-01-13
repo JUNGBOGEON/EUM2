@@ -31,6 +31,8 @@ interface CalendarSectionProps {
   onDeleteEventType: (typeId: string) => Promise<void>;
 }
 
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export function CalendarSection({
   events,
   eventTypes,
@@ -67,6 +69,8 @@ export function CalendarSection({
     recurrence: 'none',
     reminderMinutes: undefined,
   });
+
+  const { t } = useLanguage();
 
   // Get today's events
   const todayEvents = useMemo(() => {
@@ -197,16 +201,16 @@ export function CalendarSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">일정</h2>
+          <h2 className="text-lg font-semibold">{t('calendar.title')}</h2>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowEventTypesDialog(true)}>
             <Settings2 className="h-4 w-4 mr-2" />
-            유형 관리
+            {t('calendar.manage_types')}
           </Button>
           <Button onClick={() => handleDateClick(new Date())}>
             <Plus className="h-4 w-4 mr-2" />
-            일정 추가
+            {t('calendar.add_event')}
           </Button>
         </div>
       </div>
@@ -247,20 +251,20 @@ export function CalendarSection({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>일정 삭제</AlertDialogTitle>
+            <AlertDialogTitle>{t('calendar.delete_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{editingEvent?.title}&quot; 일정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+              {t('calendar.delete_confirm').replace('{title}', editingEvent?.title || '')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              삭제
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

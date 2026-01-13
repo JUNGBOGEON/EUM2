@@ -11,7 +11,6 @@ import {
   Settings,
   LogOut,
   PhoneOff,
-  Languages,
   AudioLines,
   Loader2,
   PenTool,
@@ -34,6 +33,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { TranslationControls } from './translation-controls';
+import { DelaySettingsControl } from './delay-settings-control';
 
 interface MeetingControlsProps {
   muted: boolean;
@@ -48,12 +49,30 @@ interface MeetingControlsProps {
   isVoiceFocusLoading?: boolean;
   // 화이트보드
   isWhiteboardEnabled?: boolean;
+  // TTS
+  ttsEnabled?: boolean;
+  isTogglingTTS?: boolean;
+  isTTSPlaying?: boolean;
+  ttsVolume?: number;
+  ttsQueueLength?: number;
+  // Media Delay
+  delayEnabled?: boolean;
+  delayMs?: number;
+  // Original Audio Volume
+  originalVolume?: number;
+  isOriginalVolumeFading?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleTranslation?: () => void;
   onToggleVoiceFocus?: () => void;
   onToggleWhiteboard?: () => void;
+  onToggleTTS?: () => void;
+  onSetTTSVolume?: (volume: number) => void;
+  onOpenTTSSettings?: () => void;
+  onToggleDelay?: () => void;
+  onDelayMsChange?: (ms: number) => void;
+  onSetOriginalVolume?: (volume: number) => void;
   onOpenSettings: () => void;
   onLeave: () => void;
   onEndMeeting?: () => void;
@@ -70,12 +89,27 @@ export function MeetingControls({
   isVoiceFocusEnabled = false,
   isVoiceFocusLoading = false,
   isWhiteboardEnabled = false,
+  ttsEnabled = false,
+  isTogglingTTS = false,
+  isTTSPlaying = false,
+  ttsVolume = 80,
+  ttsQueueLength = 0,
+  delayEnabled = false,
+  delayMs = 1500,
+  originalVolume = 0,
+  isOriginalVolumeFading = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
   onToggleTranslation,
   onToggleVoiceFocus,
   onToggleWhiteboard,
+  onToggleTTS,
+  onSetTTSVolume,
+  onOpenTTSSettings,
+  onToggleDelay,
+  onDelayMsChange,
+  onSetOriginalVolume,
   onOpenSettings,
   onLeave,
   onEndMeeting,
@@ -157,28 +191,24 @@ export function MeetingControls({
           </TooltipContent>
         </Tooltip>
 
-        {/* Translation Toggle */}
-        {onToggleTranslation && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onToggleTranslation}
-                disabled={isTogglingTranslation}
-                className={`h-12 w-12 rounded-full transition-colors ${
-                  translationEnabled
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
-                }`}
-              >
-                <Languages className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{translationEnabled ? '번역 끄기' : '번역 켜기'}</p>
-            </TooltipContent>
-          </Tooltip>
+        {/* Translation & TTS Controls */}
+        {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && (
+          <TranslationControls
+            translationEnabled={translationEnabled}
+            isTogglingTranslation={isTogglingTranslation}
+            onToggleTranslation={onToggleTranslation}
+            ttsEnabled={ttsEnabled}
+            isTogglingTTS={isTogglingTTS}
+            isTTSPlaying={isTTSPlaying}
+            ttsVolume={ttsVolume}
+            ttsQueueLength={ttsQueueLength}
+            onToggleTTS={onToggleTTS}
+            onSetTTSVolume={onSetTTSVolume}
+            onOpenTTSSettings={onOpenTTSSettings}
+            originalVolume={originalVolume}
+            isOriginalVolumeFading={isOriginalVolumeFading}
+            onSetOriginalVolume={onSetOriginalVolume}
+          />
         )}
 
         {/* Voice Focus (Noise Suppression) - 항상 표시 */}
@@ -217,6 +247,16 @@ export function MeetingControls({
               </p>
             </TooltipContent>
           </Tooltip>
+        )}
+
+        {/* Media Delay Settings */}
+        {onToggleDelay && onDelayMsChange && (
+          <DelaySettingsControl
+            delayEnabled={delayEnabled}
+            delayMs={delayMs}
+            onToggleDelay={onToggleDelay}
+            onDelayMsChange={onDelayMsChange}
+          />
         )}
 
         {/* Whiteboard Toggle */}

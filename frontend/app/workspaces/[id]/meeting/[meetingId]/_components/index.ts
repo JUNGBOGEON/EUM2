@@ -5,3 +5,7 @@ export { TranscriptPanel } from './transcript-panel';
 export { DeviceSettingsDialog } from './device-settings-dialog';
 export { FloatingSubtitle } from './floating-subtitle';
 export { EndMeetingDialog } from './end-meeting-dialog';
+export { TTSSettingsDialog } from './tts-settings-dialog';
+export { TranslationControls } from './translation-controls';
+export { DelaySettingsControl } from './delay-settings-control';
+export { DelayedRemoteVideo } from './delayed-remote-video';

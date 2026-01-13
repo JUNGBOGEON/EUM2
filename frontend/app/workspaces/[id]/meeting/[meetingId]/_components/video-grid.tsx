@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { VideoOff } from 'lucide-react';
 import { RemoteVideo, LocalVideo, useAudioVideo } from 'amazon-chime-sdk-component-library-react';
 import { Badge } from '@/components/ui/badge';
+import { DelayedRemoteVideo } from './delayed-remote-video';
 
 interface UserInfo {
   name: string;
@@ -23,6 +24,9 @@ interface VideoGridProps {
   currentUser?: UserInfo;
   participants: Participant[];
   currentAttendeeId?: string | null;
+  // Media Delay
+  delayEnabled?: boolean;
+  delayMs?: number;
 }
 
 // ----------------------------------------------------------------------
@@ -97,6 +101,8 @@ export function VideoGrid({
   currentUser,
   participants,
   currentAttendeeId,
+  delayEnabled = false,
+  delayMs = 1500,
 }: VideoGridProps) {
   const audioVideo = useAudioVideo();
 
@@ -161,9 +167,19 @@ export function VideoGrid({
                 <div className="w-full h-full relative">
                   {participant.isLocal ? (
                     <LocalVideo className="w-full h-full object-cover" />
-                  ) : (
-                    tileId && <RemoteVideo tileId={tileId} className="w-full h-full object-cover" />
-                  )}
+                  ) : tileId ? (
+                    // 원격 비디오: 딜레이 적용 여부에 따라 컴포넌트 선택
+                    delayEnabled ? (
+                      <DelayedRemoteVideo
+                        tileId={tileId}
+                        delayMs={delayMs}
+                        delayEnabled={delayEnabled}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <RemoteVideo tileId={tileId} className="w-full h-full object-cover" />
+                    )
+                  ) : null}
                 </div>
               ) : (
                 // Video OFF -> Avatar

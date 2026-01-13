@@ -23,6 +23,10 @@ import {
   useTranslation,
   useVoiceFocus,
   useTranscriptSync,
+  useTTS,
+  useMediaDelay,
+  useOriginalAudioVolume,
+  DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
@@ -33,6 +37,7 @@ import {
   DeviceSettingsDialog,
   FloatingSubtitle,
   EndMeetingDialog,
+  TTSSettingsDialog,
 } from './_components';
 // Legacy components for loading/error states
 import {
@@ -54,6 +59,7 @@ function MeetingRoomContent() {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false);
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
+  const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
 
   // Debug logging for Whiteboard entry point
   useEffect(() => {
@@ -180,6 +186,31 @@ function MeetingRoomContent() {
     userId,
   });
 
+  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
+  const {
+    originalVolume,
+    setOriginalVolume,
+    isFading: isOriginalVolumeFading,
+  } = useOriginalAudioVolume({
+    translationEnabled,
+  });
+
+  // TTS hook (번역된 자막 음성 재생)
+  const {
+    ttsEnabled,
+    isTogglingTTS,
+    isPlaying: isTTSPlaying,
+    volume: ttsVolume,
+    queueLength: ttsQueueLength,
+    selectedVoices,
+    toggleTTS,
+    setVolume: setTTSVolume,
+    selectVoice,
+  } = useTTS({
+    meetingId,
+    userId,
+  });
+
   // Voice Focus hook (노이즈 억제 - 기본 활성화)
   const {
     isVoiceFocusSupported,
@@ -187,6 +218,16 @@ function MeetingRoomContent() {
     isVoiceFocusLoading,
     toggleVoiceFocus,
   } = useVoiceFocus();
+
+  // Media Delay hook (자막 싱크용 영상/음성 딜레이)
+  const {
+    delayEnabled,
+    delayMs,
+    setDelayEnabled,
+    setDelayMs,
+  } = useMediaDelay({
+    config: DEFAULT_MEDIA_DELAY_CONFIG,
+  });
 
   // Chime SDK hooks
   const { isVideoEnabled, toggleVideo } = useLocalVideo();
@@ -301,6 +342,8 @@ function MeetingRoomContent() {
                 currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
                 participants={participants}
                 currentAttendeeId={currentAttendeeId}
+                delayEnabled={delayEnabled}
+                delayMs={delayMs}
               />
 
               {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
@@ -339,6 +382,14 @@ function MeetingRoomContent() {
         isVoiceFocusEnabled={isVoiceFocusEnabled}
         isVoiceFocusLoading={isVoiceFocusLoading}
         isWhiteboardEnabled={showWhiteboard}
+        // TTS props
+        ttsEnabled={ttsEnabled}
+        isTogglingTTS={isTogglingTTS}
+        isTTSPlaying={isTTSPlaying}
+        ttsVolume={ttsVolume}
+        ttsQueueLength={ttsQueueLength}
+        delayEnabled={delayEnabled}
+        delayMs={delayMs}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
         onToggleScreenShare={() => toggleContentShare()}
@@ -348,6 +399,14 @@ function MeetingRoomContent() {
           console.log('[MeetingPage] Toggling whiteboard click. Previous state:', showWhiteboard);
           setShowWhiteboard(!showWhiteboard);
         }}
+        onToggleTTS={toggleTTS}
+        onToggleDelay={() => setDelayEnabled(!delayEnabled)}
+        onDelayMsChange={setDelayMs}
+        onSetTTSVolume={setTTSVolume}
+        originalVolume={originalVolume}
+        isOriginalVolumeFading={isOriginalVolumeFading}
+        onSetOriginalVolume={setOriginalVolume}
+        onOpenTTSSettings={() => setShowTTSSettings(true)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeetingClick}
@@ -371,6 +430,14 @@ function MeetingRoomContent() {
         isOpen={showEndMeetingDialog}
         onClose={() => setShowEndMeetingDialog(false)}
         onConfirm={handleEndMeetingConfirm}
+      />
+
+      {/* TTS Settings Dialog */}
+      <TTSSettingsDialog
+        open={showTTSSettings}
+        onOpenChange={setShowTTSSettings}
+        selectedVoices={selectedVoices}
+        onSelectVoice={selectVoice}
       />
     </div>
   );

@@ -178,3 +178,71 @@ export interface ChimeRosterAttendee {
   name?: string;
   profileImage?: string;
 }
+
+// ==========================================
+// TTS (Text-to-Speech) Types
+// ==========================================
+
+/**
+ * TTS Ready WebSocket Payload
+ * 번역된 자막의 TTS 오디오가 준비되었을 때 수신하는 페이로드
+ */
+export interface TTSReadyPayload {
+  type: 'tts_ready';
+  resultId: string;
+  audioUrl: string;      // Pre-signed S3 URL
+  durationMs: number;
+  voiceId: string;
+  targetLanguage: string;
+  speakerName: string;
+  translatedText: string;
+  timestamp: number;
+}
+
+/**
+ * TTS 큐 아이템
+ */
+export interface TTSQueueItem {
+  resultId: string;
+  audioUrl: string;
+  durationMs: number;
+  voiceId: string;
+  targetLanguage: string;
+  speakerName: string;
+  translatedText: string;
+  status: 'pending' | 'playing' | 'completed' | 'error';
+  timestamp: number;
+}
+
+/**
+ * Polly 음성 정보
+ */
+export interface PollyVoice {
+  id: string;
+  name: string;
+  gender: 'Female' | 'Male';
+  languageCode: string;
+  isNeural: boolean;
+}
+
+/**
+ * TTS 설정
+ */
+export interface TTSPreference {
+  enabled: boolean;
+  voices: Record<string, string>;  // languageCode -> voiceId
+  volume: number;
+  updatedAt: number;
+}
+
+/**
+ * TTS 상태
+ */
+export interface TTSState {
+  enabled: boolean;
+  isPlaying: boolean;
+  volume: number;
+  queue: TTSQueueItem[];
+  currentlyPlaying: TTSQueueItem | null;
+  selectedVoices: Record<string, string>;  // languageCode -> voiceId
+}

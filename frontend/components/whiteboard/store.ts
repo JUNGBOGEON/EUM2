@@ -23,6 +23,8 @@ export interface WhiteboardItem {
     };
     zIndex: number;
     isDeleted?: boolean;
+    meetingId?: string;
+    userId?: string;
 }
 
 interface WhiteboardState {

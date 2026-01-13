@@ -9,6 +9,7 @@ import {
 } from '@/lib/transcribe-streaming';
 import type { TranscriptItem } from '@/lib/types';
 import { useParticipants } from './useParticipants';
+import { transcriptDebugLog } from '@/lib/meeting/debug-logger';
 
 // ==========================================
 // 타입 정의
@@ -549,11 +550,18 @@ export function useBrowserTranscription({
   }, [sessionId, userId]);
 
   // 현재 사용자 정보 (자기 자신의 트랜스크립션용) - useMemo로 안정화
-  const currentSpeakerInfo = useMemo(() => ({
-    name: currentUserName || '나',
-    profileImage: currentUserProfileImage,
-    attendeeId: currentAttendeeId || 'local-user',
-  }), [currentUserName, currentUserProfileImage, currentAttendeeId]);
+  const currentSpeakerInfo = useMemo(() => {
+    const info = {
+      name: currentUserName || '나',
+      profileImage: currentUserProfileImage,
+      attendeeId: currentAttendeeId || 'local-user',
+    };
+    // 디버깅: attendeeId가 설정되지 않은 경우 경고
+    if (!currentAttendeeId) {
+      console.warn('[BrowserTranscription] ⚠️ currentAttendeeId is not set, using fallback:', info.attendeeId);
+    }
+    return info;
+  }, [currentUserName, currentUserProfileImage, currentAttendeeId]);
 
   // Pre-signed URL 요청
   const getPresignedUrl = useCallback(async (language: SupportedLanguage): Promise<string> => {
@@ -984,6 +992,15 @@ export function useBrowserTranscription({
       languageCode: selectedLanguage, // 발화자 언어
     };
 
+    // 프로덕션 디버깅 로그 (민감 정보 마스킹)
+    transcriptDebugLog.debug('Local transcript created', {
+      event: 'local_created',
+      resultId: displayId,
+      speakerId: currentSpeakerInfo.attendeeId,
+      speakerName: currentSpeakerInfo.name,
+      isPartial: result.isPartial,
+    });
+
     // 동기화 훅에 로컬 트랜스크립트 전달 (있는 경우)
     if (onLocalTranscript) {
       onLocalTranscript(newItem);
@@ -1108,7 +1125,20 @@ export function useBrowserTranscription({
       return;
     }
 
-    console.log('[BrowserTranscription] Starting transcription...');
+    // currentAttendeeId 유효성 검사 (화자 식별에 필수)
+    if (!currentAttendeeId || currentAttendeeId === 'local-user') {
+      transcriptDebugLog.warn('Cannot start transcription - invalid currentAttendeeId', {
+        event: 'speaker_mismatch',
+        speakerId: currentAttendeeId || undefined,
+        error: 'Missing or invalid currentAttendeeId',
+      });
+      return;
+    }
+
+    transcriptDebugLog.info('Starting transcription', {
+      event: 'session_joined',
+      speakerId: currentAttendeeId,
+    });
     setSessionState('connecting');
     setError(null);
     isManualStopRef.current = false;
@@ -1157,11 +1187,13 @@ export function useBrowserTranscription({
 
             setSilenceSeconds((prev) => {
               const newVal = prev + 1;
-              // 14초 무음 시 경고 (15초 타임아웃 전 선제적 처리)
-              if (newVal >= 14 && !isManualStopRef.current) {
-                console.log('[BrowserTranscription] 14s silence - reconnecting...');
-                // 현재 세션 종료하고 재연결
-                client.stop();
+              // NOTE: 무음 감지로 재연결하지 않음
+              // - transcribe-streaming.ts의 sendKeepAlive()가 10초 후 무음 PCM 전송하여 연결 유지
+              // - 14초 재연결은 불필요한 flickering을 유발하므로 제거
+              // - AWS Transcribe 타임아웃 시 onClose에서 자동 재연결됨
+              // 30초마다 또는 60초 배수일 때만 로그 (콘솔 범람 방지)
+              if (newVal === 30 || (newVal > 30 && newVal % 60 === 0)) {
+                console.log(`[BrowserTranscription] ${newVal}s silence (keep-alive active)`);
               }
               return newVal;
             });
@@ -1169,7 +1201,11 @@ export function useBrowserTranscription({
         },
         onError: (err) => {
           if (!isMountedRef.current) return;
-          console.error('[BrowserTranscription] Error:', err);
+          transcriptDebugLog.error('Transcription stream error', err, {
+            event: 'session_left',
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
           setError(err);
           setSessionState('error');
         },
@@ -1226,7 +1262,11 @@ export function useBrowserTranscription({
       await client.start(stream);
 
     } catch (err) {
-      console.error('[BrowserTranscription] Failed to start:', err);
+      transcriptDebugLog.error('Failed to start transcription', err, {
+        event: 'session_left',
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
 
       // 에러 발생 시 리소스 정리
       if (mediaStreamRef.current) {
@@ -1237,11 +1277,14 @@ export function useBrowserTranscription({
       setError(err instanceof Error ? err : new Error(String(err)));
       setSessionState('error');
     }
-  }, [enabled, sessionId, sessionState, selectedLanguage, getPresignedUrl, getMicrophoneStream, handleTranscriptResult, startForceSplitTimer]);
+  }, [enabled, sessionId, sessionState, selectedLanguage, currentAttendeeId, getPresignedUrl, getMicrophoneStream, handleTranscriptResult, startForceSplitTimer]);
 
   // 트랜스크립션 중지
   const stopTranscription = useCallback(() => {
-    console.log('[BrowserTranscription] Stopping transcription...');
+    transcriptDebugLog.info('Stopping transcription', {
+      event: 'session_left',
+      sessionId,
+    });
     isManualStopRef.current = true;
 
     // 클라이언트 정리 (에러 발생해도 계속 진행)
@@ -1540,6 +1583,13 @@ export function useBrowserTranscription({
       return;
     }
 
+    // currentAttendeeId가 유효할 때까지 대기 (화자 식별에 필수)
+    // 'local-user'는 fallback 값으로, 실제 attendeeId가 아직 설정되지 않은 상태
+    if (!currentAttendeeId || currentAttendeeId === 'local-user') {
+      console.log('[BrowserTranscription] Waiting for valid currentAttendeeId:', currentAttendeeId);
+      return;
+    }
+
     // 이미 시작 중이거나 스트리밍 중이면 스킵
     if (autoStartTriggeredRef.current || sessionState === 'streaming' || sessionState === 'connecting') {
       console.log('[BrowserTranscription] Already starting or streaming, skipping');
@@ -1593,7 +1643,7 @@ export function useBrowserTranscription({
         // - sessionState === 'idle' effect에서 안전하게 리셋됨
       }
     };
-  }, [enabled, sessionId, meetingManager.audioVideo, sessionState, isMuted, isRoomJoined, stopTranscription]);
+  }, [enabled, sessionId, meetingManager.audioVideo, sessionState, isMuted, isRoomJoined, currentAttendeeId, stopTranscription]);
 
   // sessionState가 idle로 리셋되면 autoStartTriggered도 리셋
   useEffect(() => {

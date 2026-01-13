@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from '@/contexts/SocketContext';
 import type { TranscriptItem } from '@/lib/types';
+import { transcriptDebugLog } from '@/lib/meeting/debug-logger';
 
 /**
  * 트랜스크립트 정렬 함수
@@ -125,10 +126,10 @@ export function useTranscriptSync({
 
   // 세션 룸 참가/나가기 (서버 확인 대기)
   useEffect(() => {
-    console.log('[TranscriptSync] 🎯 Session join effect triggered:', { 
-      sessionId, 
-      isConnected, 
-      joinedSession: joinedSessionIdRef.current, 
+    console.log('[TranscriptSync] 🎯 Session join effect triggered:', {
+      sessionId,
+      isConnected,
+      joinedSession: joinedSessionIdRef.current,
       isJoining: isJoiningRef.current,
       hasEmit: !!emit,
       hasEmitWithAck: !!emitWithAck,
@@ -142,17 +143,20 @@ export function useTranscriptSync({
 
     if (!isConnected) {
       console.log('[TranscriptSync] ❌ Cannot join session - not connected');
+      // 연결이 끊어지면 재참가가 필요하므로 상태 리셋
       setIsRoomJoined(false);
+      joinedSessionIdRef.current = null;
       return;
     }
 
     // 이미 같은 세션에 참가한 경우 스킵
+    // 소켓 재연결 시 joinedSessionIdRef는 null로 리셋되므로 재참가됨 (line 147)
     if (joinedSessionIdRef.current === sessionId) {
       console.log('[TranscriptSync] Already joined this session, skipping');
       return;
     }
 
-    // 중복 요청 방지
+    // 중복 요청 방지 (같은 세션에 대한 요청만)
     if (isJoiningRef.current) {
       console.log('[TranscriptSync] Already joining, skipping');
       return;
@@ -172,15 +176,14 @@ export function useTranscriptSync({
       isJoiningRef.current = true;
       setIsRoomJoined(false);
 
-      // 이전 세션에서 나가기 (fire-and-forget)
-      if (joinedSessionIdRef.current) {
+      // 이전 세션에서 나가기 (다른 세션인 경우에만)
+      if (joinedSessionIdRef.current && joinedSessionIdRef.current !== sessionId) {
         emit('leaveSession', joinedSessionIdRef.current);
         console.log('[TranscriptSync] Left previous session room:', joinedSessionIdRef.current);
+        // 세션 변경 시 상태 초기화 (메모리 누수 방지)
+        processedIdsRef.current.clear();
+        setTranscripts([]);
       }
-
-      // 세션 변경 시 상태 초기화 (메모리 누수 방지)
-      processedIdsRef.current.clear();
-      setTranscripts([]);
 
       // 새 세션에 참가 (서버 확인 대기)
       try {
@@ -198,10 +201,12 @@ export function useTranscriptSync({
           joinedSessionIdRef.current = sessionId;
           setIsRoomJoined(true);
           console.log('[TranscriptSync] ✅ Successfully joined session room:', sessionId);
+          transcriptDebugLog.sessionEvent('join', sessionId, 'room join success');
         } else {
           console.error('[TranscriptSync] Failed to join session:', response.error);
           joinedSessionIdRef.current = null;
           setIsRoomJoined(false);
+          transcriptDebugLog.sessionEvent('error', sessionId, response.error || 'unknown error');
         }
       } catch (err) {
         // 요청이 취소된 경우 에러 로깅 스킵
@@ -233,6 +238,8 @@ export function useTranscriptSync({
         setIsRoomJoined(false);
       }
     };
+  // 주의: isRoomJoined를 deps에 넣지 않음 - effect 내에서 setIsRoomJoined를 호출하므로 무한 루프 방지
+  // 소켓 재연결 시 joinedSessionIdRef를 null로 리셋하여 재참가 트리거
   }, [sessionId, isConnected, emit, emitWithAck]);
 
   // 원격 트랜스크립트 수신
@@ -264,6 +271,14 @@ export function useTranscriptSync({
           return;
         }
 
+        // 화자 식별자 누락 경고 (디버깅용)
+        if (!payload.speakerId && !payload.speakerUserId) {
+          console.warn('[TranscriptSync] ⚠️ Transcript missing speaker identifiers:', {
+            resultId: payload.resultId,
+            speakerName: payload.speakerName,
+          });
+        }
+
         // 자신의 발화는 스킵 (로컬에서 이미 처리됨)
         // 단, currentUserId/currentAttendeeId가 유효할 때만 체크
         const isOwnTranscript =
@@ -272,6 +287,12 @@ export function useTranscriptSync({
 
         if (isOwnTranscript) {
           console.log('[TranscriptSync] Skipping own transcript:', payload.resultId);
+          transcriptDebugLog.speakerEvent('identified', {
+            expectedSpeakerId: currentAttendeeId || undefined,
+            actualSpeakerId: payload.speakerId,
+            speakerName: payload.speakerName,
+            resultId: payload.resultId,
+          });
           return;
         }
 
@@ -289,23 +310,36 @@ export function useTranscriptSync({
         // Final 트랜스크립트만 processedIds에 추가 (partial은 추가하지 않음)
         if (!payload.isPartial) {
           processedIdsRef.current.add(payload.resultId);
+
+          // 메모리 관리: 처리된 ID가 너무 많아지면 오래된 것 제거
+          const MAX_PROCESSED_IDS = 1000;
+          if (processedIdsRef.current.size > MAX_PROCESSED_IDS) {
+            const ids = Array.from(processedIdsRef.current);
+            processedIdsRef.current = new Set(ids.slice(-500)); // 최근 500개만 유지
+            console.log('[TranscriptSync] Pruned processedIds, kept:', processedIdsRef.current.size);
+          }
         }
 
         console.log('[TranscriptSync] Processing remote transcript:', {
           resultId: payload.resultId,
           isPartial: payload.isPartial,
           speaker: payload.speakerName,
+          speakerId: payload.speakerId,
+          speakerUserId: payload.speakerUserId,
         });
 
+        // speakerId: Chime attendeeId 사용 (로컬 트랜스크립트와 일관성 유지)
+        // attendeeId: 동일하게 Chime attendeeId 사용
+        // getParticipantByAttendeeId()가 Chime attendeeId로 조회하므로 일관성 필요
         const newItem: TranscriptItem = {
           id: payload.resultId,
           speakerName: payload.speakerName,
-          speakerId: payload.speakerUserId,
+          speakerId: payload.speakerId, // Chime attendeeId (로컬과 일관성)
           speakerProfileImage: payload.speakerProfileImage,
           text: payload.text,
           timestamp: payload.timestamp, // 서버 계산 타임스탬프 사용!
           isPartial: payload.isPartial,
-          attendeeId: payload.speakerId,
+          attendeeId: payload.speakerId, // Chime attendeeId
           languageCode: payload.languageCode, // 발화자 언어
         };
 

@@ -25,9 +25,13 @@ interface DragState {
     halfH?: number;
 }
 
-export function useWhiteboardInteraction(renderManager: RenderManager | null, broadcastEvent?: (type: string, data: any) => void) {
-    const params = useParams();
-    const meetingId = params?.meetingId as string || 'default';
+export function useWhiteboardInteraction(
+    renderManager: RenderManager | null,
+    meetingId: string,
+    broadcastEvent?: (type: string, data: any) => void
+) {
+    // const params = useParams(); // Removed
+    // const meetingId = params?.meetingId as string || 'default'; // Passed as arg
     const {
         tool, zoom, pan, selectedIds, items,
         selectItem, clearSelection, updateItem, pushHistory,

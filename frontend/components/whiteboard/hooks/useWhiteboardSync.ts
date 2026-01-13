@@ -8,16 +8,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export function useWhiteboardSync(
     renderManager: RenderManager | null,
+    meetingId: string,
     onRefetch?: () => void,
     currentUser?: { id: string; name: string; profileImage?: string }
 ) {
     const socketRef = useRef<Socket | null>(null);
     const addItem = useWhiteboardStore((state) => state.addItem);
+    const addRemoteItem = useWhiteboardStore((state) => state.addRemoteItem);
     const updateItem = useWhiteboardStore((state) => state.updateItem);
     const deleteItem = useWhiteboardStore((state) => state.deleteItem);
     const clearItems = useWhiteboardStore((state) => state.clearItems);
-    const params = useParams();
-    const meetingId = params.meetingId as string;
+    // const params = useParams(); // Removed reliance on useParams inside hook
+    // const meetingId = params.meetingId as string; // Passed as argument
 
     // STABLE LOCAL ID (Critical for ghosting/echo prevention)
     const localIdRef = useRef<string | null>(null);
@@ -40,11 +42,21 @@ export function useWhiteboardSync(
     const localName = currentUser?.name || 'User';
 
     useEffect(() => {
-        if (!renderManager || !meetingId) return;
+        if (!renderManager) {
+            console.log('[WhiteboardSync] Skipping connection: renderManager is null');
+            return;
+        }
+        if (!meetingId) {
+            console.log('[WhiteboardSync] Skipping connection: meetingId is null');
+            return;
+        }
+
+        console.log('[WhiteboardSync] Initializing socket connection to namespace /whiteboard with meetingId:', meetingId);
 
         // Connect to Socket.io Gateway
         const socket = io(`${API_URL}/whiteboard`, {
-            transports: ['websocket'],
+            transports: ['websocket', 'polling'],
+            withCredentials: true,
             autoConnect: true,
         });
         socketRef.current = socket;
@@ -55,17 +67,28 @@ export function useWhiteboardSync(
             socket.emit('join', { room: meetingId });
         });
 
+        socket.on('connect_error', (err) => {
+            console.error('[WhiteboardSync] Connection Error:', err.message);
+        });
+
         // Event Listeners
         socket.on('add_item', (data: any) => {
-            if (data.senderId === localId) return; // Ignore self
+            // Smart Filter:
+            // 1. If it's another user -> Accept
+            // 2. If it's ME (localId) BUT I don't have it locally (e.g. refresh/rejoin) -> Accept
+            // 3. If it's ME and I HAVE it -> Ignore (Echo)
+            const store = useWhiteboardStore.getState();
+            if (data.senderId === localId && store.items.has(data.id)) {
+                return;
+            }
 
             // Clean up the draft lines for this user so we don't have double-draw
             if (renderManager && data.senderId) {
                 renderManager.clearRemoteDrags(data.senderId);
             }
 
-            console.log('[WhiteboardSync] Received add_item', data);
-            addItem(data);
+            console.log('[WhiteboardSync] Received add_item', data.id);
+            addRemoteItem(data);
         });
 
         socket.on('update_item', (data: any) => {
@@ -93,7 +116,7 @@ export function useWhiteboardSync(
             // Remote cursor logic might rely on specific ID format
             // data should be { x, y, tool, name, avatar, senderId }
             if (data.senderId === localId) return;
-            renderManager.updateRemoteCursor(data.senderId, data);
+            renderManager.updateRemoteCursor(data.senderId, data.x, data.y, data);
         });
 
         socket.on('draw_batch', (data: any) => {

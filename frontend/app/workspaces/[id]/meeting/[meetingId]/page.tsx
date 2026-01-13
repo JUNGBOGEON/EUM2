@@ -55,6 +55,12 @@ function MeetingRoomContent() {
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
 
+  // Debug logging for Whiteboard entry point
+  useEffect(() => {
+    console.log('[MeetingPage] showWhiteboard state changed:', showWhiteboard);
+    console.log('[MeetingPage] meetingId:', meetingId);
+  }, [showWhiteboard, meetingId]);
+
   // stopTranscription ref (useBrowserTranscription보다 먼저 정의된 콜백에서 사용)
   const stopTranscriptionRef = useRef<(() => void) | null>(null);
   // Custom hooks
@@ -281,7 +287,10 @@ function MeetingRoomContent() {
           {showWhiteboard ? (
             <div className="absolute inset-0 z-10 bg-white">
               <div className="absolute inset-0 z-10 bg-white">
-                <WhiteboardCanvas currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined} />
+                <WhiteboardCanvas
+                  meetingId={meetingId}
+                  currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+                />
               </div>
             </div>
           ) : (
@@ -335,7 +344,10 @@ function MeetingRoomContent() {
         onToggleScreenShare={() => toggleContentShare()}
         onToggleTranslation={toggleTranslation}
         onToggleVoiceFocus={toggleVoiceFocus}
-        onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
+        onToggleWhiteboard={() => {
+          console.log('[MeetingPage] Toggling whiteboard click. Previous state:', showWhiteboard);
+          setShowWhiteboard(!showWhiteboard);
+        }}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
         onEndMeeting={handleEndMeetingClick}

@@ -31,6 +31,7 @@ import { useWhiteboardPanning } from './hooks/useWhiteboardPanning';
 import { WhiteboardContextMenu } from './WhiteboardContextMenu';
 
 interface WhiteboardCanvasProps {
+    meetingId: string;
     currentUser?: {
         id: string;
         name: string;
@@ -38,9 +39,9 @@ interface WhiteboardCanvasProps {
     };
 }
 
-export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps) {
+export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser }: WhiteboardCanvasProps) {
     const params = useParams();
-    const meetingId = params.meetingId as string;
+    const meetingId = propMeetingId || (params.meetingId as string);
     const containerRef = useRef<HTMLDivElement>(null);
     const [renderManager, setRenderManager] = useState<RenderManager | null>(null);
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
@@ -61,6 +62,9 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
     const redo = useWhiteboardStore((state) => state.redo);
     const clearItems = useWhiteboardStore((state) => state.clearItems);
     const setItems = useWhiteboardStore((state) => state.setItems);
+
+    // React to Store Changes: Items (Logic moved to single source of truth in loadItems)
+
 
     const updateCursorForTool = useCallback((container: HTMLElement, currentTool: string, pSize: number, eSize: number, col: string, z: number) => {
         const generatePenCursor = (size: number, color: string) => {
@@ -155,22 +159,49 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
 
     const loadItems = useCallback(async () => {
         if (!meetingId) return;
+        console.log(`[Whiteboard] loadItems called for meetingId: ${meetingId}`);
         try {
             const res = await fetch(`${API_URL}/api/whiteboard/${meetingId}`, {
                 credentials: 'include'
             });
+            console.log(`[Whiteboard] Fetch status: ${res.status}`);
             if (res.ok) {
                 const data = await res.json();
+                console.log(`[Whiteboard] Loaded ${data.length} items from server.`);
+
+                // If server returns empty list, but we have local items for THIS meeting,
+                // trust local items (assume backend persistence failure or lag).
+                // since we cleared store on meeting switch, any local items MUST be from this session.
+                const currentItems = useWhiteboardStore.getState().items;
+                if (Array.isArray(data) && data.length === 0 && currentItems.size > 0) {
+                    console.warn(`[Whiteboard] Server returned 0 items but local has ${currentItems.size}. Ignoring empty server response to preserve local work.`);
+                    return;
+                }
+
                 setItems(data);
+            } else {
+                console.error(`[Whiteboard] Fetch failed: ${res.statusText}`);
             }
         } catch (err) {
             console.error("Failed to load whiteboard items", err);
         }
     }, [meetingId, setItems]);
 
+    // Manage Meeting Context & Initial Load
     useEffect(() => {
+        if (!meetingId) return;
+
+        const store = useWhiteboardStore.getState();
+
+        // If we switched meetings, clear the store
+        if (store.meetingId !== meetingId) {
+            console.log(`[Whiteboard] Meeting changed from ${store.meetingId} to ${meetingId}. Clearing local store.`);
+            store.clearItems();
+            store.setMeetingId(meetingId);
+        }
+
         loadItems();
-    }, [loadItems]);
+    }, [meetingId, loadItems]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -190,6 +221,7 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
             await rm.init(container);
 
             if (isMounted) {
+                console.log('[WhiteboardCanvas] Setting RenderManager instance');
                 setRenderManager(rm);
                 // Force initial cursor update immediately after initialization
                 if (container) {
@@ -228,6 +260,7 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
     const items = useWhiteboardStore((state) => state.items);
     useEffect(() => {
         if (!renderManager) return;
+        console.log(`[WhiteboardCanvas] renderManager active. Rendering ${items.size} items.`);
         renderManager.renderItems(items);
     }, [items, renderManager]);
 
@@ -249,28 +282,20 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
     }, [selectedIds, items, renderManager]);
 
     // Hook: Sync Logic (Move this UP so we can pass it to other hooks)
-    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager, loadItems, currentUser);
+    const { broadcastCursor, broadcastEvent } = useWhiteboardSync(renderManager, meetingId, loadItems, currentUser);
 
     const handleClearConfirm = useCallback(() => {
         const { clearItems } = useWhiteboardStore.getState();
         clearItems();
         // Broadcast Clear
-        if (broadcastEvent) broadcastEvent('clear', {});
-
-        // Persist Clear to Backend
-        fetch(`${API_URL}/api/whiteboard/meeting/${meetingId}`, {
-            method: 'DELETE',
-            credentials: 'include'
-        }).catch(err => console.error("Failed to clear backend", err));
-
+        if (broadcastEvent) broadcastEvent('clear', { meetingId });
         setIsClearDialogOpen(false);
     }, [meetingId, broadcastEvent]);
 
-    // Hook: Drawing Logic
-    useWhiteboardDrawing(renderManager, broadcastEvent, broadcastCursor);
+    useWhiteboardDrawing(renderManager, meetingId, broadcastEvent, broadcastCursor);
 
     // Hook: Interaction Logic (Select, Move)
-    useWhiteboardInteraction(renderManager, broadcastEvent);
+    useWhiteboardInteraction(renderManager, meetingId, broadcastEvent);
 
     // Hook: Panning & Zooming
     useWhiteboardPanning(renderManager);
@@ -282,11 +307,6 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
             if (!afterItems.has(id)) {
                 // It was deleted locally by Undo/Redo. Sync this delete.
                 broadcastEvent('delete_item', { id });
-                fetch(`${API_URL}/api/whiteboard/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include'
-                }).catch(e => console.error("Sync delete failed", e));
             }
         });
 
@@ -295,24 +315,12 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
             if (!beforeItems.has(id)) {
                 // It was created/restored locally. Sync this create.
                 broadcastEvent('add_item', item);
-                fetch(`${API_URL}/api/whiteboard`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...item, meetingId, userId: 'local-user' }),
-                    credentials: 'include'
-                }).catch(e => console.error("Sync create failed", e));
             } else {
                 // 3. Detect Updated Items (Present in Both, but changed)
                 const beforeItem = beforeItems.get(id);
                 if (beforeItem !== item) {
                     // Item changed (reference comparison works because store makes updates immutable)
                     broadcastEvent('update_item', { id, changes: item });
-                    fetch(`${API_URL}/api/whiteboard/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(item),
-                        credentials: 'include'
-                    }).catch(e => console.error("Sync update failed", e));
                 }
             }
         });
@@ -354,12 +362,32 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
             const x = (e.clientX - rect.left - pan.x) / zoom;
             const y = (e.clientY - rect.top - pan.y) / zoom;
 
+            // Update Local Cursor Immediately
+            if (renderManager) {
+                renderManager.updateLocalCursor(x, y, {
+                    tool: tool,
+                    name: currentUser?.name || 'Me',
+                    avatar: currentUser?.profileImage
+                });
+            }
+
             throttledBroadcast(x, y, tool);
         };
 
+        const handleMouseLeave = () => {
+            if (renderManager) {
+                renderManager.hideLocalCursor();
+            }
+        };
+
         canvas.addEventListener('pointermove', handleMouseMove);
-        return () => canvas.removeEventListener('pointermove', handleMouseMove);
-    }, [renderManager, pan, zoom, tool]);
+        canvas.addEventListener('pointerleave', handleMouseLeave);
+
+        return () => {
+            canvas.removeEventListener('pointermove', handleMouseMove);
+            canvas.removeEventListener('pointerleave', handleMouseLeave);
+        };
+    }, [renderManager, pan, zoom, tool, currentUser]);
 
     // Drop Handler
     useEffect(() => {
@@ -554,11 +582,6 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
                     selected.forEach(id => {
                         useWhiteboardStore.getState().deleteItem(id);
                         broadcastEvent('delete_item', { id });
-                        // TODO: Persist delete
-                        fetch(`${API_URL}/api/whiteboard/item/${id}`, {
-                            method: 'DELETE',
-                            credentials: 'include'
-                        }).catch(console.error);
                     });
                     useWhiteboardStore.getState().clearSelection();
                 }
@@ -663,7 +686,6 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
             currentSelectedIds.forEach(id => {
                 useWhiteboardStore.getState().deleteItem(id);
                 broadcastEvent('delete_item', { id });
-                fetch(`${API_URL}/api/whiteboard/item/${id}`, { method: 'DELETE', credentials: 'include' }).catch(console.error);
             });
             useWhiteboardStore.getState().clearSelection();
         } else if (action === 'duplicate') {
@@ -682,13 +704,6 @@ export default function WhiteboardCanvas({ currentUser }: WhiteboardCanvasProps)
                     };
                     useWhiteboardStore.getState().addItem(newItem);
                     broadcastEvent('add_item', newItem);
-                    // Persist
-                    fetch(`${API_URL}/api/whiteboard`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...newItem, meetingId: 'default', userId: 'local' }),
-                        credentials: 'include'
-                    }).catch(console.error);
                 }
             });
         } else if (action === 'rotate-45') {

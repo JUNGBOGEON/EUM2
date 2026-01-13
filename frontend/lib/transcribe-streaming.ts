@@ -275,6 +275,34 @@ export class TranscribeStreamingClient {
   private async startAudioProcessing(): Promise<void> {
     if (!this.mediaStream) return;
 
+    // AudioWorklet Code as a string
+    const AUDIO_WORKLET_CODE = `
+class PCMProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 4096;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.bufferIndex = 0;
+  }
+
+  process(inputs, outputs, parameters) {
+    const input = inputs[0];
+    if (!input || !input.length) return true;
+    const channelData = input[0];
+
+    for (let i = 0; i < channelData.length; i++) {
+      this.buffer[this.bufferIndex++] = channelData[i];
+      if (this.bufferIndex >= this.bufferSize) {
+        this.port.postMessage(this.buffer);
+        this.bufferIndex = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-processor', PCMProcessor);
+`;
+
     // AudioContext 생성 (시스템 기본 샘플레이트 사용)
     this.audioContext = new AudioContext();
 
@@ -300,93 +328,91 @@ export class TranscribeStreamingClient {
     console.log('[TranscribeStreaming] Target sample rate:', this.options.sampleRate);
     console.log('[TranscribeStreaming] Downsample ratio:', this.audioContext.sampleRate / this.options.sampleRate!);
 
-    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+    try {
+      // AudioWorklet 로드
+      const blob = new Blob([AUDIO_WORKLET_CODE], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
+      await this.audioContext.audioWorklet.addModule(workletUrl);
+      URL.revokeObjectURL(workletUrl);
 
-    // ScriptProcessorNode (deprecated but widely supported)
-    // 4096 samples buffer size for better audio quality
-    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      const workletNode = new AudioWorkletNode(this.audioContext, 'pcm-processor');
 
-    // 오디오 콜백 카운터 (디버깅용)
-    let audioCallbackCount = 0;
-    let lastCallbackLogTime = Date.now();
+      // 오디오 콜백 카운터 (디버깅용)
+      let audioCallbackCount = 0;
+      let lastCallbackLogTime = Date.now();
 
-    this.processor.onaudioprocess = (event) => {
-      audioCallbackCount++;
+      workletNode.port.onmessage = (event) => {
+        audioCallbackCount++;
 
-      // 10초마다 콜백 횟수 로깅 (오디오 처리가 정상적으로 되는지 확인)
-      const now = Date.now();
-      if (now - lastCallbackLogTime > 10000) {
-        console.log(`[TranscribeStreaming] Audio callbacks in last 10s: ${audioCallbackCount}, muted: ${this._isMuted}, wsOpen: ${this.websocket?.readyState === WebSocket.OPEN}`);
-        audioCallbackCount = 0;
-        lastCallbackLogTime = now;
-      }
-
-      if (!this.isStreaming || this.websocket?.readyState !== WebSocket.OPEN) {
-        return;
-      }
-
-      // 음소거 상태면 오디오 전송 건너뛰기
-      if (this._isMuted) {
-        return;
-      }
-
-      const inputData = event.inputBuffer.getChannelData(0);
-
-      // 오디오 레벨 확인 (디버깅용 - 매 100번째 청크)
-      if (this.chunkCount % 100 === 0) {
-        let maxLevel = 0;
-        let rms = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          const sample = Math.abs(inputData[i]);
-          if (sample > maxLevel) maxLevel = sample;
-          rms += sample * sample;
+        // 10초마다 콜백 횟수 로깅
+        const now = Date.now();
+        if (now - lastCallbackLogTime > 10000) {
+          console.log(`[TranscribeStreaming] Audio chunks in last 10s: ${audioCallbackCount}, muted: ${this._isMuted}, wsOpen: ${this.websocket?.readyState === WebSocket.OPEN}`);
+          audioCallbackCount = 0;
+          lastCallbackLogTime = now;
         }
-        rms = Math.sqrt(rms / inputData.length);
-        console.log(`[TranscribeStreaming] Audio level - Max: ${maxLevel.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
-      }
 
-      // 다운샘플링
-      const downsampledData = downsampleBuffer(
-        inputData,
-        this.audioContext!.sampleRate,
-        this.options.sampleRate!,
-      );
-
-      // PCM 인코딩 (16-bit signed little-endian)
-      const pcmData = pcmEncode(downsampledData);
-
-      // 빈 오디오 청크 스킵
-      if (pcmData.byteLength === 0) {
-        return;
-      }
-
-      // AWS Event Stream 메시지로 인코딩하여 전송
-      try {
-        const message = encodeEventStreamMessage(pcmData);
-        this.websocket!.send(message);
-        this.lastAudioSentTime = Date.now();
-
-        this.chunkCount++;
-        if (this.chunkCount === 1) {
-          console.log(`[TranscribeStreaming] First audio chunk sent`);
-          console.log(`[TranscribeStreaming] - PCM size: ${pcmData.byteLength} bytes`);
-          console.log(`[TranscribeStreaming] - Message size: ${message.byteLength} bytes`);
-          // 첫 번째 청크의 처음 몇 바이트 로깅 (디버깅용)
-          const preview = new Uint8Array(message).slice(0, 20);
-          console.log(`[TranscribeStreaming] - Message preview:`, Array.from(preview));
-        } else if (this.chunkCount % 100 === 0) {
-          console.log(`[TranscribeStreaming] Sent ${this.chunkCount} audio chunks`);
+        if (!this.isStreaming || this.websocket?.readyState !== WebSocket.OPEN) {
+          return;
         }
-      } catch (error) {
-        console.error('[TranscribeStreaming] Failed to send audio chunk:', error);
-      }
-    };
 
-    source.connect(this.processor);
-    this.processor.connect(this.audioContext.destination);
+        if (this._isMuted) return;
 
-    // 연결 상태 모니터링 (5초마다)
-    this.startHealthCheck();
+        const inputData = event.data as Float32Array;
+
+        // 오디오 레벨 확인 (디버깅용 - 매 20번째 청크 approx)
+        if (this.chunkCount % 20 === 0) {
+          let maxLevel = 0;
+          let rms = 0;
+          for (let i = 0; i < inputData.length; i++) {
+            const sample = Math.abs(inputData[i]);
+            if (sample > maxLevel) maxLevel = sample;
+            rms += sample * sample;
+          }
+          rms = Math.sqrt(rms / inputData.length);
+          // 너무 자주 찍히지 않도록 로그 조정 가능
+          // console.log(`[TranscribeStreaming] Audio level ...`);
+        }
+
+        // 다운샘플링
+        const downsampledData = downsampleBuffer(
+          inputData,
+          this.audioContext!.sampleRate,
+          this.options.sampleRate!,
+        );
+
+        // PCM 인코딩
+        const pcmData = pcmEncode(downsampledData);
+
+        if (pcmData.byteLength === 0) return;
+
+        try {
+          const message = encodeEventStreamMessage(pcmData);
+          this.websocket!.send(message);
+          this.lastAudioSentTime = Date.now();
+          this.chunkCount++;
+        } catch (error) {
+          console.error('[TranscribeStreaming] Failed to send audio chunk:', error);
+        }
+      };
+
+      source.connect(workletNode);
+      workletNode.connect(this.audioContext.destination);
+
+      // Store worklet node as processor (type mismatch but functional equivalent for cleanup)
+      // @ts-ignore
+      this.processor = workletNode;
+
+      // 연결 상태 모니터링
+      this.startHealthCheck();
+
+    } catch (err) {
+      console.error('[TranscribeStreaming] Failed to setup AudioWorklet:', err);
+      // Fallback or error handling?
+      // Maybe fallback to ScriptProcessor if addModule fails (unlikely in modern browsers)
+      this.options.onError?.(new Error('Failed to initialize audio processor'));
+    }
   }
 
   /**

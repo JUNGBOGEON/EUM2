@@ -40,7 +40,12 @@ interface WhiteboardState {
     setColor: (color: string) => void;
     setPenSize: (size: number) => void;
     setEraserSize: (size: number) => void;
+
     setSmoothness: (smoothness: number) => void;
+
+    // Session Context
+    meetingId: string | null;
+    setMeetingId: (id: string | null) => void;
 
     // Viewport
     zoom: number;
@@ -55,6 +60,7 @@ interface WhiteboardState {
     // Data
     items: Map<string, WhiteboardItem>;
     addItem: (item: WhiteboardItem) => void;
+    addRemoteItem: (item: WhiteboardItem) => void;
     updateItem: (id: string, updates: Partial<WhiteboardItem>) => void;
     deleteItem: (id: string) => void;
     setItems: (items: WhiteboardItem[]) => void;
@@ -117,6 +123,9 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     setEraserSize: (size) => set({ eraserSize: size }),
     setSmoothness: (smoothness) => set({ smoothness }),
 
+    meetingId: null,
+    setMeetingId: (id) => set({ meetingId: id }),
+
     zoom: 1,
     pan: { x: 0, y: 0 },
     setZoom: (zoom) => set({ zoom }),
@@ -128,6 +137,22 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     items: new Map(),
     addItem: (item) => {
         get().pushHistory();
+        set((state) => {
+            const newItems = new Map(state.items);
+            // Enforce meetingId from current session if missing
+            if (!item.meetingId && state.meetingId) {
+                item.meetingId = state.meetingId;
+            } else if (!item.meetingId) {
+                console.warn('[Store] addItem called without meetingId and no active session meetingId');
+                item.meetingId = 'default';
+            }
+
+            newItems.set(item.id, item);
+            return { items: newItems };
+        });
+    },
+    addRemoteItem: (item) => {
+        // Same as addItem but NO history push (for socket events/history load)
         set((state) => {
             const newItems = new Map(state.items);
             newItems.set(item.id, item);

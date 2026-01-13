@@ -37,6 +37,10 @@ export class TransformDto {
  * 화이트보드 아이템 생성 DTO
  */
 export class CreateWhiteboardItemDto {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsString()
   @IsNotEmpty()
   meetingId: string;

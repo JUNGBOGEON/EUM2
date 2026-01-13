@@ -13,6 +13,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || '',
       scope: ['email', 'profile'],
     });
+    console.log('DEBUG: GoogleStrategy Initialized');
+    console.log('DEBUG: ClientID:', configService.get<string>('GOOGLE_CLIENT_ID') ? 'Exists' : 'Missing');
+    console.log('DEBUG: CallbackURL:', configService.get<string>('GOOGLE_CALLBACK_URL'));
   }
 
   async validate(

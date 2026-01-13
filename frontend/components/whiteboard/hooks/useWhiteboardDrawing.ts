@@ -15,11 +15,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export function useWhiteboardDrawing(
     renderManager: RenderManager | null,
+    meetingId: string,
     broadcastEvent?: (type: string, data: any) => boolean,
     broadcastCursor?: (x: number, y: number, tool: string) => void
 ) {
-    const params = useParams();
-    const meetingId = params.meetingId as string;
+    // const params = useParams(); // Removed useParams reliance
+    // const meetingId = params.meetingId as string; // Passed as argument
     // Removed duplicate useWhiteboardSync call
 
 
@@ -147,7 +148,9 @@ export function useWhiteboardDrawing(
     }, [renderManager, getLocalPoint]);
 
     const throttledBroadcast = useRef(throttle((x: number, y: number, t: string) => {
-        broadcastCursorRef.current?.(x, y, t);
+        if (broadcastCursorRef.current) {
+            broadcastCursorRef.current(x, y, t);
+        }
     }, 50)).current;
 
     const onPointerMove = useCallback((e: PointerEvent) => {
@@ -437,35 +440,15 @@ export function useWhiteboardDrawing(
 
             addItem(newItem);
 
-            // Persist item first, then handle broadcast
-            const persistPromise = fetch(`${API_URL}/api/whiteboard`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...newItem, meetingId, userId: 'local-user' }),
-                credentials: 'include'
-            });
-
+            // Hand off persistence to Gateway (via broadcastEvent)
             // Optimistic broadcast
-            // Optimistic broadcast
-            let success = false;
             if (broadcastEvent) {
-                success = broadcastEvent('add_item', newItem);
+                const success = broadcastEvent('add_item', newItem);
                 if (!success) {
-                    console.warn("Broadcast skipped (likely disconnected), relying on persistence");
+                    console.warn("Broadcast skipped (likely disconnected)");
                 }
-            }
-
-            if (!success) {
-                console.warn("Broadcast skipped (likely too large), waiting for persistence to send refetch");
-                persistPromise
-                    .then(() => {
-                        console.log("Persistence complete, sending refetch signal");
-                        if (broadcastEvent) broadcastEvent('refetch', {});
-                    })
-                    .catch(err => console.error("Failed to persist item", err));
             } else {
-                // If broadcast succeeded, just handle persist error
-                persistPromise.catch(err => console.error("Failed to persist item", err));
+                console.warn("[WhiteboardDrawing] No broadcastEvent function available");
             }
         }
 

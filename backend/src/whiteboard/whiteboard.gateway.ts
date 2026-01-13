@@ -12,10 +12,8 @@ import { Logger } from '@nestjs/common';
 import { WhiteboardService } from './whiteboard.service';
 
 @WebSocketGateway({
-    namespace: 'whiteboard',
-    cors: {
-        origin: '*', // Adjust for production
-    },
+    namespace: '/whiteboard',
+    transports: ['websocket', 'polling'],
 })
 export class WhiteboardGateway
     implements OnGatewayConnection, OnGatewayDisconnect {
@@ -27,7 +25,8 @@ export class WhiteboardGateway
     private logger: Logger = new Logger('WhiteboardGateway');
 
     handleConnection(client: Socket) {
-        this.logger.log(`Client connected: ${client.id}`);
+        console.log(`[WhiteboardGateway] Client connected: ${client.id}, Origin: ${client.handshake.headers.origin}`);
+        this.logger.log(`Client connected: ${client.id}, Origin: ${client.handshake.headers.origin}`);
     }
 
     handleDisconnect(client: Socket) {
@@ -45,6 +44,7 @@ export class WhiteboardGateway
         @MessageBody() data: { room: string; user?: any },
         @ConnectedSocket() client: Socket,
     ) {
+        console.log(`[WhiteboardGateway] Client ${client.id} joining room ${data.room}`);
         client.join(data.room);
         this.logger.log(`Client ${client.id} joined room ${data.room}`);
 
@@ -85,20 +85,34 @@ export class WhiteboardGateway
         }
     }
 
+
     @SubscribeMessage('add_item')
     async handleAddItem(
         @MessageBody() data: any,
         @ConnectedSocket() client: Socket,
     ) {
+        this.logger.debug(`[Gateway] Received add_item for ${data?.id} from ${client.id}`);
+        // Log the meetingId specifically
+        if (!data.meetingId) {
+            console.warn(`[Gateway] Item ${data?.id} missing meetingId! Defaulting to 'default'`);
+            this.logger.warn(`[Gateway] Item ${data?.id} missing meetingId! Defaulting to 'default'`);
+            data.meetingId = 'default';
+        } else {
+            console.log(`[Gateway] Item meetingId: ${data.meetingId}`);
+            this.logger.debug(`[Gateway] Item meetingId: ${data.meetingId}`);
+        }
+
         const room = Array.from(client.rooms).find((r) => r !== client.id);
         if (room) {
             client.to(room).emit('add_item', data);
         }
-        // Persist
+
+        // Persistence: Save to DB
         try {
             await this.whiteboardService.create(data);
-        } catch (e) {
-            this.logger.error(`Failed to create item: ${e.message}`);
+            this.logger.log(`Persisted add_item: ${data.id}`);
+        } catch (error) {
+            this.logger.error(`Failed to persist add_item: ${error.message}`);
         }
     }
 
@@ -107,15 +121,18 @@ export class WhiteboardGateway
         @MessageBody() data: any,
         @ConnectedSocket() client: Socket,
     ) {
+        this.logger.debug(`[Gateway] Received update_item for ${data.id}`);
         const room = Array.from(client.rooms).find((r) => r !== client.id);
         if (room) {
             client.to(room).emit('update_item', data);
         }
-        // Persist
+
+        // Persistence: Update DB
         try {
-            await this.whiteboardService.update(data.id, data.changes);
-        } catch (e) {
-            this.logger.error(`Failed to update item: ${e.message}`);
+            await this.whiteboardService.update(data.id, data);
+            this.logger.log(`Persisted update_item: ${data.id}`);
+        } catch (error) {
+            this.logger.error(`Failed to persist update_item: ${error.message}`);
         }
     }
 
@@ -124,15 +141,18 @@ export class WhiteboardGateway
         @MessageBody() data: any,
         @ConnectedSocket() client: Socket,
     ) {
+        this.logger.debug(`[Gateway] Received delete_item for ${data.id}`);
         const room = Array.from(client.rooms).find((r) => r !== client.id);
         if (room) {
             client.to(room).emit('delete_item', data);
         }
-        // Persist
+
+        // Persistence: Soft Delete
         try {
             await this.whiteboardService.remove(data.id);
-        } catch (e) {
-            this.logger.error(`Failed to delete item: ${e.message}`);
+            this.logger.log(`Persisted delete_item: ${data.id}`);
+        } catch (error) {
+            this.logger.error(`Failed to persist delete_item: ${error.message}`);
         }
     }
 
@@ -145,9 +165,19 @@ export class WhiteboardGateway
         if (room) {
             client.to(room).emit('clear', data);
         }
-        // Persist
+
+        // Persistence: Clear All for Meeting
+        // data should contain meetingId. If not, we might be in trouble.
+        // The client broadcastEvent sends { meetingId, ... }
         if (data.meetingId) {
-            await this.whiteboardService.clearAll(data.meetingId);
+            try {
+                await this.whiteboardService.clearAll(data.meetingId);
+                this.logger.log(`Persisted clear for meeting: ${data.meetingId}`);
+            } catch (error) {
+                this.logger.error(`Failed to persist clear: ${error.message}`);
+            }
+        } else {
+            this.logger.warn('Clear event missing meetingId, cannot persist.');
         }
     }
 

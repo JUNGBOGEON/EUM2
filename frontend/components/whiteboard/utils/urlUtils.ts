@@ -10,7 +10,7 @@ export const getProxiedUrl = (url: string) => {
         // Avoid double proxying if somehow passed
         if (url.includes('/api/image-proxy')) return url;
 
-        return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+        return `/api/image-proxy?url=${encodeURIComponent(url)}&ext=.png`;
     }
     return url;
 };

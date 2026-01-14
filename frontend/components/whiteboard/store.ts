@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit';
+export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit' | 'stamp';
 
 export interface PendingImage {
     url: string;
@@ -12,7 +12,7 @@ export interface PendingImage {
 
 export interface WhiteboardItem {
     id: string;
-    type: 'path' | 'image' | 'text' | 'shape' | 'postit';
+    type: 'path' | 'image' | 'text' | 'shape' | 'postit' | 'stamp';
     data: any;
     parentId?: string; // For objects inside a Post-it
     transform: {
@@ -41,6 +41,12 @@ interface WhiteboardState {
     setColor: (color: string) => void;
     setPenSize: (size: number) => void;
     setEraserSize: (size: number) => void;
+
+    currentStamp: string;
+    setCurrentStamp: (stamp: string) => void;
+
+    stampMenuPosition: { x: number, y: number } | null;
+    setStampMenuPosition: (pos: { x: number, y: number } | null) => void;
 
     setSmoothness: (smoothness: number) => void;
 
@@ -93,6 +99,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     magicPenColor: '#000000',
     penSize: 2,
     eraserSize: 20,
+    currentStamp: 'thumbs-up',
+    setCurrentStamp: (stamp) => set({ currentStamp: stamp }),
+    stampMenuPosition: null,
+    setStampMenuPosition: (pos) => set({ stampMenuPosition: pos }),
     smoothness: 7,
     setTool: (tool) => set((state) => {
         let newColor = state.color;

@@ -120,6 +120,8 @@ export function useWhiteboardDrawing(
     const currentParentOrigin = useRef<{ x: number, y: number } | null>(null);
     const currentParentColor = useRef<string | null>(null);
 
+    const currentErasureId = useRef<string | null>(null);
+
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
         const { tool: currentTool } = stateRef.current;
@@ -128,9 +130,16 @@ export function useWhiteboardDrawing(
         isDrawing.current = true;
         currentPath.current = [];
         lastRenderedIndex.current = 0;
-        currentParentId.current = null; // Reset parent
+        currentParentId.current = null;
         currentParentOrigin.current = null;
         currentParentColor.current = null;
+
+        // Reset Erasure ID for new stroke
+        if (currentTool === 'eraser') {
+            currentErasureId.current = uuidv4();
+        } else {
+            currentErasureId.current = null;
+        }
 
         filterX.current.reset();
         filterY.current.reset();
@@ -222,50 +231,8 @@ export function useWhiteboardDrawing(
         // 2. Add to Batch Buffer for Streaming Drawing
         batchBuffer.current.push(point);
 
-        // 3. REAL-TIME ERASER: Delete text/image/shape items immediately when touched
-        if (currentTool === 'eraser') {
-            const eraseR = (currentEraserSize / currentZoom) / 2;
-            const hitArea = {
-                x: point.x - eraseR,
-                y: point.y - eraseR,
-                width: eraseR * 2,
-                height: eraseR * 2
-            };
-
-            const hits: any[] = [];
-            renderManager.quadTree.retrieve(hits, hitArea);
-
-            // Find deletable items - only shapes can be deleted by eraser
-            // Text must be selected and deleted, images/paths get erasures attached
-            const deletableItems = hits.filter(item => {
-                if (item.type !== 'shape') {
-                    return false;
-                }
-                const lBounds = renderManager.getLocalBounds(item);
-                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
-                const worldMinX = t.x;
-                const worldMinY = t.y;
-                const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
-                const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
-
-                return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
-                    hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
-            });
-
-            // Delete immediately
-            deletableItems.forEach(item => {
-                console.log(`[Eraser] Real-time deleting ${item.type}:`, item.id);
-                useWhiteboardStore.getState().deleteItem(item.id);
-                if (broadcastEventRef.current) {
-                    broadcastEventRef.current('delete_item', { id: item.id });
-                }
-            });
-
-            // Re-render if items were deleted
-            if (deletableItems.length > 0) {
-                renderManager.renderItems(useWhiteboardStore.getState().items);
-            }
-        }
+        // NOTE: Real-time deletion logic removed to prevent re-renders. 
+        // All mutations happen in onPointerUp.
 
         const g = currentGraphics.current;
         const glow = glowGraphics.current;
@@ -308,9 +275,6 @@ export function useWhiteboardDrawing(
                 for (let i = 1; i < newPoints.length; i++) {
                     glow.lineTo(newPoints[i].x, newPoints[i].y);
                 }
-                // Glow uses same color but wider and possibly lighter/different? 
-                // Let's use the same color with blur filter applied to the graphics container.
-                // We just draw a thicker line here.
                 glow.stroke({ width: width + 10 / currentZoom, color, alpha: 0.6, cap: 'round', join: 'round' });
             }
 
@@ -346,8 +310,6 @@ export function useWhiteboardDrawing(
                 finalPoints.push({ x: finalPoints[0].x + 0.01, y: finalPoints[0].y });
             }
 
-            let isRecognized = false;
-
             // GHOST FILTERING: Ignore tiny dots/strokes
             const minDimension = 10 / currentZoom; // 10px visual threshold
             const xs = finalPoints.map(p => p.x);
@@ -355,8 +317,6 @@ export function useWhiteboardDrawing(
             const w = Math.max(...xs) - Math.min(...xs);
             const h = Math.max(...ys) - Math.min(...ys);
 
-            // Filter out accidental clicks (dots) unless it's a deliberate dot (e.g. thick pen tap)
-            // For Magic Pen, be stricter.
             if (currentTool === 'magic-pen') {
                 if (w < 20 / currentZoom && h < 20 / currentZoom) {
                     // Too small for magic pen -> Discard
@@ -364,159 +324,15 @@ export function useWhiteboardDrawing(
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
-                    renderManager.renderItems(useWhiteboardStore.getState().items);
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
                     return;
                 }
-            } else {
-                // For regular pen, if only 1 point or super tiny, maybe ignore?
-                // Current logic handles point length >= 1 check below. 
-                // Leaving regular pen capable of dots.
-            }
 
-            if (currentTool === 'eraser') {
-                // ERASER LOGIC: attached erasure for paths, deletion for other items
-                // 1. Identify valid unique Eraser Path
-                if (!capturedPoints || capturedPoints.length < 2) return;
-
-                // 2. Check Intersection with existing items
-                // Simple AABB check for now against the whole stroke AABB
-                const xs = capturedPoints.map(p => p.x);
-                const ys = capturedPoints.map(p => p.y);
-                const minX = Math.min(...xs);
-                const maxX = Math.max(...xs);
-                const minY = Math.min(...ys);
-                const maxY = Math.max(...ys);
-
-                // Expand slightly for stroke width
-                const eraseR = (currentEraserSize / currentZoom) / 2;
-                const hitArea = { x: minX - eraseR, y: minY - eraseR, width: (maxX - minX) + eraseR * 2, height: (maxY - minY) + eraseR * 2 };
-
-                const hits: any[] = [];
-                if (renderManager) {
-                    renderManager.quadTree.retrieve(hits, hitArea);
-                }
-
-                // Filter true intersections (approximate) and process by type
-                const intersectedItems = hits.filter(item => {
-                    // Get bounds - works for all item types via getLocalBounds
-                    const lBounds = renderManager!.getLocalBounds(item);
-                    const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
-                    const worldMinX = t.x;
-                    const worldMinY = t.y;
-                    const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
-                    const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
-
-                    // Basic AABB intersection
-                    return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
-                        hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
-                });
-
-                if (intersectedItems.length > 0) {
-                    console.log("[Eraser] Hit Items:", intersectedItems.map(i => `${i.id}(${i.type})`));
-
-                    // Separate items by type
-                    // Path and Image items get erasures attached (partial deletion)
-                    const erasableItems = intersectedItems.filter(item =>
-                        item.type === 'path' || item.type === 'image'
-                    );
-                    // Only shapes can be deleted entirely by eraser
-                    const deletableItems = intersectedItems.filter(item =>
-                        item.type === 'shape'
-                    );
-
-                    // DELETE text, image, shape items completely
-                    deletableItems.forEach(item => {
-                        console.log(`[Eraser] Deleting ${item.type} item:`, item.id);
-                        useWhiteboardStore.getState().deleteItem(item.id);
-                        if (broadcastEvent) {
-                            broadcastEvent('delete_item', { id: item.id });
-                        }
-                    });
-
-                    // ATTACH erasures to path and image items
-                    erasableItems.forEach(item => {
-                        // Transform Global Points -> Local Points
-                        const lBounds = renderManager!.getLocalBounds(item);
-                        const cx = lBounds.x + lBounds.width / 2;
-                        const cy = lBounds.y + lBounds.height / 2;
-
-                        const sX = item.transform.scaleX || 1;
-                        const sY = item.transform.scaleY || 1;
-                        const rot = item.transform.rotation || 0;
-                        const tx = item.transform.x + cx; // Pivot World X
-                        const ty = item.transform.y + cy; // Pivot World Y
-
-                        const cos = Math.cos(-rot);
-                        const sin = Math.sin(-rot);
-
-                        const localPoints = capturedPoints.map(p => {
-                            // 1. Translate back (World -> Pivot)
-                            const dx = p.x - tx;
-                            const dy = p.y - ty;
-                            // 2. Rotate Inverse
-                            const rx = dx * cos - dy * sin;
-                            const ry = dx * sin + dy * cos;
-                            // 3. Scale Inverse
-                            const sx = rx / sX;
-                            const sy = ry / sY;
-                            // 4. Pivot Offset (Pivot -> Local Origin)
-                            // Pivot was at (cx, cy) in local space.
-                            // So we are now relative to Pivot. To get absolute local, add Pivot.
-                            return { x: sx + cx, y: sy + cy };
-                        });
-
-                        const simplifiedLocal = simplifyPoints(localPoints, 0.5 / currentZoom);
-                        // Normalize eraser size by scale (approximate average scale) to maintain visual width
-                        const avgScale = (Math.abs(sX) + Math.abs(sY)) / 2;
-                        const newErasure = {
-                            points: simplifiedLocal,
-                            size: (currentEraserSize / currentZoom) / (avgScale || 1)
-                        };
-
-                        const existingErasures = item.data.erasures || [];
-                        const updatePayload = {
-                            data: {
-                                ...item.data,
-                                erasures: [...existingErasures, newErasure]
-                            }
-                        };
-
-                        // Update Store
-                        useWhiteboardStore.getState().updateItem(item.id, updatePayload);
-
-                        // Persist/Broadcast Update
-                        if (broadcastEvent) {
-                            console.log("[Eraser] Broadcasting Update for", item.id);
-                            broadcastEvent('update_item', { id: item.id, ...updatePayload });
-                        } else {
-                            console.warn("[Eraser] No broadcastEvent available");
-                        }
-                    });
-
-                    // Cleanup current graphics
-                    if (currentGraphics.current) {
-                        currentGraphics.current.destroy();
-                        currentGraphics.current = null;
-                    }
-                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
-                    return; // Done, do not create global item
-                }
-
-                // If NO valid intersection, fall through to create global 'white' stroke?
-                // Or just do nothing? 
-                // Let's allow global eraser strokes for background cleaning if desired.
-                // Fall through.
-            }
-
-
-            if (currentTool === 'magic-pen') {
-                // Magic Pen Logic
+                // Recognize Shape
                 const result = detectShape(capturedPoints);
-                // ... same magic pen logic ...
                 if (result.type !== 'none' && result.correctedPoints) {
                     finalPoints = result.correctedPoints;
-                    isRecognized = true;
-                    // ... redraw if needed ...
+                    // Redraw recognized shape temporarily
                     if (currentGraphics.current) {
                         currentGraphics.current.clear();
                         const g = currentGraphics.current;
@@ -529,16 +345,150 @@ export function useWhiteboardDrawing(
                         g.stroke({ width, color, cap: 'round', join: 'round' });
                     }
                 } else {
-                    // UNRECOGNIZED MAGIC PEN STROKE -> DISCARD
+                    // Unrecognized magic pen stroke -> Discard
                     if (currentGraphics.current) {
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
-                    renderManager.renderItems(useWhiteboardStore.getState().items);
-                    return; // EARLY RETURN
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return;
                 }
             }
 
+            if (currentTool === 'eraser') {
+                console.log('[Eraser] onPointerUp triggered. Points:', capturedPoints.length);
+
+                // ERASER LOGIC: attached erasure for paths, deletion for other items
+                const eraseR = (currentEraserSize / currentZoom) / 2;
+                // Bounding box of the entire stroke
+                const xs = capturedPoints.map(p => p.x);
+                const ys = capturedPoints.map(p => p.y);
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+
+                const hitArea = { x: minX - eraseR, y: minY - eraseR, width: (maxX - minX) + eraseR * 2, height: (maxY - minY) + eraseR * 2 };
+
+                const hits: any[] = [];
+                if (renderManager) {
+                    renderManager.quadTree.retrieve(hits, hitArea);
+                }
+                console.log('[Eraser] QuadTree hits:', hits.length);
+
+                // Filter true intersections
+                const intersectedItems = hits.filter(item => {
+                    const lBounds = renderManager!.getLocalBounds(item);
+                    const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+                    const worldMinX = t.x + (lBounds.x * (t.scaleX || 1));
+                    const worldMinY = t.y + (lBounds.y * (t.scaleY || 1));
+                    const worldMaxX = t.x + ((lBounds.x + lBounds.width) * (t.scaleX || 1));
+                    const worldMaxY = t.y + ((lBounds.y + lBounds.height) * (t.scaleY || 1));
+
+                    return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
+                        hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
+                });
+
+                console.log('[Eraser] Intersected items (after bounds check):', intersectedItems.length);
+
+                if (intersectedItems.length > 0) {
+                    const erasableItems = intersectedItems.filter(item =>
+                        item.type === 'path' || item.type === 'image' || item.type === 'stamp'
+                    );
+                    const deletableItems = intersectedItems.filter(item =>
+                        item.type === 'shape'
+                    );
+
+                    // DELETE text/shape items
+                    deletableItems.forEach(item => {
+                        console.log(`[Eraser] Deleting ${item.type} item:`, item.id);
+                        useWhiteboardStore.getState().deleteItem(item.id);
+                        if (broadcastEventRef.current) {
+                            broadcastEventRef.current('delete_item', { id: item.id });
+                        }
+                    });
+
+                    // ATTACH erasures
+                    erasableItems.forEach(hitItem => {
+                        console.log('[Eraser] Processing hit item:', hitItem.id);
+                        const item = useWhiteboardStore.getState().items.get(hitItem.id);
+                        if (!item) return;
+
+                        const lBounds = renderManager!.getLocalBounds(item);
+                        const halfW = lBounds.width / 2;
+                        const halfH = lBounds.height / 2;
+                        const cx = lBounds.x + halfW;
+                        const cy = lBounds.y + halfH;
+                        const sX = item.transform.scaleX || 1;
+                        const sY = item.transform.scaleY || 1;
+                        const rot = item.transform.rotation || 0;
+                        const tx = item.transform.x + cx;
+                        const ty = item.transform.y + cy;
+                        const cos = Math.cos(-rot);
+                        const sin = Math.sin(-rot);
+
+                        const localPoints = capturedPoints.map(p => {
+                            const dx = p.x - tx;
+                            const dy = p.y - ty;
+                            const rx = dx * cos - dy * sin;
+                            const ry = dx * sin + dy * cos;
+                            const sx = rx / sX;
+                            const sy = ry / sY;
+                            return { x: sx + halfW, y: sy + halfH };
+                        });
+
+                        const simplifiedLocal = simplifyPoints(localPoints, 0.5 / currentZoom);
+                        const avgScale = (Math.abs(sX) + Math.abs(sY)) / 2;
+
+                        // Use currentErasureId if available, or generate a new one for this stroke
+                        const erasureId = currentErasureId.current || uuidv4();
+
+                        const newErasure = {
+                            id: erasureId,
+                            points: simplifiedLocal,
+                            size: (currentEraserSize / currentZoom) / (avgScale || 1)
+                        };
+
+                        const existingErasures = item.data.erasures || [];
+                        const existingIndex = existingErasures.findIndex((e: any) => e.id === erasureId);
+
+                        let newErasuresList;
+                        if (existingIndex !== -1) {
+                            newErasuresList = [...existingErasures];
+                            newErasuresList[existingIndex] = newErasure;
+                        } else {
+                            newErasuresList = [...existingErasures, newErasure];
+                        }
+
+                        const updatePayload = {
+                            data: {
+                                ...item.data,
+                                erasures: newErasuresList
+                            }
+                        };
+
+                        console.log('[Eraser] Updating item with new erasure:', {
+                            itemId: item.id,
+                            erasureCount: updatePayload.data.erasures.length
+                        });
+                        useWhiteboardStore.getState().updateItem(item.id, updatePayload);
+
+                        if (broadcastEventRef.current) {
+                            broadcastEventRef.current('update_item', { id: item.id, ...updatePayload });
+                        }
+                    });
+                }
+
+                // Clean up graphics and return (Do NOT create path item)
+                if (currentGraphics.current) {
+                    currentGraphics.current.destroy();
+                    currentGraphics.current = null;
+                }
+                if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                return;
+            }
+
+            // --- Create New Path Item (Pen/Magic Pen/Stamp?? No stamp handled usage separately) ---
             let simplified = simplifyPoints(finalPoints, 0.5 / currentZoom);
 
             // If inside Post-it, convert World Points to Local Points
@@ -547,13 +497,14 @@ export function useWhiteboardDrawing(
                 const oy = currentParentOrigin.current.y;
                 simplified = simplified.map(p => ({ x: p.x - ox, y: p.y - oy }));
             }
+
             const newItem: StoreItem = {
                 id: uuidv4(),
                 type: 'path',
                 data: {
                     points: simplified,
-                    color: currentTool === 'eraser' ? '#ffffff' : currentColorStr,
-                    brushSize: (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom
+                    color: currentColorStr,
+                    brushSize: currentPenSize / currentZoom
                 },
                 transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
                 zIndex: Date.now(),
@@ -565,18 +516,14 @@ export function useWhiteboardDrawing(
             addItem(newItem);
 
             // Hand off persistence to Gateway (via broadcastEvent)
-            // Optimistic broadcast
-            if (broadcastEvent) {
-                const success = broadcastEvent('add_item', newItem);
-                if (!success) {
-                    console.warn("Broadcast skipped (likely disconnected)");
-                }
+            if (broadcastEventRef.current) {
+                broadcastEventRef.current('add_item', newItem);
             } else {
                 console.warn("[WhiteboardDrawing] No broadcastEvent function available");
             }
         }
 
-        // Clean up: Remove the progressive graphics strictly
+        // Cleanup current graphics
         if (currentGraphics.current) {
             currentGraphics.current.destroy();
             currentGraphics.current = null;
@@ -587,7 +534,7 @@ export function useWhiteboardDrawing(
             const items = useWhiteboardStore.getState().items;
             renderManager.renderItems(items);
         }
-    }, [renderManager, addItem, meetingId, flushBatch, broadcastEvent]);
+    }, [renderManager, addItem, meetingId, flushBatch]);
 
     useEffect(() => {
         if (!renderManager) return;

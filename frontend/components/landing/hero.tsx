@@ -1,6 +1,10 @@
 import Link from 'next/link';
 
-export function Hero() {
+interface HeroProps {
+  onLoginClick: () => void;
+}
+
+export function Hero({ onLoginClick }: HeroProps) {
   return (
     <section className="relative flex flex-col items-center justify-center min-h-[90vh] px-4 overflow-hidden">
       {/* The Beam (Pulsating Line) */}
@@ -21,13 +25,16 @@ export function Hero() {
             언어 장벽 없는 글로벌 팀을 위한 단 하나의 플랫폼, EUM.
           </p>
 
-          <Link
-            href="/login"
-            className="group mt-12 relative px-8 py-3 bg-transparent border border-white/20 hover:border-white text-white/80 hover:text-white transition-all duration-500 overflow-hidden"
+          <button
+            onClick={onLoginClick}
+            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-transparent border border-white/30 rounded-full overflow-hidden transition-all duration-500 hover:border-white"
           >
-            <span className="relative z-10 text-[12px] tracking-[0.2em] font-light">ENTER EUM</span>
-            <div className="absolute inset-0 bg-white transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left mix-blend-difference" />
-          </Link>
+            <span className="absolute inset-0 bg-white translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-in-out mix-blend-difference" />
+            <span className="relative z-10 text-[15px] font-mono tracking-wider text-white group-hover:text-black transition-colors duration-500">
+              LOGIN
+            </span>
+            <div className="relative z-10 w-2 h-2 rounded-full bg-white group-hover:bg-black transition-colors duration-500" />
+          </button>
         </div>
       </div>
 

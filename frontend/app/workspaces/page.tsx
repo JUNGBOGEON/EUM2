@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/sidebar';
 import {
   AppSidebar,
-  WorkspaceCard,
+  WorkspaceRow,
   EditDialog,
   LeaveDialog,
   DeleteDialog,
@@ -85,50 +85,63 @@ export default function WorkspacesPage() {
       />
 
       <SidebarInset>
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col bg-black">
           <div className="flex-1 overflow-auto">
-            <div className="max-w-[1200px] mx-auto p-8 pt-14">
-              {/* Welcome Header */}
-              <div className="flex items-center justify-between mb-8">
+            <div className="max-w-[1200px] mx-auto p-4 md:p-12 pt-14">
+              {/* Console Header */}
+              <div className="flex items-end justify-between mb-12 border-b border-white/10 pb-6">
                 <div>
-                  <h1 className="text-3xl font-bold text-foreground">
-                    {t('workspaces.welcome').replace('{name}', user?.name || '')}
+                  <h1 className="text-[24px] font-mono font-bold text-white tracking-tighter">
+                    OPERATOR: {user?.name?.toUpperCase() || 'UNKNOWN'}
                   </h1>
-                  <p className="text-muted-foreground mt-1">{t('workspaces.greeting')}</p>
+                  <p className="text-[12px] text-white/40 font-mono mt-2 uppercase tracking-widest">
+                    System Access Level: Admin
+                  </p>
                 </div>
                 <Button
                   onClick={() => setCreateModalOpen(true)}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="bg-white text-black hover:bg-white/80 font-mono text-xs rounded-none border border-white px-6 h-10"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t('workspaces.create_new')}
+                  <Plus className="mr-2 h-3 w-3" />
+                  INITIATE_NEW_WORKSPACE
                 </Button>
               </div>
 
-              {/* Empty State or Workspace Grid */}
-              {workspaces.length === 0 ? (
-                <div className="border border-dashed border-border rounded-xl p-16 text-center bg-card/50">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <FolderOpen className="h-8 w-8 text-primary" />
+              {/* Data Table Header */}
+              {workspaces.length > 0 && (
+                <div className="flex px-4 py-2 border-b border-white/20 text-[10px] font-mono text-white/30 uppercase tracking-wider mb-2">
+                  <div className="flex-1">System Name / Description</div>
+                  <div className="flex gap-8 md:gap-12 mr-12">
+                    <div className="hidden md:block w-20">Operatives</div>
+                    <div className="hidden sm:block w-24">Last Active</div>
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
-                    {t('workspaces.no_workspaces')}
+                </div>
+              )}
+
+              {/* Empty State or Workspace List */}
+              {workspaces.length === 0 ? (
+                <div className="border border-dashed border-white/10 rounded-sm p-24 text-center">
+                  <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6">
+                    <FolderOpen className="h-6 w-6 text-white/40" />
+                  </div>
+                  <h3 className="text-lg font-mono text-white mb-2">
+                    NO_SYSTEMS_FOUND
                   </h3>
-                  <p className="text-muted-foreground mb-6">
-                    {t('workspaces.empty_guide')}
+                  <p className="text-sm text-white/40 font-mono mb-8">
+                    The archives are empty. Initialize a new worksapce system.
                   </p>
                   <Button
                     onClick={() => setCreateModalOpen(true)}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="bg-white text-black hover:bg-white/80 font-mono text-xs rounded-none"
                   >
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('workspaces.create_first')}
+                    <Plus className="mr-2 h-3 w-3" />
+                    CREATE_SYSTEM
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="flex flex-col">
                   {workspaces.map((workspace) => (
-                    <WorkspaceCard
+                    <WorkspaceRow
                       key={workspace.id}
                       workspace={workspace}
                       user={user}

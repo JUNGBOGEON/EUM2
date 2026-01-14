@@ -18,7 +18,7 @@ export function Footer() {
         </div>
 
         <p className="mt-8 text-[10px] text-white/20 font-mono">
-          © 2024 EUM. THE ARCHITECTURE OF SILENCE.
+          © 2026 EUM. THE ARCHITECTURE OF SILENCE.
         </p>
       </div>
     </footer>

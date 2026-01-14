@@ -10,6 +10,9 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { MeetingChatService } from './meeting-chat.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../../users/entities/user.entity';
 
 @WebSocketGateway({
     namespace: '/workspace',
@@ -24,7 +27,11 @@ export class MeetingChatGateway implements OnGatewayConnection, OnGatewayDisconn
 
     private readonly logger = new Logger(MeetingChatGateway.name);
 
-    constructor(private readonly meetingChatService: MeetingChatService) { }
+    constructor(
+        private readonly meetingChatService: MeetingChatService,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
+    ) { }
 
     handleConnection(client: Socket) {
         this.logger.log(`Client connected: ${client.id}`);
@@ -58,28 +65,33 @@ export class MeetingChatGateway implements OnGatewayConnection, OnGatewayDisconn
                 data.sourceLanguage,
             );
 
-            // 2. Process translations
+            // 2. Fetch sender's profile image
+            const sender = await this.userRepository.findOne({ where: { id: data.senderId } });
+            const senderProfileImage = sender?.profileImage || null;
+
+            // 3. Process translations
             const translations = await this.meetingChatService.processTranslations(
                 data.meetingId,
                 data.content,
                 data.sourceLanguage,
             );
 
-            // 3. Update message with translations (async)
+            // 4. Update message with translations (async)
             await this.meetingChatService.updateMessageTranslations(savedMessage.id, translations);
 
-            // 4. Construct payload
+            // 5. Construct payload with profile image
             const payload = {
                 id: savedMessage.id,
                 senderId: data.senderId,
-                senderName: data.senderName, // Pass sender name for immediate display
+                senderName: data.senderName,
+                senderProfileImage, // Include profile image
                 content: data.content,
                 sourceLanguage: data.sourceLanguage,
                 translations,
                 createdAt: savedMessage.createdAt,
             };
 
-            // 5. Broadcast to room
+            // 6. Broadcast to room
             this.server.to(`meeting:${data.meetingId}`).emit('meeting-chat:new_message', payload);
 
         } catch (error) {

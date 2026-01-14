@@ -70,79 +70,63 @@ export function CommunicationPanel({
     const [chatInput, setChatInput] = useState('');
     const [autoScroll, setAutoScroll] = useState(true);
 
-    // Merge and Sort Items
+    // Merge and Sort Items - All items sorted by timestamp for stable ordering
     const items: CommunicationItem[] = useMemo(() => {
-        // Normalize to Relative Time (ms from start) for sorting
-        // This ensures both Chat (Absolute) and Transcript (Relative) align on the same timeline 0
-
-        const startTime = meetingStartTime || 0;
-        const hasStartTime = !!meetingStartTime;
-
+        // All transcripts: use t.timestamp directly
         const tItems: CommunicationItem[] = transcripts.map(t => ({
             type: 'transcript',
             data: t,
             timestamp: t.timestamp
         }));
 
+        // Chat: use elapsedTime if available (set when message received)
+        // For history messages without elapsedTime, calculate from createdAt
         const mItems: CommunicationItem[] = messages.map(m => {
-            // Fix: Ensure createdAt is treated as UTC
-            let dateStr = typeof m.createdAt === 'string' ? m.createdAt : '';
-            if (dateStr) {
-                if (!dateStr.includes('T')) dateStr = dateStr.replace(' ', 'T');
-                if (!dateStr.endsWith('Z') && !dateStr.includes('+')) dateStr += 'Z';
-            } else {
-                dateStr = new Date(m.createdAt).toISOString();
-            }
-            const absoluteTime = new Date(dateStr).getTime();
-            // If we have a start time, convert Chat to Relative.
-            // If NOT, we can't reliably compare, but we'll try to keep them large (Absolute) and Transcripts small (Relative) -> Failing case.
-            // So we MUST have a start time. Use createdAt of first message/transcript as fallback if needed? 
-            // For now, assume startTime exists. If not, fallback to using absolute for both (converting transcript to absolute using Date.now - elapsed)
+            let timestamp: number;
 
-            let relativeTime = 0;
-            if (hasStartTime) {
-                // Clamp to 0 if negative
-                relativeTime = Math.max(0, absoluteTime - startTime);
+            if (typeof m.elapsedTime === 'number') {
+                // Real-time message: use pre-calculated elapsedTime
+                timestamp = m.elapsedTime;
+            } else if (meetingStartTime) {
+                // History message: try to calculate from createdAt
+                try {
+                    let dateStr = typeof m.createdAt === 'string' ? m.createdAt : '';
+                    if (dateStr && !dateStr.endsWith('Z') && !dateStr.includes('+')) {
+                        if (!dateStr.includes('T')) dateStr = dateStr.replace(' ', 'T');
+                        dateStr += 'Z';
+                    }
+                    const msgTime = dateStr ? new Date(dateStr).getTime() : new Date(m.createdAt).getTime();
+                    timestamp = Math.max(0, msgTime - meetingStartTime);
+                } catch {
+                    timestamp = 0;
+                }
             } else {
-                // Fallback: Use absolute time for sorting
-                // Convert transcript to absolute: Date.now() - elapsed? No, that shifts.
-                // We'll just leave them separated if no start time, but try to convert Chat to large numbers.
-                // Wait, to MIX them, we need a common base.
-                // Let's use Absolute Time for everything internally.
-                // Transcript Absolute = startTime + elapsed.
-                // Chat Absolute = createdAt.
-
-                // If startTime is missing, Transcripts (0..30min) vs Chat (1700000..).
-                // User wants integration.
-                // If startTime is missing, we basically can't integrate purely history.
-                // But assuming usually we have it.
-                relativeTime = absoluteTime;
+                // Fallback: no meetingStartTime, use 0
+                timestamp = 0;
             }
 
             return {
                 type: 'chat',
                 data: m,
-                timestamp: hasStartTime ? (absoluteTime - startTime) : absoluteTime
+                timestamp
             };
         });
 
-        // Re-map Transcripts to Absolute if missing start time?
-        // Actually, if missing start time, Transcripts are 0..X. Chat is Huge.
-        // We MUST rely on meetingStartTime.
-        // If sorting by RELATIVE:
-        // Transcript: t.timestamp (e.g. 5000ms)
-        // Chat: createdAt - startTime (e.g. 14:00:05 - 14:00:00 = 5000ms)
-        // This puts them on the same scale!
-
+        // Sort all items by timestamp - stable sort keeps same-timestamp items in order
         return [...tItems, ...mItems].sort((a, b) => a.timestamp - b.timestamp);
     }, [transcripts, messages, meetingStartTime]);
 
-    // Auto-scroll
+    // Auto-scroll with smooth behavior
     useEffect(() => {
         if (autoScroll && containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            // Use requestAnimationFrame for smoother scrolling
+            requestAnimationFrame(() => {
+                if (containerRef.current) {
+                    containerRef.current.scrollTop = containerRef.current.scrollHeight;
+                }
+            });
         }
-    }, [items, autoScroll, containerRef]);
+    }, [items, autoScroll]);
 
     // Handle scroll to toggle auto-scroll
     const handleScroll = () => {
@@ -219,82 +203,54 @@ export function CommunicationPanel({
                             const speakerProfileImage = dynamicSpeaker?.profileImage || t.speakerProfileImage;
 
                             const translation = translationEnabled && getTranslation ? getTranslation(t.id) : undefined;
-                            const targetLang = translation ? TRANSCRIPTION_LANGUAGES.find((l) => l.code === translation.targetLanguage) : undefined;
 
                             return (
-                                <div key={`t-${t.id}`} className={`flex gap-3 ${t.isPartial ? 'opacity-60' : ''}`}>
-                                    <div className="flex-shrink-0 mt-1">
+                                <div key={`t-${t.id}`} className={`py-1 ${t.isPartial ? 'opacity-40' : ''}`}>
+                                    <div className="flex items-start gap-2.5">
                                         {speakerProfileImage ? (
-                                            <Image src={speakerProfileImage} alt={speakerName} width={32} height={32} className="rounded-full" />
+                                            <Image src={speakerProfileImage} alt={speakerName} width={28} height={28} className="rounded-full flex-shrink-0" />
                                         ) : (
-                                            <div className="w-8 h-8 rounded-full bg-blue-500/30 flex items-center justify-center text-xs text-blue-400 font-bold border border-blue-500/20">
+                                            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white/50 font-medium flex-shrink-0">
                                                 {speakerName.charAt(0).toUpperCase()}
                                             </div>
                                         )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs font-semibold text-blue-300">{speakerName}</span>
-                                            <span className="text-[10px] text-white/40">{formatElapsedTime(t.timestamp)}</span>
-                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3 border-blue-500/30 text-blue-400 bg-blue-500/10">
-                                                음성
-                                            </Badge>
-                                        </div>
-                                        <div className="text-sm text-white/90 leading-relaxed break-words">
-                                            {t.text}
-                                        </div>
-                                        {translation && (
-                                            <div className="text-sm text-emerald-300/90 leading-relaxed mt-1.5 p-2 bg-emerald-500/10 rounded-md border border-emerald-500/20">
-                                                <span className="text-[10px] text-emerald-500 mr-2 uppercase tracking-wide opacity-80">{targetLang?.code}</span>
-                                                {translation.translatedText}
+                                        <div className="flex-1 min-w-0 pt-0.5">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                <span className="text-[11px] font-medium text-white/70">{speakerName}</span>
+                                                <span className="text-[10px] text-white/25">{formatElapsedTime(t.timestamp)}</span>
                                             </div>
-                                        )}
+                                            <p className="text-[13px] text-white/90 leading-snug">{t.text}</p>
+                                            {translation && (
+                                                <p className="mt-0.5 text-[12px] text-white/40 leading-snug">{translation.translatedText}</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
                         } else {
                             const m = item.data;
-                            const isMyMessage = false; // TODO: Check if it's my message (senderId === session.user.id) - pass userId prop
-                            // Assuming translation logic for chat is similar: 
-                            // messages contain 'translations' Map. We pick the one matching selectedLanguage.
                             const translatedText = m.translations?.[selectedLanguage];
 
                             return (
-                                <div key={`c-${m.id}`} className="flex gap-3">
-                                    <div className="flex-shrink-0 mt-1">
+                                <div key={`c-${m.id}`} className="py-1">
+                                    <div className="flex items-start gap-2.5">
                                         {m.senderProfileImage ? (
-                                            <Image
-                                                src={m.senderProfileImage}
-                                                alt={m.senderName}
-                                                width={32}
-                                                height={32}
-                                                className="rounded-full object-cover w-8 h-8"
-                                            />
+                                            <Image src={m.senderProfileImage} alt={m.senderName} width={28} height={28} className="rounded-full flex-shrink-0" />
                                         ) : (
-                                            <div className="w-8 h-8 rounded-full bg-purple-500/30 flex items-center justify-center text-xs text-purple-400 font-bold border border-purple-500/20">
+                                            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white/50 font-medium flex-shrink-0">
                                                 {m.senderName.charAt(0).toUpperCase()}
                                             </div>
                                         )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs font-semibold text-purple-300">{m.senderName}</span>
-                                            {/* Display Elapsed Time for Chat to match Transcripts */}
-                                            <span className="text-[10px] text-white/40">{formatElapsedTime(item.timestamp)}</span>
-                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3 border-purple-500/30 text-purple-400 bg-purple-500/10">
-                                                채팅
-                                            </Badge>
-                                        </div>
-                                        <div className="text-sm bg-white/5 p-3 rounded-lg rounded-tl-none border border-white/10 text-white/90 break-words relative group">
-                                            {m.content}
-                                            {/* Translate Icon/Indicator could go here */}
-                                        </div>
-                                        {translatedText && (
-                                            <div className="text-sm text-emerald-300/90 leading-relaxed mt-1.5 p-2 bg-emerald-500/10 rounded-md border border-emerald-500/20">
-                                                <span className="text-[10px] text-emerald-500 mr-2 uppercase tracking-wide opacity-80">{selectedLanguage}</span>
-                                                {translatedText}
+                                        <div className="flex-1 min-w-0 pt-0.5">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                <span className="text-[11px] font-medium text-white/70">{m.senderName}</span>
+                                                <span className="text-[10px] text-white/25">{formatElapsedTime(item.timestamp)}</span>
                                             </div>
-                                        )}
+                                            <p className="text-[13px] text-white/90 leading-snug px-2.5 py-1.5 bg-white/[0.04] rounded-lg inline-block">{m.content}</p>
+                                            {translatedText && (
+                                                <p className="mt-0.5 text-[12px] text-white/40 leading-snug pl-2.5">{translatedText}</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );

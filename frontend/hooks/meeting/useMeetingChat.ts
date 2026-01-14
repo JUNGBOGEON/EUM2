@@ -13,12 +13,26 @@ export interface MeetingChatMessage {
     sourceLanguage: string;
     translations: Record<string, string>;
     createdAt: string;
+    // New: Elapsed time in ms from meeting start (for unified timeline)
+    elapsedTime?: number;
 }
 
-export function useMeetingChat(meetingId: string, currentUser?: { id: string; name?: string | null }) {
+interface UseMeetingChatOptions {
+    meetingId: string;
+    currentUser?: { id: string; name?: string | null };
+    meetingStartTime?: number | null; // Epoch ms of when meeting started
+}
+
+export function useMeetingChat({ meetingId, currentUser, meetingStartTime }: UseMeetingChatOptions) {
 
     const { socket, isConnected } = useSocket();
     const [messages, setMessages] = useState<MeetingChatMessage[]>([]);
+
+    // Helper: Calculate elapsed time from meeting start
+    const calculateElapsedTime = useCallback(() => {
+        if (!meetingStartTime) return 0;
+        return Math.max(0, Date.now() - meetingStartTime);
+    }, [meetingStartTime]);
 
     // Initial fetch of chat history
     useEffect(() => {
@@ -26,10 +40,6 @@ export function useMeetingChat(meetingId: string, currentUser?: { id: string; na
 
         const fetchMessages = async () => {
             try {
-                // Assuming apiClient or fetch is available
-                // We use standard fetch here to avoid circular deps if apiClient is complex, 
-                // but ideally use the project's apiClient.
-                // Let's use the local fetch with credentials since we are inside a component.
                 const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/meetings/${meetingId}/chat/messages`, {
                     credentials: 'include',
                 });
@@ -37,7 +47,13 @@ export function useMeetingChat(meetingId: string, currentUser?: { id: string; na
                 if (response.ok) {
                     const data = await response.json();
                     if (Array.isArray(data)) {
-                        setMessages(data);
+                        // For history messages, use elapsedTime from server if available
+                        // Otherwise calculate based on createdAt (fallback)
+                        setMessages(data.map((m: MeetingChatMessage) => ({
+                            ...m,
+                            // If server provides elapsedTime, use it; otherwise leave undefined
+                            elapsedTime: m.elapsedTime ?? undefined
+                        })));
                     }
                 }
             } catch (error) {
@@ -57,10 +73,13 @@ export function useMeetingChat(meetingId: string, currentUser?: { id: string; na
 
         // Listen for new messages
         const handleNewMessage = (message: MeetingChatMessage) => {
+            // Calculate elapsed time at the moment we receive the message
+            const elapsedTime = calculateElapsedTime();
+
             setMessages((prev) => {
                 // Prevent duplicates
                 if (prev.some(m => m.id === message.id)) return prev;
-                return [...prev, message];
+                return [...prev, { ...message, elapsedTime }];
             });
         };
 
@@ -69,7 +88,7 @@ export function useMeetingChat(meetingId: string, currentUser?: { id: string; na
         return () => {
             socket.off('meeting-chat:new_message', handleNewMessage);
         };
-    }, [socket, isConnected, meetingId]);
+    }, [socket, isConnected, meetingId, calculateElapsedTime]);
 
     // Debug logging
     useEffect(() => {
@@ -78,10 +97,9 @@ export function useMeetingChat(meetingId: string, currentUser?: { id: string; na
             isConnected,
             socketId: socket?.id,
             hasCurrentUser: !!currentUser,
-            currentUserId: currentUser?.id,
-            currentUserName: currentUser?.name
+            meetingStartTime
         });
-    }, [meetingId, isConnected, socket, currentUser]);
+    }, [meetingId, isConnected, socket, currentUser, meetingStartTime]);
 
     const sendMessage = useCallback((content: string, sourceLanguage: string) => {
         console.log('[useMeetingChat] sendMessage called:', { content, sourceLanguage, currentUser });

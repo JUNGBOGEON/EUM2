@@ -8,10 +8,11 @@ import { ParticipantPreferenceService } from '../services/participant-preference
 import { RedisModule } from '../../redis/redis.module';
 import { SessionParticipant } from '../entities/session-participant.entity';
 import { MeetingChatController } from './meeting-chat.controller';
+import { User } from '../../users/entities/user.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([MeetingChatMessage, SessionParticipant]),
+        TypeOrmModule.forFeature([MeetingChatMessage, SessionParticipant, User]),
         RedisModule,
     ],
     controllers: [MeetingChatController],

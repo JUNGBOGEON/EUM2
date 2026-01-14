@@ -98,10 +98,18 @@ function MeetingRoomContent() {
       initializeAudioOnly();
     }
   }, [meeting, audioInitialized, initializeAudioOnly]);
-  // Meeting start time (timestamp)
-  const meetingStartTime = meeting?.startedAt
-    ? new Date(meeting.startedAt).getTime()
-    : null;
+  // Meeting start time (timestamp) - ensure UTC parsing
+  const meetingStartTime = (() => {
+    if (!meeting?.startedAt) return null;
+    let dateStr = typeof meeting.startedAt === 'string' ? meeting.startedAt : '';
+    if (dateStr) {
+      if (!dateStr.includes('T')) dateStr = dateStr.replace(' ', 'T');
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) dateStr += 'Z';
+    } else {
+      dateStr = new Date(meeting.startedAt).toISOString();
+    }
+    return new Date(dateStr).getTime();
+  })();
 
   useEffect(() => {
     console.log('[MeetingPage] meetingStartTime debug:', {
@@ -149,7 +157,11 @@ function MeetingRoomContent() {
   });
 
   // Meeting Chat hook
-  const { messages: chatMessages, sendMessage } = useMeetingChat(meetingId, currentUser || undefined);
+  const { messages: chatMessages, sendMessage } = useMeetingChat({
+    meetingId,
+    currentUser: currentUser || undefined,
+    meetingStartTime,
+  });
 
   // Debug currentUser in Page
   useEffect(() => {

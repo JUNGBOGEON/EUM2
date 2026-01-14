@@ -5,7 +5,8 @@ import { useWhiteboardStore, WhiteboardItem } from '../store';
 import { RenderManager } from '../RenderManager';
 
 interface DragState {
-    type: 'move' | 'handle' | 'box';
+    type: 'move' | 'handle' | 'box' | 'stamp';
+    startTime?: number;
     initialPoint: { x: number; y: number };
     initialItemTransforms: Map<string, WhiteboardItem['transform']>;
     handle?: string;
@@ -35,16 +36,19 @@ export function useWhiteboardInteraction(
     const {
         tool, zoom, pan, selectedIds, items,
         selectItem, clearSelection, updateItem, pushHistory,
-        pendingImage, setPendingImage, setTool, addItem, setSelectedIds
+        pendingImage, setPendingImage, setTool, addItem, setSelectedIds,
+        currentStamp, setStampMenuPosition
     } = useWhiteboardStore();
 
     // Stable state ref
-    const stateRef = useRef({ tool, zoom, pan, selectedIds, items, pendingImage });
+    const stateRef = useRef({ tool, zoom, pan, selectedIds, items, pendingImage, currentStamp });
     useEffect(() => {
-        stateRef.current = { tool, zoom, pan, selectedIds, items, pendingImage };
-    }, [tool, zoom, pan, selectedIds, items, pendingImage]);
+        stateRef.current = { tool, zoom, pan, selectedIds, items, pendingImage, currentStamp };
+    }, [tool, zoom, pan, selectedIds, items, pendingImage, currentStamp]);
 
     const isDragging = useRef<DragState | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const lastPointerPos = useRef<{ x: number, y: number } | null>(null);
 
     const getLocalPoint = useCallback((e: PointerEvent | MouseEvent) => {
         if (!renderManager) return { x: 0, y: 0 };
@@ -360,7 +364,61 @@ export function useWhiteboardInteraction(
         if (!renderManager) return;
         const point = getLocalPoint(e);
         const canvas = renderManager.app.canvas;
-        const { tool: currentTool, selectedIds: currentSelectedIds, items: currentItems, pendingImage: currentPendingImage } = stateRef.current;
+        const { tool: currentTool, selectedIds: currentSelectedIds, items: currentItems, pendingImage: currentPendingImage, currentStamp } = stateRef.current;
+
+        // STAMP TOOL LOGIC
+        if (currentTool === 'stamp') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.button === 2) {
+                // Right Click -> Open Menu
+                setStampMenuPosition({ x: e.clientX, y: e.clientY });
+                return;
+            }
+
+            // Left Click -> Grow Stamp (Click and Hold)
+            const startTime = Date.now();
+            isDragging.current = {
+                type: 'stamp',
+                initialPoint: point,
+                initialItemTransforms: new Map(), // Required by type
+                startTime
+            };
+
+            const animate = () => {
+                if (isDragging.current?.type !== 'stamp') return;
+                const elapsed = Date.now() - startTime;
+
+                // 4-Step Logic: 0-1s (Step 1), 1-2s (Step 2), 2-3s (Step 3), 3s+ (Step 4)
+                const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
+
+                // Base sizes: 80, 120, 160, 200 (or similar progression)
+                const baseSize = 80 + (step * 40);
+
+                // Shaking Effect (increasing with step)
+                const shakeIntensity = step * 2;
+                const shakeX = (Math.random() - 0.5) * shakeIntensity;
+                const shakeY = (Math.random() - 0.5) * shakeIntensity;
+
+                const currentPoint = isDragging.current.initialPoint;
+
+                if (renderManager) {
+                    renderManager.renderGhost(
+                        'stamp',
+                        currentPoint.x + shakeX,
+                        currentPoint.y + shakeY,
+                        baseSize,
+                        baseSize,
+                        { stampType: currentStamp || 'thumbs-up' }
+                    );
+                }
+                animationFrameRef.current = requestAnimationFrame(animate);
+            };
+            animationFrameRef.current = requestAnimationFrame(animate);
+            canvas.setPointerCapture(e.pointerId);
+            return;
+        }
 
         // Image Placement
         if (currentTool === 'image' && currentPendingImage) {
@@ -679,6 +737,7 @@ export function useWhiteboardInteraction(
 
     const onPointerMove = useCallback((e: PointerEvent) => {
         const point = getLocalPoint(e);
+        lastPointerPos.current = point;
 
         if (!isDragging.current) {
             // ... (Ghost rendering)
@@ -686,6 +745,7 @@ export function useWhiteboardInteraction(
             const tool = CurrentState.tool;
             const selectedIds = CurrentState.selectedIds;
             const pendingImage = CurrentState.pendingImage;
+            const currentStamp = CurrentState.currentStamp;
 
             if (tool === 'image' && pendingImage && renderManager) {
                 renderManager.renderGhost('image', point.x, point.y, pendingImage.width, pendingImage.height, { url: pendingImage.url });
@@ -694,6 +754,10 @@ export function useWhiteboardInteraction(
             } else if (tool === 'postit' && renderManager) {
                 // Show Post-it Ghost
                 renderManager.renderGhost('postit', point.x, point.y, 200, 200);
+                renderManager.app.canvas.style.cursor = 'crosshair';
+                return;
+            } else if (tool === 'stamp' && renderManager) {
+                renderManager.renderGhost('stamp', point.x, point.y, 100, 100, { stampType: currentStamp || 'thumbs-up' });
                 renderManager.app.canvas.style.cursor = 'crosshair';
                 return;
             } else {
@@ -761,6 +825,11 @@ export function useWhiteboardInteraction(
         const { type, initialPoint, initialItemTransforms, groupBounds, handle, groupCenter, initialAngle, isOBB, rotationOffset, initialLocalCenters, initialSelectedIds } = isDragging.current as DragState;
         let dx = point.x - initialPoint.x;
         let dy = point.y - initialPoint.y;
+
+        if (type === 'stamp') {
+            isDragging.current!.initialPoint = point;
+            return;
+        }
 
         if (type === 'move') {
             initialItemTransforms.forEach((initialTransform: any, id: string) => {
@@ -1030,10 +1099,67 @@ export function useWhiteboardInteraction(
     }, [getLocalPoint, updateItem, renderManager, isPointInSelection, getGroupHandleAtPoint, setSelectedIds]);
 
     const onPointerUp = useCallback((e: PointerEvent) => {
+        // Right click release -> Close Menu
+        if (e.button === 2) {
+            setStampMenuPosition(null);
+            return;
+        }
+
         renderManager?.setSelectionOverride(null);
         renderManager?.renderSelection(useWhiteboardStore.getState().selectedIds, useWhiteboardStore.getState().items);
 
         if (isDragging.current) {
+            // STAMP FINALIZATION
+            if (isDragging.current.type === 'stamp') {
+                const { initialPoint, startTime } = isDragging.current;
+                const point = isDragging.current.initialPoint || initialPoint; // Use updated point
+
+                const elapsed = Date.now() - (startTime || 0);
+                // 4-Step Logic Match
+                const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
+                const size = 80 + (step * 40);
+
+                const { currentStamp } = stateRef.current;
+                const half = size / 2;
+
+                const newItem: WhiteboardItem = {
+                    id: uuidv4(),
+                    type: 'stamp' as any,
+                    data: {
+                        stampType: currentStamp || 'thumbs-up',
+                        width: size,
+                        height: size
+                    },
+                    transform: {
+                        x: point.x - half,
+                        y: point.y - half,
+                        rotation: 0,
+                        scaleX: 1,
+                        scaleY: 1
+                    },
+                    zIndex: Date.now(),
+                    meetingId: meetingId,
+                    userId: 'user'
+                };
+
+                addItem(newItem);
+                if (broadcastEvent) broadcastEvent('add_item', newItem);
+
+                if (renderManager) {
+                    renderManager.playStampEffect(point.x, point.y);
+                    renderManager.renderGhost(null, 0, 0, 0, 0); // Clear ghost
+                }
+
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                    animationFrameRef.current = null;
+                }
+
+                isDragging.current = null;
+                renderManager?.app.canvas.releasePointerCapture(e.pointerId);
+                return;
+            }
+
             if ((isDragging.current.type === 'move' || isDragging.current.type === 'handle') && broadcastEvent) {
                 const affectedIds = Array.from(isDragging.current.initialItemTransforms.keys());
                 const currentItems = useWhiteboardStore.getState().items;
@@ -1148,6 +1274,18 @@ export function useWhiteboardInteraction(
             onContextMenu(null);
         }
     }, [renderManager, getLocalPoint, isPointInSelection, onContextMenu, selectItem]);
+
+    useEffect(() => {
+        if (!renderManager) return;
+
+        // Use currentStamp directly from props/store to ensure sync
+        // Using Effect dependency here is critical for "hover" update without moving mouse
+        if (tool === 'stamp' && lastPointerPos.current) {
+            const p = lastPointerPos.current;
+            console.log(`[Interaction] Updating ghost stamp: ${currentStamp} at ${p.x},${p.y}`);
+            renderManager.renderGhost('stamp', p.x, p.y, 100, 100, { stampType: currentStamp || 'thumbs-up' });
+        }
+    }, [currentStamp, tool, renderManager]);
 
     useEffect(() => {
         if (!renderManager) return;

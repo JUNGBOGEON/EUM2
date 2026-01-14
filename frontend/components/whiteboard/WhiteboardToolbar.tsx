@@ -39,7 +39,8 @@ function WhiteboardToolbarComponent({
         setSmoothness,
         canUndo,
         canRedo,
-        setPendingImage
+        setPendingImage,
+        setStampMenuPosition
     } = useWhiteboardStore();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -508,6 +509,24 @@ function WhiteboardToolbarComponent({
                                     strokeWidth={2.5}
                                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                 />
+                            </svg>
+                        </button>
+
+                        {/* Stamp */}
+                        <button
+                            onClick={(e) => {
+                                handleToolClick('stamp');
+                                // Open menu at center or near button? Center is safest for visibility.
+                                setStampMenuPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                            }}
+                            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${tool === 'stamp'
+                                ? 'bg-pink-500 text-white shadow-xl scale-110'
+                                : 'hover:bg-pink-50 text-stone-500 hover:text-pink-600 hover:scale-110'
+                                }`}
+                            title="Stamp"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </button>
 

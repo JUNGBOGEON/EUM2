@@ -21,6 +21,7 @@ import { EventExtractionService } from '../../ai/event-extraction.service';
 import { S3StorageService } from '../../storage/s3-storage.service';
 import { WorkspaceFilesService } from '../../workspaces/workspace-files.service';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
+import { MeetingChatService } from '../chat/meeting-chat.service';
 
 // Re-export types for use in other modules
 export type { StructuredSummary, SummarySection };
@@ -37,6 +38,7 @@ export class SummaryService {
     private eventExtractionService: EventExtractionService,
     private s3StorageService: S3StorageService,
     private workspaceFilesService: WorkspaceFilesService,
+    private meetingChatService: MeetingChatService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
   ) { }
@@ -69,49 +71,52 @@ export class SummaryService {
     }
 
     // 1. 발화 스크립트 조회 (PROCESSING 전에 먼저 체크)
-    const transcriptData =
-      await this.transcriptionService.getTranscriptForSummary(sessionId);
+    try {
+      const transcriptData =
+        await this.transcriptionService.getTranscriptForSummary(sessionId);
 
-    // 2. 발화 기록이 없으면 AI 요약 생성하지 않음
-    if (!transcriptData.fullText || transcriptData.transcripts.length === 0) {
+      // 2. 발화 기록이 없으면 AI 요약 생성하지 않음
+      if (!transcriptData.fullText || transcriptData.transcripts.length === 0) {
+        this.logger.log(
+          `[Summary] No transcripts for session ${sessionId}, skipping AI summary`,
+        );
+        await this.sessionRepository.update(sessionId, {
+          summaryStatus: SummaryStatus.SKIPPED,
+        });
+        // WebSocket 알림
+        this.workspaceGateway.broadcastSummaryStatus({
+          type: 'summary_status_update',
+          workspaceId: session.workspaceId,
+          sessionId,
+          status: 'skipped',
+          message: '요약할 내용이 없습니다',
+        });
+        return;
+      }
+
       this.logger.log(
-        `[Summary] No transcripts for session ${sessionId}, skipping AI summary`,
+        `[Summary] Found ${transcriptData.transcripts.length} transcripts, ` +
+        `${transcriptData.speakers.length} speakers for session ${sessionId}`,
       );
+
+      // 상태 업데이트: PROCESSING (발화 기록이 있을 때만)
       await this.sessionRepository.update(sessionId, {
-        summaryStatus: SummaryStatus.SKIPPED,
+        summaryStatus: SummaryStatus.PROCESSING,
       });
-      // WebSocket 알림
+      // WebSocket 알림 - 처리 시작
       this.workspaceGateway.broadcastSummaryStatus({
         type: 'summary_status_update',
         workspaceId: session.workspaceId,
         sessionId,
-        status: 'skipped',
-        message: '요약할 내용이 없습니다',
+        status: 'processing',
+        message: `${transcriptData.transcripts.length}개의 발언을 분석하고 있습니다`,
       });
-      return;
-    }
 
-    this.logger.log(
-      `[Summary] Found ${transcriptData.transcripts.length} transcripts, ` +
-      `${transcriptData.speakers.length} speakers for session ${sessionId}`,
-    );
+      // 3. 채팅 메시지 조회
+      const chatMessages = await this.meetingChatService.getMessages(sessionId);
 
-    // 상태 업데이트: PROCESSING (발화 기록이 있을 때만)
-    await this.sessionRepository.update(sessionId, {
-      summaryStatus: SummaryStatus.PROCESSING,
-    });
-    // WebSocket 알림 - 처리 시작
-    this.workspaceGateway.broadcastSummaryStatus({
-      type: 'summary_status_update',
-      workspaceId: session.workspaceId,
-      sessionId,
-      status: 'processing',
-      message: `${transcriptData.transcripts.length}개의 발언을 분석하고 있습니다`,
-    });
-
-    try {
-      // 3. 발화 스크립트 포맷팅 (resultId 포함)
-      const formattedTranscript = this.formatTranscriptWithIds(transcriptData);
+      // 4. 발화 스크립트 + 채팅 메시지 통합 및 포맷팅
+      const formattedTranscript = this.formatUnifiedTranscript(transcriptData, chatMessages);
 
       // 4. Bedrock으로 구조화된 요약 생성
       const structuredSummary =
@@ -202,6 +207,54 @@ export class SummaryService {
         (t, idx) =>
           `[ID:${t.resultId || `t-${idx}`}][${t.speakerName || '참가자'}]: ${t.text}`,
       )
+      .join('\n');
+  }
+
+  /**
+   * 발화 스크립트와 채팅 메시지를 통합하여 포맷팅
+   */
+  private formatUnifiedTranscript(
+    transcriptData: {
+      transcripts: Array<{
+        resultId?: string;
+        speakerName: string | null;
+        text: string;
+        timestamp?: number;
+        startTime?: number;
+      }>;
+    },
+    chatMessages: Array<{
+      id: string;
+      sender: { name: string } | null;
+      content: string;
+      createdAt: Date;
+    }>
+  ): string {
+    const unifiedTranscripts = transcriptData.transcripts.map((t) => ({
+      type: 'speech',
+      id: t.resultId || `speech-${Math.random()}`,
+      timestamp: t.startTime || 0,
+      speakerName: t.speakerName || '참가자',
+      content: t.text,
+    }));
+
+    const unifiedChats = chatMessages.map((c) => ({
+      type: 'chat',
+      id: c.id,
+      timestamp: new Date(c.createdAt).getTime(),
+      speakerName: c.sender?.name || '알 수 없음',
+      content: c.content,
+    }));
+
+    const merged = [...unifiedTranscripts, ...unifiedChats].sort(
+      (a, b) => a.timestamp - b.timestamp
+    );
+
+    return merged
+      .map((item) => {
+        const typeLabel = item.type === 'chat' ? '(채팅)' : '';
+        return `[ID:${item.id}][${item.speakerName}${typeLabel}]: ${item.content}`;
+      })
       .join('\n');
   }
 

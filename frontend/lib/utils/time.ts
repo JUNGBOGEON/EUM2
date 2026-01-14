@@ -14,7 +14,9 @@ export function formatTime(timestampMs: number): string {
  * 경과 시간(밀리초)을 "MM:SS" 또는 "HH:MM:SS" 형식으로 포맷팅
  */
 export function formatElapsedTime(elapsedMs: number): string {
-  const totalSeconds = Math.floor(elapsedMs / 1000);
+  // Negative elapsed time means something is wrong (future meeting start?), clamp to 0
+  const normalizedMs = Math.max(0, elapsedMs);
+  const totalSeconds = Math.floor(normalizedMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;

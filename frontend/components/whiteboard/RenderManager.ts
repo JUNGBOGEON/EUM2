@@ -241,11 +241,105 @@ export class RenderManager {
         }
 
         if (item.type === 'text') {
-            // Basic approximation if text measurement isn't perfect in headless
-            const w = item.data?.width || (item.data?.text?.length * 10) || 50;
-            const h = item.data?.height || 20;
-            return { x: 0, y: 0, width: w, height: h };
+            const fontSize = item.data?.fontSize || 24;
+            const fontFamily = item.data?.fontFamily || 'Arial, sans-serif';
+            const text = item.data?.text || '';
+            const lineHeight = fontSize * 1.4;
+            const MAX_WIDTH = 376; // Matches PixiJS wordWrapWidth
+
+            if (!text.trim()) {
+                // Empty text - minimal bounds
+                return { x: 0, y: 0, width: 100, height: fontSize };
+            }
+
+            // Use canvas for accurate text measurement
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return { x: 0, y: 0, width: 100, height: fontSize };
+            }
+
+            ctx.font = `${fontSize}px ${fontFamily}`;
+
+            // Split by existing newlines and measure each line
+            const explicitLines = text.split('\n');
+            let totalHeight = 0;
+            let maxWidth = 0;
+
+            for (const explicitLine of explicitLines) {
+                if (explicitLine.length === 0) {
+                    // Empty line
+                    totalHeight += lineHeight;
+                    continue;
+                }
+
+                const linePixelWidth = ctx.measureText(explicitLine).width;
+
+                if (linePixelWidth <= MAX_WIDTH) {
+                    // Line fits without wrapping
+                    maxWidth = Math.max(maxWidth, linePixelWidth);
+                    totalHeight += lineHeight;
+                } else {
+                    // Line needs wrapping - calculate wrapped lines
+                    let currentLine = '';
+                    let currentWidth = 0;
+                    const words = explicitLine.split(/(\s+)/);
+
+                    for (const word of words) {
+                        const wordWidth = ctx.measureText(word).width;
+
+                        if (currentWidth + wordWidth <= MAX_WIDTH) {
+                            currentLine += word;
+                            currentWidth += wordWidth;
+                        } else {
+                            if (currentLine.length > 0) {
+                                maxWidth = Math.max(maxWidth, currentWidth);
+                                totalHeight += lineHeight;
+                            }
+
+                            // Handle words longer than MAX_WIDTH
+                            if (wordWidth > MAX_WIDTH && word.trim().length > 0) {
+                                // Break character by character
+                                let charLine = '';
+                                let charWidth = 0;
+                                for (const char of word) {
+                                    const charW = ctx.measureText(char).width;
+                                    if (charWidth + charW <= MAX_WIDTH) {
+                                        charLine += char;
+                                        charWidth += charW;
+                                    } else {
+                                        if (charLine.length > 0) {
+                                            maxWidth = Math.max(maxWidth, charWidth);
+                                            totalHeight += lineHeight;
+                                        }
+                                        charLine = char;
+                                        charWidth = charW;
+                                    }
+                                }
+                                currentLine = charLine;
+                                currentWidth = charWidth;
+                            } else {
+                                currentLine = word;
+                                currentWidth = wordWidth;
+                            }
+                        }
+                    }
+
+                    if (currentLine.length > 0) {
+                        maxWidth = Math.max(maxWidth, currentWidth);
+                        totalHeight += lineHeight;
+                    }
+                }
+            }
+
+            return {
+                x: 0,
+                y: 0,
+                width: item.data?.width || Math.max(50, Math.min(maxWidth, MAX_WIDTH)),
+                height: item.data?.height || Math.max(fontSize, totalHeight)
+            };
         }
+
 
         if (item.type === 'shape') {
             const w = item.data?.width || 100;
@@ -279,14 +373,11 @@ export class RenderManager {
         this.currentZoom = zoom;
     }
 
-    renderItems(items: Map<string, WhiteboardItem>) {
+    renderItems(items: Map<string, WhiteboardItem>, editingItemId?: string | null) {
         if (!this.initialized) {
             console.warn("[RenderManager] renderItems called but not initialized");
             return;
         }
-
-        // Debug Log
-        console.log(`[RenderManager] renderItems called. Count: ${items.size}`);
 
         this.quadTree.clear();
         this.staticLayer.removeChildren();
@@ -295,14 +386,15 @@ export class RenderManager {
         const sortedItems = Array.from(items.values()).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
         sortedItems.forEach((item) => {
-            this.addItem(item);
+            const isEditing = item.id === editingItemId;
+            this.addItem(item, isEditing);
         });
 
         // Force render if not auto-updating (though ticker should handle it)
         // this.app.render(); 
     }
 
-    addItem(item: WhiteboardItem) {
+    addItem(item: WhiteboardItem, isEditing: boolean = false) {
         if (!this.initialized) return;
 
         // Insert into QuadTree
@@ -398,6 +490,52 @@ export class RenderManager {
             content.rotation = t.rotation ?? 0;
 
             this.staticLayer.addChild(content);
+        }
+
+        if (item.type === 'text') {
+            const { text, fontSize, color, fontFamily } = item.data || {};
+            const textStyle = new PIXI.TextStyle({
+                fontFamily: fontFamily || 'Arial, sans-serif',
+                fontSize: fontSize || 24,
+                fill: color || '#000000',
+                align: 'left',
+                // DISABLED: Let explicit newlines from TextInputOverlay control wrapping
+                // This ensures consistency between input, edit, and display
+                wordWrap: false,
+                lineHeight: (fontSize || 24) * 1.4,
+            });
+
+            // Fallback for empty text
+            const displayText = text || '';
+            if (!displayText.trim()) {
+                return; // Don't render empty text items
+            }
+
+            const pixiText = new PIXI.Text({ text: displayText, style: textStyle });
+            pixiText.resolution = 2; // sharper text
+
+            // Local bounds - use actual Pixi text measurements (accounts for wordWrap)
+            const w = pixiText.width;
+            const h = pixiText.height;
+            console.log(`[RenderManager] Text "${displayText.substring(0, 20)}..." rendered: w=${w}, h=${h}`);
+            const cx = w / 2;
+            const cy = h / 2;
+
+            const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+
+            // Pivot at center
+            pixiText.pivot.set(cx, cy);
+            // Position at World Center (Transform X/Y + Half Size)
+            pixiText.position.set(t.x + cx, t.y + cy);
+            pixiText.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+            pixiText.rotation = t.rotation ?? 0;
+
+            if (isEditing) {
+                pixiText.visible = false;
+                pixiText.alpha = 0;
+            }
+
+            this.staticLayer.addChild(pixiText);
         }
 
         if (item.type === 'image' && item.data.url) {

@@ -188,6 +188,51 @@ export function useWhiteboardDrawing(
         // 2. Add to Batch Buffer for Streaming Drawing
         batchBuffer.current.push(point);
 
+        // 3. REAL-TIME ERASER: Delete text/image/shape items immediately when touched
+        if (currentTool === 'eraser') {
+            const eraseR = (currentEraserSize / currentZoom) / 2;
+            const hitArea = {
+                x: point.x - eraseR,
+                y: point.y - eraseR,
+                width: eraseR * 2,
+                height: eraseR * 2
+            };
+
+            const hits: any[] = [];
+            renderManager.quadTree.retrieve(hits, hitArea);
+
+            // Find deletable items - only shapes can be deleted by eraser
+            // Text must be selected and deleted, images/paths get erasures attached
+            const deletableItems = hits.filter(item => {
+                if (item.type !== 'shape') {
+                    return false;
+                }
+                const lBounds = renderManager.getLocalBounds(item);
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+                const worldMinX = t.x;
+                const worldMinY = t.y;
+                const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
+                const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
+
+                return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
+                    hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
+            });
+
+            // Delete immediately
+            deletableItems.forEach(item => {
+                console.log(`[Eraser] Real-time deleting ${item.type}:`, item.id);
+                useWhiteboardStore.getState().deleteItem(item.id);
+                if (broadcastEventRef.current) {
+                    broadcastEventRef.current('delete_item', { id: item.id });
+                }
+            });
+
+            // Re-render if items were deleted
+            if (deletableItems.length > 0) {
+                renderManager.renderItems(useWhiteboardStore.getState().items);
+            }
+        }
+
         const g = currentGraphics.current;
         const glow = glowGraphics.current;
 
@@ -285,7 +330,7 @@ export function useWhiteboardDrawing(
             }
 
             if (currentTool === 'eraser') {
-                // ERASER LOGIC: attached erasure
+                // ERASER LOGIC: attached erasure for paths, deletion for other items
                 // 1. Identify valid unique Eraser Path
                 if (!capturedPoints || capturedPoints.length < 2) return;
 
@@ -307,18 +352,45 @@ export function useWhiteboardDrawing(
                     renderManager.quadTree.retrieve(hits, hitArea);
                 }
 
-                // Filter true intersections (approximate) and attach
+                // Filter true intersections (approximate) and process by type
                 const intersectedItems = hits.filter(item => {
-                    const b = item.getBounds();
+                    // Get bounds - works for all item types via getLocalBounds
+                    const lBounds = renderManager!.getLocalBounds(item);
+                    const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+                    const worldMinX = t.x;
+                    const worldMinY = t.y;
+                    const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
+                    const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
+
                     // Basic AABB intersection
-                    return hitArea.x < b.x + b.width && hitArea.x + hitArea.width > b.x &&
-                        hitArea.y < b.y + b.height && hitArea.y + hitArea.height > b.y;
+                    return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
+                        hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
                 });
 
                 if (intersectedItems.length > 0) {
-                    console.log("[Eraser] Hit Items:", intersectedItems.map(i => i.id));
-                    // ATTACH MODE
-                    intersectedItems.forEach(item => {
+                    console.log("[Eraser] Hit Items:", intersectedItems.map(i => `${i.id}(${i.type})`));
+
+                    // Separate items by type
+                    // Path and Image items get erasures attached (partial deletion)
+                    const erasableItems = intersectedItems.filter(item =>
+                        item.type === 'path' || item.type === 'image'
+                    );
+                    // Only shapes can be deleted entirely by eraser
+                    const deletableItems = intersectedItems.filter(item =>
+                        item.type === 'shape'
+                    );
+
+                    // DELETE text, image, shape items completely
+                    deletableItems.forEach(item => {
+                        console.log(`[Eraser] Deleting ${item.type} item:`, item.id);
+                        useWhiteboardStore.getState().deleteItem(item.id);
+                        if (broadcastEvent) {
+                            broadcastEvent('delete_item', { id: item.id });
+                        }
+                    });
+
+                    // ATTACH erasures to path and image items
+                    erasableItems.forEach(item => {
                         // Transform Global Points -> Local Points
                         const lBounds = renderManager!.getLocalBounds(item);
                         const cx = lBounds.x + lBounds.width / 2;
@@ -366,7 +438,7 @@ export function useWhiteboardDrawing(
                         };
 
                         // Update Store
-                        useWhiteboardStore.getState().updateItem(item.id, updatePayload); // Use getState to avoid closure staleness? updateItem is stable from store hook but good practice
+                        useWhiteboardStore.getState().updateItem(item.id, updatePayload);
 
                         // Persist/Broadcast Update
                         if (broadcastEvent) {
@@ -375,7 +447,6 @@ export function useWhiteboardDrawing(
                         } else {
                             console.warn("[Eraser] No broadcastEvent available");
                         }
-                        // TODO: API Persist (Patch)
                     });
 
                     // Cleanup current graphics
@@ -392,6 +463,7 @@ export function useWhiteboardDrawing(
                 // Let's allow global eraser strokes for background cleaning if desired.
                 // Fall through.
             }
+
 
             if (currentTool === 'magic-pen') {
                 // Magic Pen Logic

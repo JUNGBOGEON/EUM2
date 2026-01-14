@@ -29,7 +29,8 @@ export function useWhiteboardInteraction(
     renderManager: RenderManager | null,
     meetingId: string,
     broadcastEvent?: (type: string, data: any) => void,
-    onContextMenu?: (state: { x: number, y: number } | null) => void
+    onContextMenu?: (state: { x: number, y: number } | null) => void,
+    setEditingItem?: (id: string | null) => void
 ) {
     const {
         tool, zoom, pan, selectedIds, items,
@@ -381,6 +382,42 @@ export function useWhiteboardInteraction(
             }
             return;
         }
+
+
+
+        // TEXT TOOL LOGIC - Only creates NEW text, doesn't edit existing
+        if (currentTool === 'text') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Always create New Text (editing is done via Select tool double-click)
+            const id = uuidv4();
+            const newItem: WhiteboardItem = {
+                id,
+                type: 'text',
+                data: {
+                    text: '',
+                    fontSize: 24,
+                    fontFamily: 'Arial',
+                    color: useWhiteboardStore.getState().color // Use current selected color
+                },
+                transform: {
+                    x: point.x,
+                    y: point.y,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                },
+                zIndex: Date.now(),
+                meetingId: meetingId
+            };
+
+            addItem(newItem);
+            if (broadcastEvent) broadcastEvent('add_item', newItem);
+            if (setEditingItem) setEditingItem(id);
+            return;
+        }
+
 
         if (currentTool !== 'select') return;
 
@@ -922,6 +959,50 @@ export function useWhiteboardInteraction(
         }
     }, [renderManager, broadcastEvent]);
 
+    // Double-click to edit text items
+    const onDoubleClick = useCallback((e: MouseEvent) => {
+        if (!renderManager) return;
+        const { tool: currentTool } = stateRef.current;
+
+        // Only works with select tool
+        if (currentTool !== 'select') return;
+
+        const point = getLocalPoint(e as any);
+
+        // Find text item at click position
+        const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+
+        const clickedText = hits.find(item => {
+            if (item.type !== 'text') return false;
+            const lb = renderManager.getLocalBounds(item);
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const rot = item.transform.rotation || 0;
+            const cx = lb.x + lb.width / 2;
+            const cy = lb.y + lb.height / 2;
+            const wcX = item.transform.x + cx;
+            const wcY = item.transform.y + cy;
+            const dx = point.x - wcX;
+            const dy = point.y - wcY;
+            const cos = Math.cos(-rot);
+            const sin = Math.sin(-rot);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            const halfW = (lb.width * sx) / 2;
+            const halfH = (lb.height * sy) / 2;
+            // No padding for strict hit test on text items
+            return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
+        });
+
+        if (clickedText && setEditingItem) {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditingItem(clickedText.id);
+        }
+    }, [renderManager, getLocalPoint, setEditingItem]);
+
     const handleContextMenu = useCallback((e: MouseEvent) => {
         e.preventDefault();
         if (!renderManager || !onContextMenu) return;
@@ -977,6 +1058,7 @@ export function useWhiteboardInteraction(
         canvas.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
+        canvas.addEventListener('dblclick', onDoubleClick);
         // Add context menu listener
         canvas.addEventListener('contextmenu', handleContextMenu);
 
@@ -984,7 +1066,8 @@ export function useWhiteboardInteraction(
             canvas.removeEventListener('pointerdown', onPointerDown);
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
+            canvas.removeEventListener('dblclick', onDoubleClick);
             canvas.removeEventListener('contextmenu', handleContextMenu);
         };
-    }, [renderManager, onPointerDown, onPointerMove, onPointerUp, handleContextMenu]);
+    }, [renderManager, onPointerDown, onPointerMove, onPointerUp, onDoubleClick, handleContextMenu]);
 }

@@ -116,6 +116,10 @@ export function useWhiteboardDrawing(
         };
     }, [renderManager]);
 
+    const currentParentId = useRef<string | null>(null);
+    const currentParentOrigin = useRef<{ x: number, y: number } | null>(null);
+    const currentParentColor = useRef<string | null>(null);
+
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
         const { tool: currentTool } = stateRef.current;
@@ -124,11 +128,41 @@ export function useWhiteboardDrawing(
         isDrawing.current = true;
         currentPath.current = [];
         lastRenderedIndex.current = 0;
+        currentParentId.current = null; // Reset parent
+        currentParentOrigin.current = null;
+        currentParentColor.current = null;
 
         filterX.current.reset();
         filterY.current.reset();
 
         const point = getLocalPoint(e);
+
+        // Check if starting inside a Post-it
+        const hitArea = { x: point.x - 1, y: point.y - 1, width: 2, height: 2 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+
+        const postitHit = hits.find(item => {
+            if (item.type !== 'postit') return false;
+            const lb = renderManager.getLocalBounds(item);
+            const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+            const worldMinX = t.x;
+            const worldMinY = t.y;
+            const worldMaxX = t.x + lb.width * (t.scaleX || 1);
+            const worldMaxY = t.y + lb.height * (t.scaleY || 1);
+            return point.x >= worldMinX && point.x <= worldMaxX &&
+                point.y >= worldMinY && point.y <= worldMaxY;
+        });
+
+        if (postitHit) {
+            currentParentId.current = postitHit.id;
+            currentParentOrigin.current = { x: postitHit.transform.x, y: postitHit.transform.y };
+            // Ensure hex string format
+            const rawColor = postitHit.data?.color || 0xFFEB3B;
+            currentParentColor.current = typeof rawColor === 'number' ? '#' + rawColor.toString(16).padStart(6, '0') : rawColor;
+            console.log('[Drawing] Starting inside Post-it:', postitHit.id, 'Color:', currentParentColor.current);
+        }
+
         currentPath.current.push(point);
         filterX.current.filter(point.x);
         filterY.current.filter(point.y);
@@ -236,7 +270,17 @@ export function useWhiteboardDrawing(
         const g = currentGraphics.current;
         const glow = glowGraphics.current;
 
-        const color = parseInt(currentColorStr.replace('#', ''), 16);
+        let color = parseInt(currentColorStr.replace('#', ''), 16);
+        // Eraser Color Logic
+        if (currentTool === 'eraser') {
+            if (currentParentColor.current) {
+                // Use Post-it background color to mimic erasing inside it
+                color = parseInt(currentParentColor.current.replace('#', ''), 16);
+            } else {
+                color = 0xffffff; // Default White Eraser
+            }
+        }
+
         const width = (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom;
 
         // PROGRESSIVE RENDERING: Draw only the NEW segment from last rendered point
@@ -495,7 +539,14 @@ export function useWhiteboardDrawing(
                 }
             }
 
-            const simplified = simplifyPoints(finalPoints, 0.5 / currentZoom);
+            let simplified = simplifyPoints(finalPoints, 0.5 / currentZoom);
+
+            // If inside Post-it, convert World Points to Local Points
+            if (currentParentOrigin.current) {
+                const ox = currentParentOrigin.current.x;
+                const oy = currentParentOrigin.current.y;
+                simplified = simplified.map(p => ({ x: p.x - ox, y: p.y - oy }));
+            }
             const newItem: StoreItem = {
                 id: uuidv4(),
                 type: 'path',
@@ -507,7 +558,8 @@ export function useWhiteboardDrawing(
                 transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
                 zIndex: Date.now(),
                 meetingId: meetingId || 'default',
-                userId: 'user' // Placeholder, will be replaced by backend or ignored if unnecessary for broadcast
+                userId: 'user',
+                parentId: currentParentId.current || undefined // Link to parent Post-it if drawing inside one
             };
 
             addItem(newItem);

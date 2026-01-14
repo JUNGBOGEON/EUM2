@@ -16,7 +16,7 @@ const RAW_ICONS = {
     eraser: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16 8l-6 6" /></svg>`,
     image: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
     shape: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></svg>`,
-    text: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18M3 6h18M3 18h18" /></svg>`
+    text: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 6h14M12 6v13m-3 0h6" /></svg>`
 };
 
 const SVG_ICONS: Record<string, string> = Object.fromEntries(
@@ -31,6 +31,7 @@ export class RenderManager {
     public quadTree: QuadTree<WhiteboardItem & { getBounds: () => Rect }>;
     public selectionLayer: PIXI.Container;
     public dragLayer: PIXI.Container;
+    public ghostLayer: PIXI.Container;
     public cursorLayer: PIXI.Container;
     public width: number;
     public height: number;
@@ -96,7 +97,7 @@ export class RenderManager {
         this.drawingLayer = new PIXI.Container();
         this.selectionLayer = new PIXI.Container();
         this.dragLayer = new PIXI.Container();
-        this.dragLayer = new PIXI.Container();
+        this.ghostLayer = new PIXI.Container();
         this.cursorLayer = new PIXI.Container();
         this.quadTree = new QuadTree({ x: 0, y: 0, width, height });
 
@@ -147,6 +148,7 @@ export class RenderManager {
             }
 
             this.app.stage.addChild(this.drawingLayer);
+            this.app.stage.addChild(this.ghostLayer);
             this.app.stage.addChild(this.selectionLayer);
             this.app.stage.addChild(this.dragLayer);
             this.app.stage.addChild(this.cursorLayer);
@@ -347,6 +349,12 @@ export class RenderManager {
             return { x: 0, y: 0, width: w, height: h };
         }
 
+        if (item.type === 'postit') {
+            const w = item.data?.width || 200;
+            const h = item.data?.height || 200;
+            return { x: 0, y: 0, width: w, height: h };
+        }
+
         return { x: 0, y: 0, width: 0, height: 0 };
     }
 
@@ -382,12 +390,34 @@ export class RenderManager {
         this.quadTree.clear();
         this.staticLayer.removeChildren();
 
-        // Optimized batch rendering with legacy sort safety
-        const sortedItems = Array.from(items.values()).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+        // Separate items into root items and child items
+        const rootItems: WhiteboardItem[] = [];
+        const childrenByParent = new Map<string, WhiteboardItem[]>();
 
-        sortedItems.forEach((item) => {
+        items.forEach(item => {
+            if (item.parentId) {
+                const children = childrenByParent.get(item.parentId) || [];
+                children.push(item);
+                childrenByParent.set(item.parentId, children);
+            } else {
+                rootItems.push(item);
+            }
+        });
+
+        // Sort root items by zIndex
+        rootItems.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+        rootItems.forEach((item) => {
             const isEditing = item.id === editingItemId;
-            this.addItem(item, isEditing);
+
+            // For Post-its, render with children as a group
+            if (item.type === 'postit') {
+                const children = childrenByParent.get(item.id) || [];
+                children.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+                this.addPostitWithChildren(item, children, editingItemId);
+            } else {
+                this.addItem(item, isEditing);
+            }
         });
 
         // Force render if not auto-updating (though ticker should handle it)
@@ -677,7 +707,243 @@ export class RenderManager {
 
             this.staticLayer.addChild(content);
         }
+
+        // POST-IT RENDERING
+        if (item.type === 'postit') {
+            const w = item.data?.width || 200;
+            const h = item.data?.height || 200;
+            const color = item.data?.color || 0xFFEB3B; // Yellow default
+
+            const container = new PIXI.Container();
+
+            // Shadow
+            const shadow = new PIXI.Graphics();
+            shadow.roundRect(4, 4, w, h, 4);
+            shadow.fill({ color: 0x000000, alpha: 0.15 });
+            container.addChild(shadow);
+
+            // Main background
+            const bg = new PIXI.Graphics();
+            bg.roundRect(0, 0, w, h, 4);
+            bg.fill({ color: color, alpha: 1 });
+            container.addChild(bg);
+
+            // Corner fold effect
+            const fold = new PIXI.Graphics();
+            const foldSize = 20;
+            fold.moveTo(w - foldSize, 0);
+            fold.lineTo(w, 0);
+            fold.lineTo(w, foldSize);
+            fold.lineTo(w - foldSize, 0);
+            fold.fill({ color: 0x000000, alpha: 0.1 });
+            container.addChild(fold);
+
+            // Border
+            const border = new PIXI.Graphics();
+            border.roundRect(0, 0, w, h, 4);
+            border.stroke({ width: 1, color: 0x000000, alpha: 0.15 });
+            container.addChild(border);
+
+            // Apply transforms
+            const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+            container.pivot.set(w / 2, h / 2);
+            container.position.set(t.x + w / 2, t.y + h / 2);
+            container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+            container.rotation = t.rotation ?? 0;
+
+            this.staticLayer.addChild(container);
+        }
     }
+
+    // Render Post-it with its children in a single container (Unity-like parent-child hierarchy)
+    addPostitWithChildren(postit: WhiteboardItem, children: WhiteboardItem[], editingItemId?: string | null) {
+        if (!this.initialized) return;
+
+        const w = postit.data?.width || 200;
+        const h = postit.data?.height || 200;
+        const color = postit.data?.color || 0xFFEB3B;
+
+        // Main container that holds everything
+        const mainContainer = new PIXI.Container();
+
+        // Insert Post-it into QuadTree
+        this.quadTree.insert({ ...postit, getBounds: () => this.getItemBounds(postit) });
+
+        // Shadow
+        const shadow = new PIXI.Graphics();
+        shadow.roundRect(4, 4, w, h, 4);
+        shadow.fill({ color: 0x000000, alpha: 0.15 });
+        mainContainer.addChild(shadow);
+
+        // Main background
+        const bg = new PIXI.Graphics();
+        bg.roundRect(0, 0, w, h, 4);
+        bg.fill({ color: color, alpha: 1 });
+        mainContainer.addChild(bg);
+
+        // Content container for children (clipped to Post-it bounds)
+        const contentContainer = new PIXI.Container();
+
+        // Create clipping mask
+        const mask = new PIXI.Graphics();
+        mask.roundRect(0, 0, w, h, 4);
+        mask.fill({ color: 0xffffff });
+        mainContainer.addChild(mask);
+        contentContainer.mask = mask;
+
+        // Render children inside the content container
+        children.forEach(child => {
+            // Insert child into QuadTree with parent-adjusted bounds
+            this.quadTree.insert({ ...child, getBounds: () => this.getItemBounds(child) });
+
+            const childContent = this.createItemContent(child, child.id === editingItemId);
+            if (childContent) {
+                contentContainer.addChild(childContent);
+            }
+        });
+
+        mainContainer.addChild(contentContainer);
+
+        // Corner fold effect (on top of children)
+        const fold = new PIXI.Graphics();
+        const foldSize = 20;
+        fold.moveTo(w - foldSize, 0);
+        fold.lineTo(w, 0);
+        fold.lineTo(w, foldSize);
+        fold.lineTo(w - foldSize, 0);
+        fold.fill({ color: 0x000000, alpha: 0.1 });
+        mainContainer.addChild(fold);
+
+        // Border (on top of children)
+        const border = new PIXI.Graphics();
+        border.roundRect(0, 0, w, h, 4);
+        border.stroke({ width: 1, color: 0x000000, alpha: 0.15 });
+        mainContainer.addChild(border);
+
+        // Apply Post-it transforms to entire container
+        const t = postit.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+        mainContainer.pivot.set(w / 2, h / 2);
+        mainContainer.position.set(t.x + w / 2, t.y + h / 2);
+        mainContainer.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+        mainContainer.rotation = t.rotation ?? 0;
+
+        this.staticLayer.addChild(mainContainer);
+    }
+
+    // Create content for an item without adding to layer (used for child items)
+    private createItemContent(item: WhiteboardItem, isEditing: boolean): PIXI.Container | null {
+        if (item.type === 'path') {
+            return this.createPathContent(item);
+        }
+        if (item.type === 'text' && !isEditing) {
+            return this.createTextContent(item);
+        }
+        if (item.type === 'image') {
+            return this.createImageContent(item);
+        }
+        // Add more types as needed
+        return null;
+    }
+
+    private createPathContent(item: WhiteboardItem): PIXI.Container | null {
+        const g = new PIXI.Graphics();
+        const { points, color: itemColor, brushSize: itemBrushSize, erasures } = item.data || {};
+        const drawColor = typeof itemColor === 'string' ? parseInt(itemColor.replace('#', ''), 16) : (itemColor || 0x000000);
+        const drawWidth = itemBrushSize || 2;
+
+        if (itemColor === '#ffffff' || itemColor === 0xffffff || itemColor === 'eraser') {
+            g.blendMode = 'erase';
+        }
+
+        if (points && points.length > 0) {
+            g.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                const p1 = points[i - 1];
+                const p2 = points[i];
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                g.quadraticCurveTo(p1.x, p1.y, midX, midY);
+            }
+            if (points.length > 1) {
+                const last = points[points.length - 1];
+                g.lineTo(last.x, last.y);
+            }
+            g.stroke({ width: drawWidth, color: drawColor, cap: 'round', join: 'round' });
+        }
+
+        // Apply transform
+        const lb = this.getLocalBounds(item);
+        const cx = lb.x + lb.width / 2;
+        const cy = lb.y + lb.height / 2;
+        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+
+        g.pivot.set(cx, cy);
+        g.position.set(t.x + cx, t.y + cy);
+        g.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+        g.rotation = t.rotation ?? 0;
+
+        return g;
+    }
+
+    private createTextContent(item: WhiteboardItem): PIXI.Container | null {
+        const { text, fontSize, color, fontFamily } = item.data || {};
+        const textStyle = new PIXI.TextStyle({
+            fontFamily: fontFamily || 'Arial, sans-serif',
+            fontSize: fontSize || 24,
+            fill: color || '#000000',
+            align: 'left',
+            wordWrap: false,
+            lineHeight: (fontSize || 24) * 1.4,
+        });
+
+        const displayText = text || '';
+        if (!displayText.trim()) return null;
+
+        const pixiText = new PIXI.Text({ text: displayText, style: textStyle });
+        pixiText.resolution = 2;
+
+        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+        pixiText.position.set(t.x, t.y);
+        pixiText.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+        pixiText.rotation = t.rotation ?? 0;
+
+        return pixiText;
+    }
+
+    private createImageContent(item: WhiteboardItem): PIXI.Container | null {
+        const url = item.data?.url;
+        if (!url) return null;
+
+        const proxiedUrl = getProxiedUrl(url);
+        let texture: PIXI.Texture;
+
+        if (PIXI.Assets.cache.has(proxiedUrl)) {
+            texture = PIXI.Assets.get(proxiedUrl);
+        } else {
+            texture = PIXI.Texture.EMPTY;
+            // Load async
+            loadTexture(proxiedUrl).catch(() => { });
+        }
+
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0);
+
+        const w = item.data.width || 100;
+        const h = item.data.height || 100;
+        sprite.width = w;
+        sprite.height = h;
+
+        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+        const container = new PIXI.Container();
+        container.addChild(sprite);
+        container.pivot.set(w / 2, h / 2);
+        container.position.set(t.x + w / 2, t.y + h / 2);
+        container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+        container.rotation = t.rotation ?? 0;
+
+        return container;
+    }
+
 
     clearLayers() {
         this.staticLayer.removeChildren();
@@ -1233,45 +1499,78 @@ export class RenderManager {
         }
     }
 
-    // Interactive Ghost Rendering (for image placement etc)
+    // Interactive Ghost Rendering
     private ghostSprite: PIXI.Sprite | null = null;
-    renderGhost(url: string | null, x: number, y: number, w: number = 0, h: number = 0, alpha: number = 0.5) {
+
+    renderGhost(type: 'image' | 'postit' | null, x: number, y: number, w: number = 0, h: number = 0, data?: any) {
         if (!this.initialized) return;
 
-        if (!url) {
-            // Clear ghost
+        // Clear existing children from ghostLayer first (for Post-it graphics)
+        this.ghostLayer.removeChildren();
+
+        if (!type) {
+            // Hide ghost sprite if it exists
             if (this.ghostSprite) {
                 this.ghostSprite.visible = false;
             }
             return;
         }
 
-        if (!this.ghostSprite) {
-            this.ghostSprite = new PIXI.Sprite();
-            this.ghostSprite.anchor.set(0.5);
-            this.dragLayer.addChild(this.ghostSprite); // Use drag layer
-        }
-
-        this.ghostSprite.visible = true;
-        this.ghostSprite.alpha = alpha;
-        this.ghostSprite.x = x;
-        this.ghostSprite.y = y;
-
-        // Load texture if needed (simple cache)
-        if (this.ghostSprite.label !== url) {
-            const proxied = getProxiedUrl(url);
-            loadTexture(proxied).then(tex => {
-                // Double check current label to avoid race
-                if (this.ghostSprite && this.ghostSprite.label === url) {
-                    this.ghostSprite.texture = tex;
+        if (type === 'image') {
+            if (!this.ghostSprite) {
+                this.ghostSprite = new PIXI.Sprite();
+                this.ghostSprite.anchor.set(0.5);
+                this.ghostLayer.addChild(this.ghostSprite); // Use ghostLayer
+            } else {
+                // Ensure sprite is on the ghostLayer if it was elsewhere? 
+                // It might have been on dragLayer previously. Let's re-add to be sure or just assume logic is clean.
+                // Better to assume new architecture.
+                if (this.ghostSprite.parent !== this.ghostLayer) {
+                    this.ghostLayer.addChild(this.ghostSprite);
                 }
-            }).catch(() => { });
-            this.ghostSprite.label = url;
-        }
+            }
 
-        if (w && h) {
-            this.ghostSprite.width = w;
-            this.ghostSprite.height = h;
+            const url = data?.url;
+            if (url) {
+                this.ghostSprite.visible = true;
+                this.ghostSprite.alpha = 0.5;
+                this.ghostSprite.x = x;
+                this.ghostSprite.y = y;
+
+                // Load texture if needed
+                if (this.ghostSprite.label !== url) {
+                    const proxied = getProxiedUrl(url);
+                    loadTexture(proxied).then(tex => {
+                        if (this.ghostSprite && this.ghostSprite.label === url) {
+                            this.ghostSprite.texture = tex;
+                        }
+                    }).catch(() => { });
+                    this.ghostSprite.label = url;
+                }
+
+                if (w && h) {
+                    this.ghostSprite.width = w;
+                    this.ghostSprite.height = h;
+                }
+            }
+        } else if (type === 'postit') {
+            if (this.ghostSprite) this.ghostSprite.visible = false;
+
+            const g = new PIXI.Graphics();
+            const halfW = w / 2;
+            const halfH = h / 2;
+
+            // Drop Shadow
+            g.rect(-halfW + 4, -halfH + 4, w, h);
+            g.fill({ color: 0x000000, alpha: 0.1 });
+
+            // Post-it Body
+            g.rect(-halfW, -halfH, w, h);
+            g.fill({ color: 0xFFEB3B, alpha: 0.6 });
+            g.stroke({ width: 2, color: 0xFFC107, alpha: 0.8 });
+
+            this.ghostLayer.addChild(g);
+            this.ghostLayer.position.set(x, y);
         }
     }
 

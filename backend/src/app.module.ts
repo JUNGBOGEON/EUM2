@@ -9,6 +9,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { RedisModule } from './redis/redis.module';
 import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { ChatModule } from './chat/chat.module';
 import { HealthModule } from './health/health.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -60,9 +61,10 @@ import { join } from 'path';
     RedisModule,
     MeetingsModule,
     WhiteboardModule,
+    ChatModule,
     HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

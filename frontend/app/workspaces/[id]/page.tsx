@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import {
   WorkspaceSidebar,
@@ -11,6 +12,7 @@ import {
   MembersSection,
   SettingsSection,
   CalendarSection,
+  ChatSection,
   WorkspaceNotifications,
 } from './_components';
 import { useWorkspaceDetail } from './_hooks/use-workspace-detail';
@@ -151,6 +153,7 @@ export default function WorkspaceDetailPage() {
               <div>
                 <h1 className="text-lg font-semibold text-foreground">
                   {activeNav === 'meeting' && t('meeting.title')}
+                  {activeNav === 'chat' && t('chat.title')}
                   {activeNav === 'calendar' && t('calendar.title')}
                   {activeNav === 'files' && t('files.title')}
                   {activeNav === 'history' && t('history.title')}
@@ -169,8 +172,15 @@ export default function WorkspaceDetailPage() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-auto p-6">
-              <div className="max-w-4xl mx-auto">
+            <main className={cn(
+              "flex-1 flex flex-col",
+              activeNav === 'chat' ? "overflow-hidden p-0" : "overflow-auto p-6"
+            )}>
+              <div className={cn(
+                "mx-auto transition-all duration-300",
+                activeNav === 'chat' ? "h-full w-full" :
+                  ['calendar', 'history', 'files'].includes(activeNav) ? "w-full max-w-[70%]" : "w-full max-w-4xl"
+              )}>
                 {/* Meeting Section */}
                 {activeNav === 'meeting' && (
                   <MeetingSection
@@ -179,6 +189,14 @@ export default function WorkspaceDetailPage() {
                     onJoinSession={joinSession}
                     isStarting={isStartingMeeting}
                     isJoining={isJoiningSession}
+                  />
+                )}
+
+                {/* Chat Section */}
+                {activeNav === 'chat' && (
+                  <ChatSection
+                    workspaceId={workspaceId}
+                    currentUser={user}
                   />
                 )}
 

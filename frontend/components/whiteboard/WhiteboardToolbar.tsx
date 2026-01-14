@@ -449,6 +449,20 @@ function WhiteboardToolbarComponent({
                             </button>
                         </div>
 
+                        {/* Text Tool */}
+                        <button
+                            onClick={() => handleToolClick('text')}
+                            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${tool === 'text'
+                                ? 'bg-black text-white shadow-xl scale-110'
+                                : 'hover:bg-stone-50 text-stone-500 hover:text-stone-900 hover:scale-110'
+                                }`}
+                            title="Text"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12h18M3 6h18M3 18h18" />
+                            </svg>
+                        </button>
+
                         {/* Hidden Input */}
                         <input
                             type="file"

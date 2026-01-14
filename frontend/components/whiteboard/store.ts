@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text';
+export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit';
 
 export interface PendingImage {
     url: string;
@@ -12,8 +12,9 @@ export interface PendingImage {
 
 export interface WhiteboardItem {
     id: string;
-    type: 'path' | 'image' | 'text' | 'shape';
+    type: 'path' | 'image' | 'text' | 'shape' | 'postit';
     data: any;
+    parentId?: string; // For objects inside a Post-it
     transform: {
         x: number;
         y: number;
@@ -172,6 +173,19 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
         get().pushHistory();
         set((state) => {
             const newItems = new Map(state.items);
+            const itemToDelete = newItems.get(id);
+
+            // If deleting a Post-it, also delete all child items
+            if (itemToDelete?.type === 'postit') {
+                const childIds: string[] = [];
+                newItems.forEach((item, itemId) => {
+                    if (item.parentId === id) {
+                        childIds.push(itemId);
+                    }
+                });
+                childIds.forEach(childId => newItems.delete(childId));
+            }
+
             newItems.delete(id);
             return { items: newItems };
         });

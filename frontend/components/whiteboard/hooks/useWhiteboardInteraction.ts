@@ -341,6 +341,21 @@ export function useWhiteboardInteraction(
     }, [renderManager, getSelectionBounds]);
 
 
+    const findPostitAtPoint = useCallback((point: { x: number, y: number }) => {
+        if (!renderManager) return null;
+        const hitArea = { x: point.x - 1, y: point.y - 1, width: 2, height: 2 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+        return hits.find(item => {
+            if (item.type !== 'postit') return false;
+            const t = item.transform || { x: 0, y: 0 };
+            const w = item.data?.width || 200;
+            const h = item.data?.height || 200;
+            return point.x >= t.x && point.x <= t.x + w &&
+                point.y >= t.y && point.y <= t.y + h;
+        });
+    }, [renderManager]);
+
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
         const point = getLocalPoint(e);
@@ -349,17 +364,46 @@ export function useWhiteboardInteraction(
 
         // Image Placement
         if (currentTool === 'image' && currentPendingImage) {
-            // ... (keep logic)
+            e.preventDefault();
+            e.stopPropagation();
+
             const placeImage = (url: string) => {
+                let targetW = currentPendingImage.width;
+                let targetH = currentPendingImage.height;
+                let tx = point.x - targetW / 2;
+                let ty = point.y - targetH / 2;
+                let parentId: string | undefined = undefined;
+
+                const postit = findPostitAtPoint(point);
+                if (postit) {
+                    parentId = postit.id;
+                    // Auto-scale to fit inside Post-it with padding
+                    const pW = postit.data?.width || 200;
+                    const pH = postit.data?.height || 200;
+                    const maxW = pW - 40;
+                    const maxH = pH - 40;
+
+                    if (targetW > maxW || targetH > maxH) {
+                        const ratio = Math.min(maxW / targetW, maxH / targetH);
+                        targetW *= ratio;
+                        targetH *= ratio;
+                    }
+
+                    // Convert to Local Coordinates (Top-Left relative to Post-it Top-Left)
+                    tx = (point.x - postit.transform.x) - targetW / 2;
+                    ty = (point.y - postit.transform.y) - targetH / 2;
+                }
+
                 const newItem = {
                     id: uuidv4(),
                     type: 'image' as const,
-                    data: { url, width: currentPendingImage.width, height: currentPendingImage.height },
-                    transform: { x: point.x - currentPendingImage.width / 2, y: point.y - currentPendingImage.height / 2, scaleX: 1, scaleY: 1, rotation: 0 },
+                    data: { url, width: targetW, height: targetH },
+                    transform: { x: tx, y: ty, scaleX: 1, scaleY: 1, rotation: 0 },
                     zIndex: Date.now(),
                     isDeleted: false,
                     meetingId: meetingId,
-                    userId: 'user'
+                    userId: 'user',
+                    parentId
                 };
                 addItem(newItem);
                 if (broadcastEvent) broadcastEvent('add_item', newItem);
@@ -391,6 +435,18 @@ export function useWhiteboardInteraction(
             e.stopPropagation();
 
             // Always create New Text (editing is done via Select tool double-click)
+            let tx = point.x;
+            let ty = point.y;
+            let parentId: string | undefined = undefined;
+
+            const postit = findPostitAtPoint(point);
+            if (postit) {
+                parentId = postit.id;
+                tx = point.x - postit.transform.x;
+                ty = point.y - postit.transform.y;
+                console.log('[Text] Placing text inside Post-it:', parentId, tx, ty);
+            }
+
             const id = uuidv4();
             const newItem: WhiteboardItem = {
                 id,
@@ -402,8 +458,43 @@ export function useWhiteboardInteraction(
                     color: useWhiteboardStore.getState().color // Use current selected color
                 },
                 transform: {
-                    x: point.x,
-                    y: point.y,
+                    x: tx,
+                    y: ty,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                },
+                zIndex: Date.now(),
+                meetingId: meetingId,
+                parentId
+            };
+
+            addItem(newItem);
+            if (broadcastEvent) broadcastEvent('add_item', newItem);
+            if (setEditingItem) setEditingItem(id);
+            return;
+        }
+
+        // POST-IT TOOL LOGIC - Creates new Post-it
+        if (currentTool === 'postit') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const id = uuidv4();
+            const postitWidth = 200;
+            const postitHeight = 200;
+
+            const newItem: WhiteboardItem = {
+                id,
+                type: 'postit',
+                data: {
+                    width: postitWidth,
+                    height: postitHeight,
+                    color: 0xFFEB3B // Yellow default
+                },
+                transform: {
+                    x: point.x - postitWidth / 2, // Center on click
+                    y: point.y - postitHeight / 2,
                     scaleX: 1,
                     scaleY: 1,
                     rotation: 0
@@ -414,7 +505,9 @@ export function useWhiteboardInteraction(
 
             addItem(newItem);
             if (broadcastEvent) broadcastEvent('add_item', newItem);
-            if (setEditingItem) setEditingItem(id);
+            selectItem(id); // Select the new Post-it
+            setTool('select'); // Switch to select tool
+            if (renderManager) renderManager.renderGhost(null, 0, 0, 0, 0); // Clear ghost
             return;
         }
 
@@ -595,7 +688,12 @@ export function useWhiteboardInteraction(
             const pendingImage = CurrentState.pendingImage;
 
             if (tool === 'image' && pendingImage && renderManager) {
-                renderManager.renderGhost(pendingImage.url, point.x, point.y, pendingImage.width, pendingImage.height, 0.5);
+                renderManager.renderGhost('image', point.x, point.y, pendingImage.width, pendingImage.height, { url: pendingImage.url });
+                renderManager.app.canvas.style.cursor = 'crosshair';
+                return;
+            } else if (tool === 'postit' && renderManager) {
+                // Show Post-it Ghost
+                renderManager.renderGhost('postit', point.x, point.y, 200, 200);
                 renderManager.app.canvas.style.cursor = 'crosshair';
                 return;
             } else {

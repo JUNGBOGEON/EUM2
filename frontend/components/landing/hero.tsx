@@ -1,57 +1,41 @@
 import Link from 'next/link';
-import Image from 'next/image';
 
 export function Hero() {
   return (
-    <section className="pt-20 pb-24">
-      <div className="mx-auto max-w-[1080px] px-4">
-        <div className="max-w-[640px]">
-          {/* Headline */}
-          <h1 className="text-[42px] font-bold leading-[1.15] tracking-[-0.02em] text-[#ffffffcf]">
-            말이 통하지 않아도,
-            <br />
-            마음은 통합니다.
-          </h1>
+    <section className="relative flex flex-col items-center justify-center min-h-[90vh] px-4 overflow-hidden">
+      {/* The Beam (Pulsating Line) */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200px] bg-white/20 animate-pulse" />
 
-          {/* Description - 철학적 */}
-          <p className="mt-6 text-[17px] text-[#ffffff71] leading-[1.7]">
-            언어는 장벽이 아닌 다리가 되어야 합니다.
-            <br />
-            EUM은 당신의 목소리가 세상 어디서든 이해받을 수 있도록,
-            <br />
-            경계 없는 대화의 공간을 만듭니다.
+      <div className="relative z-10 w-full max-w-[1080px] text-center">
+        {/* Headline: Semi-Abstract */}
+        <h1 className="text-[60px] md:text-[100px] font-black leading-[0.9] tracking-tighter text-white mb-12 mix-blend-difference">
+          언어의 끝,<br />
+          연결의 시작.
+        </h1>
+
+        {/* Sub-headline: Concrete Value */}
+        <div className="flex flex-col items-center gap-6">
+          <p className="text-[15px] md:text-[18px] font-mono text-white/60 leading-[1.6] whitespace-pre-line tracking-wide">
+            실시간 AI 번역과 고화질 화상회의가 만났습니다.
+            {'\n'}
+            언어 장벽 없는 글로벌 팀을 위한 단 하나의 플랫폼, EUM.
           </p>
 
-          {/* CTA */}
-          <div className="mt-10 flex items-center gap-4">
-            <Link
-              href="/login"
-              className="inline-flex items-center px-6 py-2.5 text-[15px] font-medium bg-[#ffffffcf] text-[#191919] hover:bg-white rounded-full transition-colors"
-            >
-              무료로 시작하기
-            </Link>
-            <span className="text-sm text-[#ffffff40]">
-              별도의 설치 없이
-            </span>
-          </div>
+          <Link
+            href="/login"
+            className="group mt-12 relative px-8 py-3 bg-transparent border border-white/20 hover:border-white text-white/80 hover:text-white transition-all duration-500 overflow-hidden"
+          >
+            <span className="relative z-10 text-[12px] tracking-[0.2em] font-light">ENTER EUM</span>
+            <div className="absolute inset-0 bg-white transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left mix-blend-difference" />
+          </Link>
         </div>
+      </div>
 
-        {/* Preview */}
-        <div className="mt-20">
-          <div className="relative aspect-[16/9] max-w-[900px] rounded-2xl border border-[#ffffff14] overflow-hidden bg-[#252525]">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Image
-                  src="/logo/logo_black.svg"
-                  alt="EUM Preview"
-                  width={80}
-                  height={80}
-                  className="mx-auto opacity-10 invert"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* The Conflict (Conceptual Shadow) */}
+      <div className="absolute bottom-12 left-0 w-full text-center px-4">
+        <p className="text-[12px] text-white/20 font-mono tracking-widest uppercase">
+          Resonance beyond Syntax
+        </p>
       </div>
     </section>
   );

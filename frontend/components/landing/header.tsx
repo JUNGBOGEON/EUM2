@@ -3,30 +3,30 @@ import Image from 'next/image';
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 w-full bg-[#191919]">
-      <nav className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-3">
-        <Link href="/" className="flex items-center">
+    <header className="sticky top-0 z-50 w-full bg-black border-b border-white/10 backdrop-blur-md">
+      <nav className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-4">
+        <Link href="/" className="flex items-center group">
           <Image
             src="/logo/eum_black.svg"
             alt="EUM"
             width={36}
             height={13}
-            className="invert"
+            className="invert opacity-80 group-hover:opacity-100 transition-opacity"
           />
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Link
             href="/login"
-            className="px-4 py-1.5 text-sm text-[#ffffffcf] hover:bg-[#ffffff0e] rounded-full transition-colors"
+            className="text-[12px] font-mono text-white/60 hover:text-white transition-colors"
           >
-            로그인
+            LOGIN
           </Link>
           <Link
             href="/login"
-            className="px-4 py-1.5 text-sm bg-[#ffffffcf] text-[#191919] hover:bg-white rounded-full transition-colors"
+            className="px-5 py-1.5 text-[12px] font-mono border border-white/20 text-white hover:bg-white hover:text-black hover:border-white transition-all duration-300"
           >
-            시작하기
+            START
           </Link>
         </div>
       </nav>

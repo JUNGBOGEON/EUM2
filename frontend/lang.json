@@ -6,6 +6,7 @@
             "archives": "회의록 보관함",
             "notifications": "알림",
             "settings": "설정",
+            "chat": "채팅",
             "logout": "로그아웃"
         },
         "workspaces": {
@@ -170,6 +171,19 @@
             "upload": "업로드",
             "view_list": "리스트 보기",
             "view_grid": "그리드 보기"
+        },
+        "chat": {
+            "title": "채팅",
+            "channels": "채널",
+            "create_channel": "채널 만들기",
+            "channel_name": "채널 이름",
+            "placeholder": "메시지를 입력하세요...",
+            "send": "전송",
+            "no_messages": "아직 메시지가 없습니다. 대화를 시작해보세요!",
+            "new_channel_placeholder": "예: 공지사항, 잡담",
+            "create": "생성",
+            "cancel": "취소",
+            "menu_label": "채팅"
         }
     },
     "en": {
@@ -179,6 +193,7 @@
             "archives": "Archives",
             "notifications": "Notifications",
             "settings": "Settings",
+            "chat": "Chat",
             "logout": "Logout"
         },
         "workspaces": {
@@ -343,6 +358,19 @@
             "upload": "Upload",
             "view_list": "List View",
             "view_grid": "Grid View"
+        },
+        "chat": {
+            "title": "Chat",
+            "channels": "Channels",
+            "create_channel": "Create Channel",
+            "channel_name": "Channel Name",
+            "placeholder": "Type a message...",
+            "send": "Send",
+            "no_messages": "No messages yet. Start the conversation!",
+            "new_channel_placeholder": "e.g. Announcements, Random",
+            "create": "Create",
+            "cancel": "Cancel",
+            "menu_label": "Chat"
         }
     },
     "zh-CN": {

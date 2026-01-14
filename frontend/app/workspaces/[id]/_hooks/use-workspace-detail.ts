@@ -21,6 +21,21 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
   // Navigation state
   const [activeNav, setActiveNav] = useState<NavItemId>('meeting');
 
+  // Initialize activeNav from localStorage
+  useEffect(() => {
+    const savedNav = localStorage.getItem(`workspace_nav_${workspaceId}`);
+    if (savedNav) {
+      setActiveNav(savedNav as NavItemId);
+    }
+  }, [workspaceId]);
+
+  // Persist activeNav changes
+  useEffect(() => {
+    if (activeNav) {
+      localStorage.setItem(`workspace_nav_${workspaceId}`, activeNav);
+    }
+  }, [activeNav, workspaceId]);
+
   // WebSocket state
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);

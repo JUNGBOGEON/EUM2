@@ -6,4 +6,5 @@ export { MembersSection } from './members-section';
 export { SettingsSection } from './settings-section';
 export { CalendarSection } from './calendar-section';
 export { WorkspaceNotifications } from './workspace-notifications';
+export { ChatSection } from './chat-section';
 export { SummaryLoadingAnimation } from './summary-loading-animation';

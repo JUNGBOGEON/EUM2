@@ -616,6 +616,10 @@ export function useWhiteboardDrawing(
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
+                    // Notify remote users to clear drag graphics
+                    if (broadcastEventRef.current) {
+                        broadcastEventRef.current('stroke_end', {});
+                    }
                     if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
                     return;
                 }
@@ -641,6 +645,10 @@ export function useWhiteboardDrawing(
                     if (currentGraphics.current) {
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
+                    }
+                    // Notify remote users to clear drag graphics
+                    if (broadcastEventRef.current) {
+                        broadcastEventRef.current('stroke_end', {});
                     }
                     if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
                     return;
@@ -721,7 +729,7 @@ export function useWhiteboardDrawing(
 
                         // Create ONE erasure with all points from the stroke
                         const newErasure = {
-                            id: erasureId,
+                            id: currentErasureId.current || uuidv4(),
                             points: simplifiedLocal,
                             size: (currentEraserSize / currentZoom) / (avgScale || 1)
                         };
@@ -730,7 +738,7 @@ export function useWhiteboardDrawing(
                         const updatePayload = {
                             data: {
                                 ...item.data,
-                                erasures: newErasuresList
+                                erasures: [...existingErasures, newErasure]
                             }
                         };
 
@@ -757,41 +765,15 @@ export function useWhiteboardDrawing(
                     currentGraphics.current.destroy();
                     currentGraphics.current = null;
                 }
-                return;
-            }
-
-
-            if (currentTool === 'magic-pen') {
-                // Magic Pen Logic
-                const result = detectShape(capturedPoints);
-                // ... same magic pen logic ...
-                if (result.type !== 'none' && result.correctedPoints) {
-                    finalPoints = result.correctedPoints;
-                    isRecognized = true;
-                    // ... redraw if needed ...
-                    if (currentGraphics.current) {
-                        currentGraphics.current.clear();
-                        const g = currentGraphics.current;
-                        const color = parseInt(currentColorStr.replace('#', ''), 16);
-                        const width = currentPenSize / currentZoom;
-                        g.moveTo(finalPoints[0].x, finalPoints[0].y);
-                        for (let i = 1; i < finalPoints.length; i++) {
-                            g.lineTo(finalPoints[i].x, finalPoints[i].y);
-                        }
-                        g.stroke({ width, color, cap: 'round', join: 'round' });
-                    }
-                } else {
-                    // UNRECOGNIZED MAGIC PEN STROKE -> DISCARD
-                    if (currentGraphics.current) {
-                        currentGraphics.current.destroy();
-                        currentGraphics.current = null;
-                    }
-                    renderManager.renderItems(useWhiteboardStore.getState().items);
-                    return; // EARLY RETURN
+                // Notify remote users to clear drag graphics
+                if (broadcastEventRef.current) {
+                    broadcastEventRef.current('stroke_end', {});
                 }
-                if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
                 return;
             }
+
+            // NOTE: Magic pen is handled above (line 612-652), not here
+            // The finalPoints are already updated with corrected shape points
 
             // --- Create New Path Item (Pen/Magic Pen/Stamp?? No stamp handled usage separately) ---
             let simplified = simplifyPoints(finalPoints, 0.5 / currentZoom);

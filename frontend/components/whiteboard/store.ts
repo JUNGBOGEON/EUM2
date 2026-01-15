@@ -194,7 +194,15 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
             const newItems = new Map(state.items);
             const item = newItems.get(id);
             if (item) {
-                newItems.set(id, { ...item, ...updates });
+                // Deep merge for 'data' property to handle erasures correctly
+                const mergedItem = { ...item, ...updates };
+                if (updates.data && item.data) {
+                    mergedItem.data = { ...item.data, ...updates.data };
+                }
+                if (updates.transform && item.transform) {
+                    mergedItem.transform = { ...item.transform, ...updates.transform };
+                }
+                newItems.set(id, mergedItem);
             }
             return { items: newItems };
         }),

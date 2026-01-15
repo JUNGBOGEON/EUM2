@@ -191,4 +191,15 @@ export class WhiteboardGateway
             client.to(room).emit('refetch', data);
         }
     }
+
+    @SubscribeMessage('stroke_end')
+    handleStrokeEnd(
+        @MessageBody() data: any,
+        @ConnectedSocket() client: Socket,
+    ) {
+        const room = Array.from(client.rooms).find((r) => r !== client.id);
+        if (room) {
+            client.to(room).emit('stroke_end', data);
+        }
+    }
 }

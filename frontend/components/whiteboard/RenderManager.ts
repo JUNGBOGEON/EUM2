@@ -4,7 +4,7 @@ import { getProxiedUrl } from './utils/urlUtils';
 import { loadTexture } from './utils/textureLoader';
 import { WhiteboardItem } from './store';
 import { QuadTree, Rect } from './utils/QuadTree';
-import { STAMP_ICONS } from './utils/stampAssets';
+import { STAMP_ICONS, STAMP_PATHS, STAMP_COLORS } from './utils/stampAssets';
 
 // Use Base64 encoding for SVGs to avoid parsing errors in PixiJS/Browser
 const svgToBase64 = (svg: string) => `data:image/svg+xml;base64,${btoa(svg)}`;
@@ -459,7 +459,19 @@ export class RenderManager {
         }
 
         this.quadTree.clear();
-        this.staticLayer.removeChildren();
+
+
+        // Proper cleanup: destroy generated textures to prevent memory leaks
+        const children = this.staticLayer.removeChildren();
+        children.forEach((c: any) => {
+            if (c._isErasureRT) {
+                // Destroy sprite AND its texture (since we created it specifically for this frame)
+                c.destroy({ children: true, texture: true });
+            } else {
+                // Standard destroy (keep shared textures)
+                c.destroy({ children: true });
+            }
+        });
 
         // Separate items into root items and child items
         const rootItems: WhiteboardItem[] = [];
@@ -538,62 +550,64 @@ export class RenderManager {
             const cx = bounds.x + bounds.width / 2;
             const cy = bounds.y + bounds.height / 2;
 
+
             const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
-            if (hasErasures) {
-                console.log('[RenderManager] Path has erasures:', { id: item.id, count: item.data.erasures.length });
-            }
 
             // Create Content Wrapper
             let content: PIXI.Container | PIXI.Graphics = g;
             const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
 
             if (hasErasures) {
-                const container = new PIXI.Container();
+                // WORKAROUND: PixiJS v8 erase blend mode requires rendering to a texture
+                // We render the path + Erasure(blend=erase) into a RenderTexture
+                const boundsWidth = Math.ceil(bounds.width);
+                const boundsHeight = Math.ceil(bounds.height);
 
-                // Normalize Global Geometry to Local Space (0,0)
-                // This ensures it aligns with Erasure Points which are 0..W
+                const tempContainer = new PIXI.Container();
+
+                // 1. Add Path Graphics (Shifted to Local 0,0)
                 g.position.set(-bounds.x, -bounds.y);
+                tempContainer.addChild(g);
 
-                container.addChild(g);
-
-                // Add Erasures
+                // 2. Add Erasures (White circles with blendMode='erase')
+                const eraserGraphics = new PIXI.Graphics();
                 item.data.erasures.forEach((erase: any) => {
-                    const eg = new PIXI.Graphics();
-                    eg.blendMode = 'erase';
                     const w = erase.size || 20;
-
                     if (erase.points && erase.points.length > 0) {
-                        if (erase.points.length === 1) {
-                            // Single point - draw a circle for real-time erasing
-                            const p = erase.points[0];
-                            eg.circle(p.x, p.y, w / 2);
-                            eg.fill({ color: 0xffffff });
+                        const points = erase.points;
+                        if (points.length === 1) {
+                            eraserGraphics.circle(points[0].x - bounds.x, points[0].y - bounds.y, w / 2);
+                            eraserGraphics.fill({ color: 0xffffff });
                         } else {
-                            // Multiple points - draw a path
-                            eg.moveTo(erase.points[0].x, erase.points[0].y);
-                            for (let i = 1; i < erase.points.length; i++) {
-                                const p1 = erase.points[i - 1];
-                                const p2 = erase.points[i];
-                                const midX = (p1.x + p2.x) / 2;
-                                const midY = (p1.y + p2.y) / 2;
-                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            eraserGraphics.moveTo(points[0].x - bounds.x, points[0].y - bounds.y);
+                            for (let i = 1; i < points.length; i++) {
+                                eraserGraphics.lineTo(points[i].x - bounds.x, points[i].y - bounds.y);
                             }
-                            // Line to last
-                            const last = erase.points[erase.points.length - 1];
-                            eg.lineTo(last.x, last.y);
-                            eg.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
+                            eraserGraphics.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
                         }
                     }
-                    container.addChild(eg);
                 });
+                eraserGraphics.fill({ color: 0xffffff });
+                eraserGraphics.blendMode = 'erase';
+                tempContainer.addChild(eraserGraphics);
 
-                container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
-                content = container;
+                // 3. Render to Texture
+                // 3. Render to Texture
+                if (this.app && this.app.renderer && boundsWidth > 0 && boundsHeight > 0) {
+                    const rt = PIXI.RenderTexture.create({ width: boundsWidth, height: boundsHeight });
+                    this.app.renderer.render({ container: tempContainer, target: rt });
 
-                // For Normalized Container, Pivot is Local Center
-                const localCx = bounds.width / 2;
-                const localCy = bounds.height / 2;
-                content.pivot.set(localCx, localCy);
+                    // 4. Create Sprite from Texture
+                    const sprite = new PIXI.Sprite(rt);
+                    (sprite as any)._isErasureRT = true;
+
+                    // Pivot is center of the local bounds
+                    const localCx = bounds.width / 2;
+                    const localCy = bounds.height / 2;
+                    sprite.pivot.set(localCx, localCy);
+
+                    content = sprite;
+                }
             } else {
                 // Determine Pivot for Global Geometry (World Center)
                 content.pivot.set(cx, cy);
@@ -709,35 +723,43 @@ export class RenderManager {
             const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
             let content: PIXI.Container | PIXI.Sprite = sprite;
 
-            if (hasErasures) {
-                const container = new PIXI.Container();
-                container.addChild(sprite);
+            if (hasErasures && this.app && this.app.renderer) {
+                // Get local dimensions
+                // Assuming sprite anchor is 0.5, we want to capture the full visual
+                // simple bounds check:
+                const localBounds = sprite.getLocalBounds();
+                const w = Math.ceil(localBounds.width);
+                const h = Math.ceil(localBounds.height);
 
-                item.data.erasures.forEach((erase: any) => {
-                    const eg = new PIXI.Graphics();
-                    eg.blendMode = 'erase';
-                    const ew = erase.size || 20;
+                if (w > 0 && h > 0) {
+                    const tempContainer = new PIXI.Container();
 
-                    if (erase.points && erase.points.length > 0) {
-                        eg.moveTo(erase.points[0].x, erase.points[0].y);
-                        for (let i = 1; i < erase.points.length; i++) {
-                            const p1 = erase.points[i - 1];
-                            const p2 = erase.points[i];
-                            const midX = (p1.x + p2.x) / 2;
-                            const midY = (p1.y + p2.y) / 2;
-                            eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                    // Center the sprite in the container (assuming anchor 0.5)
+                    sprite.position.set(w / 2, h / 2);
+                    tempContainer.addChild(sprite);
+
+                    // Add erasures
+                    const eraserGraphics = new PIXI.Graphics();
+                    item.data.erasures.forEach((erase: any) => {
+                        const ew = erase.size || 20;
+                        if (erase.points) {
+                            erase.points.forEach((p: any) => {
+                                eraserGraphics.circle(p.x, p.y, ew / 2);
+                            });
                         }
-                        if (erase.points.length > 1) {
-                            const last = erase.points[erase.points.length - 1];
-                            eg.lineTo(last.x, last.y);
-                        }
-                    }
-                    eg.stroke({ width: ew, color: 0xffffff, cap: 'round', join: 'round' });
-                    container.addChild(eg);
-                });
+                    });
+                    eraserGraphics.fill({ color: 0xffffff });
+                    eraserGraphics.blendMode = 'erase';
+                    tempContainer.addChild(eraserGraphics);
 
-                container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
-                content = container;
+                    const rt = PIXI.RenderTexture.create({ width: w, height: h });
+                    this.app.renderer.render({ container: tempContainer, target: rt });
+
+                    content = new PIXI.Sprite(rt);
+                    (content as any)._isErasureRT = true;
+                    // Set anchor/pivot to center to match original sprite behavior
+                    (content as PIXI.Sprite).anchor.set(0.5);
+                }
             }
 
             // Apply Transforms
@@ -807,43 +829,42 @@ export class RenderManager {
                 const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
                 let finalContent: PIXI.Container | PIXI.Sprite = content;
 
-                if (hasErasures) {
-                    const container = new PIXI.Container();
+                if (hasErasures && this.app && this.app.renderer) {
+                    const tempContainer = new PIXI.Container();
 
-                    // Reset content transform to be local to the wrapper
-                    // Content pivot is (cx, cy).
-                    // We place it at (cx, cy) so its top-left (0,0) aligns with wrapper (0,0)
+                    // Position content to local (0,0) - assuming content.pivot is (cx,cy)
+                    // We want the content to be drawn from (0,0) in the texture.
+                    // If content.pivot is set to cx,cy, setting position to cx,cy makes visual top-left (0,0).
                     content.position.set(cx, cy);
                     content.scale.set(1, 1);
                     content.rotation = 0;
+                    tempContainer.addChild(content);
 
-                    container.addChild(content);
-
+                    const eraserGraphics = new PIXI.Graphics();
                     item.data.erasures.forEach((erase: any) => {
-                        const eg = new PIXI.Graphics();
-                        eg.blendMode = 'erase';
                         const ew = erase.size || 20;
-
-                        if (erase.points && erase.points.length > 0) {
-                            eg.moveTo(erase.points[0].x, erase.points[0].y);
-                            for (let i = 1; i < erase.points.length; i++) {
-                                const p1 = erase.points[i - 1];
-                                const p2 = erase.points[i];
-                                const midX = (p1.x + p2.x) / 2;
-                                const midY = (p1.y + p2.y) / 2;
-                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
-                            }
-                            if (erase.points.length > 1) {
-                                const last = erase.points[erase.points.length - 1];
-                                eg.lineTo(last.x, last.y);
-                            }
+                        if (erase.points) {
+                            erase.points.forEach((p: any) => {
+                                eraserGraphics.circle(p.x, p.y, ew / 2);
+                            });
                         }
-                        eg.stroke({ width: ew, color: 0xffffff, cap: 'round', join: 'round' });
-                        container.addChild(eg);
                     });
+                    eraserGraphics.fill({ color: 0xffffff });
+                    eraserGraphics.blendMode = 'erase';
+                    tempContainer.addChild(eraserGraphics);
 
-                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
-                    finalContent = container;
+                    const w = Math.ceil(bounds.width);
+                    const h = Math.ceil(bounds.height);
+
+                    // Safety check
+                    if (w > 0 && h > 0) {
+                        const rt = PIXI.RenderTexture.create({ width: w, height: h });
+                        this.app.renderer.render({ container: tempContainer, target: rt });
+
+                        const sprite = new PIXI.Sprite(rt);
+                        (sprite as any)._isErasureRT = true;
+                        finalContent = sprite;
+                    }
                 }
 
                 // Apply transforms to the final content wrapper
@@ -902,67 +923,7 @@ export class RenderManager {
             this.staticLayer.addChild(container);
         }
 
-        // STAMP RENDERING
-        if (item.type === 'stamp') {
-            const content = this.createStampContent(item);
-            if (content) {
-                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
-                const bounds = this.getLocalBounds(item);
-                const cx = bounds.width / 2;
-                const cy = bounds.height / 2;
 
-                // Check for erasures
-                const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
-                let finalContent: PIXI.Container | PIXI.Sprite = content;
-
-                if (hasErasures) {
-                    const container = new PIXI.Container();
-
-                    // Reset content transform to be local to the wrapper
-                    // Content pivot is (cx, cy).
-                    // We place it at (cx, cy) so its top-left (0,0) aligns with wrapper (0,0)
-                    content.position.set(cx, cy);
-                    content.scale.set(1, 1);
-                    content.rotation = 0;
-
-                    container.addChild(content);
-
-                    item.data.erasures.forEach((erase: any) => {
-                        const eg = new PIXI.Graphics();
-                        eg.blendMode = 'erase';
-                        const ew = erase.size || 20;
-
-                        if (erase.points && erase.points.length > 0) {
-                            eg.moveTo(erase.points[0].x, erase.points[0].y);
-                            for (let i = 1; i < erase.points.length; i++) {
-                                const p1 = erase.points[i - 1];
-                                const p2 = erase.points[i];
-                                const midX = (p1.x + p2.x) / 2;
-                                const midY = (p1.y + p2.y) / 2;
-                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
-                            }
-                            if (erase.points.length > 1) {
-                                const last = erase.points[erase.points.length - 1];
-                                eg.lineTo(last.x, last.y);
-                            }
-                        }
-                        eg.stroke({ width: ew, color: 0xffffff, cap: 'round', join: 'round' });
-                        container.addChild(eg);
-                    });
-
-                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
-                    finalContent = container;
-                }
-
-                // Apply transforms to the final content wrapper
-                finalContent.pivot.set(cx, cy);
-                finalContent.position.set(t.x + cx, t.y + cy);
-                finalContent.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
-                finalContent.rotation = t.rotation ?? 0;
-
-                this.staticLayer.addChild(finalContent);
-            }
-        }
     }
 
     // Render Post-it with its children in a single container (Unity-like parent-child hierarchy)
@@ -1677,6 +1638,61 @@ export class RenderManager {
         console.warn(`[RenderManager] removeRemoteUserBySocketId not implemented (mapped: ${socketId})`);
     }
 
+    /**
+     * Draw a batch of points from a remote user's stroke
+     * Used for real-time drawing synchronization
+     */
+    drawRemoteBatch(data: {
+        senderId: string;
+        points: { x: number; y: number }[];
+        color: number;
+        width: number;
+        tool: string;
+        isNewStroke?: boolean;
+    }) {
+        if (!this.initialized) return;
+
+        const { senderId, points, color, width, tool } = data;
+
+        // Get or create graphics for this sender
+        let graphics = this.remoteGraphics.get(senderId);
+        if (!graphics) {
+            graphics = new PIXI.Graphics();
+            this.dynamicLayer.addChild(graphics);
+            this.remoteGraphics.set(senderId, graphics);
+        }
+
+        if (points.length < 2) return;
+
+        // Draw the incoming points as a continuous stroke
+        if (tool === 'eraser') {
+            // Eraser visualization (semi-transparent cyan)
+            graphics.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                graphics.lineTo(points[i].x, points[i].y);
+            }
+            graphics.stroke({ width, color: 0x00FFFF, alpha: 0.3, cap: 'round', join: 'round' });
+        } else {
+            // Pen / Magic-Pen
+            graphics.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                graphics.lineTo(points[i].x, points[i].y);
+            }
+            graphics.stroke({ width, color, cap: 'round', join: 'round' });
+        }
+    }
+
+    /**
+     * Clear the temporary remote drawing graphics for a specific user
+     * Called when their add_item event is received (stroke finalized)
+     */
+    clearRemoteDrags(senderId: string) {
+        const graphics = this.remoteGraphics.get(senderId);
+        if (graphics) {
+            graphics.clear();
+        }
+    }
+
     updateLocalCursor(x: number, y: number, user: any) {
         if (!this.initialized) return;
 
@@ -1834,8 +1850,9 @@ export class RenderManager {
                 this.ghostSprite.alpha = 0.6;
                 this.ghostSprite.x = x;
                 this.ghostSprite.y = y;
-                this.ghostSprite.width = w;
-                this.ghostSprite.height = h;
+                // Fix: Use texture size or default if w/h not provided (preview mode)
+                this.ghostSprite.width = w || texture.width || 80;
+                this.ghostSprite.height = h || texture.height || 80;
             }
         }
     }
@@ -1899,81 +1916,5 @@ export class RenderManager {
             }
         }
     }
-    private createStampContent(item: WhiteboardItem): PIXI.Container | null {
-        const stampType = item.data?.stampType || 'thumbs-up';
-        const cacheKey = `stamp-${stampType}`;
-        const texture = this.iconTextures.get(cacheKey);
 
-        if (!texture) {
-            console.warn(`[RenderManager] Missing texture for stamp: ${stampType}`);
-            return null;
-        }
-
-        console.log(`[RenderManager] Creating stamp content for ${item.id} (${stampType})`);
-        const sprite = new PIXI.Sprite(texture);
-        sprite.anchor.set(0.5);
-
-        const w = item.data?.width || 200;
-        const h = item.data?.height || 200;
-
-        // Ensure non-zero size
-        const safeW = w || 50;
-        const safeH = h || 50;
-
-        sprite.width = safeW;
-        sprite.height = safeH;
-
-        const container = new PIXI.Container();
-
-        // Pivot/Anchor Logic
-        // LocalBounds returns x=0, y=0, w, h. Center is w/2, h/2.
-        const cx = safeW / 2;
-        const cy = safeH / 2;
-
-        sprite.position.set(cx, cy);
-        container.addChild(sprite);
-
-        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
-        container.pivot.set(cx, cy);
-        container.position.set(t.x + cx, t.y + cy);
-        container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
-        container.rotation = t.rotation ?? 0;
-
-        return container;
-    }
-
-    public playStampEffect(x: number, y: number) {
-        const lines: PIXI.Graphics[] = [];
-        const count = 6;
-        for (let i = 0; i < count; i++) {
-            const g = new PIXI.Graphics();
-            g.moveTo(0, 0);
-            g.lineTo(15, 0);
-            g.stroke({ width: 2, color: 0xFFD700 });
-            g.position.set(x, y);
-            g.rotation = (i / count) * Math.PI * 2;
-            lines.push(g);
-            this.effectLayer.addChild(g);
-        }
-
-        let time = 0;
-        this.activeEffects.push({
-            update: (dt: number) => {
-                time += dt;
-                const progress = Math.min(time / 20, 1);
-
-                lines.forEach(l => {
-                    l.position.x += Math.cos(l.rotation) * 2 * dt;
-                    l.position.y += Math.sin(l.rotation) * 2 * dt;
-                    l.alpha = 1 - progress;
-                });
-
-                if (progress >= 1) {
-                    lines.forEach(l => l.destroy());
-                    return false;
-                }
-                return true;
-            }
-        });
-    }
 }

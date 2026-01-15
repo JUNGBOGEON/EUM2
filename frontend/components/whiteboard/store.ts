@@ -50,6 +50,12 @@ interface WhiteboardState {
 
     setSmoothness: (smoothness: number) => void;
 
+    // Stamp
+    currentStamp: string | null;
+    setCurrentStamp: (stamp: string) => void;
+    stampMenuPosition: { x: number; y: number } | null;
+    setStampMenuPosition: (pos: { x: number; y: number } | null) => void;
+
     // Session Context
     meetingId: string | null;
     setMeetingId: (id: string | null) => void;
@@ -63,6 +69,10 @@ interface WhiteboardState {
     // Image Placement
     pendingImage: PendingImage | null;
     setPendingImage: (image: PendingImage | null) => void;
+
+    // UI Interactive State
+    isDrawing: boolean;
+    setIsDrawing: (isDrawing: boolean) => void;
 
     // Data
     items: Map<string, WhiteboardItem>;
@@ -132,7 +142,12 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     }),
     setPenSize: (size) => set({ penSize: size }),
     setEraserSize: (size) => set({ eraserSize: size }),
-    setSmoothness: (smoothness) => set({ smoothness }),
+    setSmoothness: (smoothness: number) => set({ smoothness }),
+
+    currentStamp: 'thumbs-up',
+    setCurrentStamp: (stamp) => set({ currentStamp: stamp }),
+    stampMenuPosition: null,
+    setStampMenuPosition: (pos) => set({ stampMenuPosition: pos }),
 
     meetingId: null,
     setMeetingId: (id) => set({ meetingId: id }),
@@ -144,6 +159,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
 
     pendingImage: null,
     setPendingImage: (image) => set({ pendingImage: image }),
+
+    // UI State
+    isDrawing: false,
+    setIsDrawing: (isDrawing) => set({ isDrawing }),
 
     items: new Map(),
     addItem: (item) => {

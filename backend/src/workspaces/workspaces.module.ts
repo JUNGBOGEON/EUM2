@@ -7,6 +7,8 @@ import { WorkspaceFile } from './entities/workspace-file.entity';
 import { WorkspaceInvitation } from './entities/workspace-invitation.entity';
 import { WorkspaceEvent } from './entities/workspace-event.entity';
 import { WorkspaceEventType } from './entities/workspace-event-type.entity';
+import { WorkspaceRole } from './entities/workspace-role.entity';
+import { WorkspaceMemberRole } from './entities/workspace-member-role.entity';
 import { WorkspaceGateway } from './workspace.gateway';
 import { GatewayBroadcastService } from './services/gateway-broadcast.service';
 import { WorkspaceFilesService } from './workspace-files.service';
@@ -17,6 +19,8 @@ import { WorkspaceEventsService } from './workspace-events.service';
 import { WorkspaceEventsController } from './workspace-events.controller';
 import { WorkspaceEventTypesService } from './workspace-event-types.service';
 import { WorkspaceEventTypesController } from './workspace-event-types.controller';
+import { WorkspaceRolesService } from './workspace-roles.service';
+import { WorkspaceRolesController } from './workspace-roles.controller';
 import { StorageModule } from '../storage/storage.module';
 import { User } from '../users/entities/user.entity';
 
@@ -28,6 +32,8 @@ import { User } from '../users/entities/user.entity';
       WorkspaceInvitation,
       WorkspaceEvent,
       WorkspaceEventType,
+      WorkspaceRole,
+      WorkspaceMemberRole,
       User,
     ]),
     StorageModule,
@@ -38,6 +44,7 @@ import { User } from '../users/entities/user.entity';
     WorkspaceInvitationsController,
     WorkspaceEventsController,
     WorkspaceEventTypesController,
+    WorkspaceRolesController,
   ],
   providers: [
     WorkspacesService,
@@ -47,6 +54,7 @@ import { User } from '../users/entities/user.entity';
     WorkspaceInvitationsService,
     WorkspaceEventsService,
     WorkspaceEventTypesService,
+    WorkspaceRolesService,
   ],
   exports: [
     WorkspacesService,
@@ -55,6 +63,7 @@ import { User } from '../users/entities/user.entity';
     WorkspaceInvitationsService,
     WorkspaceEventsService,
     WorkspaceEventTypesService,
+    WorkspaceRolesService,
   ],
 })
-export class WorkspacesModule {}
+export class WorkspacesModule { }

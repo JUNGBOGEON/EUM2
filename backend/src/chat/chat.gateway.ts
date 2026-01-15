@@ -8,8 +8,9 @@ import {
     ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import { ChatService } from './chat.service';
+import { WorkspaceRolesService } from '../workspaces/workspace-roles.service';
 
 @WebSocketGateway({
     namespace: '/chat',
@@ -27,7 +28,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     private logger: Logger = new Logger('ChatGateway');
 
-    constructor(private readonly chatService: ChatService) { }
+    constructor(
+        private readonly chatService: ChatService,
+        @Inject(forwardRef(() => WorkspaceRolesService))
+        private readonly rolesService: WorkspaceRolesService,
+    ) { }
 
     handleConnection(client: Socket) {
         this.logger.log(`Client connected: ${client.id}`);
@@ -64,7 +69,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     ) {
         this.logger.log(`[DEBUG] Received message from ${client.id}: ${JSON.stringify(data)}`);
         try {
-            // 1. Save to DB
+            // 1. Get channel to check workspace
+            const channel = await this.chatService.getChannelById(data.channelId);
+            if (!channel) {
+                client.emit('error', { message: 'Channel not found' });
+                return;
+            }
+
+            // 2. Check sendMessages permission
+            const hasPermission = await this.rolesService.checkPermission(
+                channel.workspaceId,
+                data.senderId,
+                'sendMessages',
+            );
+
+            if (!hasPermission) {
+                this.logger.warn(`User ${data.senderId} does not have sendMessages permission in workspace ${channel.workspaceId}`);
+                client.emit('error', { message: 'You do not have permission to send messages' });
+                return;
+            }
+
+            // 3. Save to DB
             this.logger.log(`[DEBUG] Saving message to DB...`);
             const savedMessage = await this.chatService.saveMessage(
                 data.channelId,
@@ -73,7 +98,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             );
             this.logger.log(`[DEBUG] Message saved with ID: ${savedMessage.id}`);
 
-            // 2. Broadcast to room
+            // 4. Broadcast to room
             const fullMessage = await this.chatService.getMessageWithSender(savedMessage.id);
             const room = `channel:${data.channelId}`;
             this.logger.log(`[DEBUG] Broadcasting to room ${room}: ${JSON.stringify(fullMessage)}`);
@@ -85,3 +110,4 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
     }
 }
+

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Video, Users, ArrowRight, Play, Sparkles } from 'lucide-react';
+import { Video, Users, ArrowRight, Play, Sparkles, VideoOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,7 @@ interface MeetingSectionProps {
   onJoinSession: (sessionId: string) => void;
   isStarting: boolean;
   isJoining: boolean;
+  canJoinCalls?: boolean;
 }
 
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -24,6 +25,7 @@ export function MeetingSection({
   onJoinSession,
   isStarting,
   isJoining,
+  canJoinCalls = true,
 }: MeetingSectionProps) {
   const [meetingTitle, setMeetingTitle] = useState('');
   const { t } = useLanguage();
@@ -53,6 +55,23 @@ export function MeetingSection({
     return t('meeting.duration_format_min')
       .replace('{minutes}', minutes.toString());
   };
+
+  // If user can't join calls, show restriction message
+  if (!canJoinCalls) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+          <VideoOff className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">
+          {t('meeting.restricted')}
+        </h3>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          {t('meeting.restricted_desc')}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

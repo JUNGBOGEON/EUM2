@@ -45,7 +45,9 @@
             "starting": "시작 중...",
             "duration_format": "{hours}시간 {minutes}분 진행 중",
             "duration_format_min": "{minutes}분 진행 중",
-            "live": "LIVE"
+            "live": "LIVE",
+            "restricted": "회의 참가가 제한되었습니다",
+            "restricted_desc": "관리자에게 문의하여 통화 권한을 요청하세요."
         },
         "members": {
             "title": "멤버",
@@ -68,6 +70,36 @@
             "pending": "대기 중",
             "search_empty": "검색 결과가 없습니다",
             "search_short": "2글자 이상 입력하세요"
+        },
+        "roles": {
+            "title": "역할 관리",
+            "add": "역할 추가",
+            "edit": "역할 편집",
+            "delete": "역할 삭제",
+            "delete_confirm": "\"{name}\" 역할을 삭제하시겠습니까?",
+            "delete_warning": "이 역할이 부여된 멤버는 기본 역할로 변경됩니다.",
+            "name": "역할 이름",
+            "name_placeholder": "역할 이름을 입력하세요",
+            "set_default": "새 멤버 기본 역할로 설정",
+            "system_role": "시스템",
+            "default_role": "기본",
+            "permissions": "권한",
+            "send_messages": "채팅 권한",
+            "send_messages_desc": "워크스페이스 채팅에서 메시지 전송",
+            "join_calls": "통화 입장 권한",
+            "join_calls_desc": "미팅룸 입장 및 참여",
+            "edit_calendar": "캘린더 편집 권한",
+            "edit_calendar_desc": "일정 생성, 수정, 삭제",
+            "upload_files": "저장소 업로드 권한",
+            "upload_files_desc": "파일 업로드 및 관리",
+            "manage_permissions": "권한 관리 권한",
+            "manage_permissions_desc": "멤버 역할 변경 및 역할 관리",
+            "save": "저장",
+            "saving": "저장 중...",
+            "change_role": "역할 변경",
+            "admin": "관리자",
+            "member": "멤버",
+            "guest": "게스트"
         },
         "calendar": {
             "title": "일정",
@@ -183,7 +215,8 @@
             "new_channel_placeholder": "예: 공지사항, 잡담",
             "create": "생성",
             "cancel": "취소",
-            "menu_label": "채팅"
+            "menu_label": "채팅",
+            "restricted": "채팅이 제한되었습니다"
         }
     },
     "en": {
@@ -232,7 +265,9 @@
             "starting": "Starting...",
             "duration_format": "{hours}h {minutes}m running",
             "duration_format_min": "{minutes}m running",
-            "live": "LIVE"
+            "live": "LIVE",
+            "restricted": "Meeting access is restricted",
+            "restricted_desc": "Contact your administrator to request call permissions."
         },
         "members": {
             "title": "Members",
@@ -370,7 +405,8 @@
             "new_channel_placeholder": "e.g. Announcements, Random",
             "create": "Create",
             "cancel": "Cancel",
-            "menu_label": "Chat"
+            "menu_label": "Chat",
+            "restricted": "Chat is restricted"
         }
     },
     "zh-CN": {

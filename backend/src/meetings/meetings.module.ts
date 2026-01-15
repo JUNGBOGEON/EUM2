@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MeetingChatModule } from './chat/meeting-chat.module';
 import { MeetingsService } from './meetings.service';
 import { MeetingsController } from './meetings.controller';
 import { MeetingSession } from './entities/meeting-session.entity';
@@ -39,6 +40,7 @@ import { TTSPreferenceService } from './services/tts-preference.service';
     WorkspacesModule,
     AiModule,
     StorageModule,
+    MeetingChatModule,
   ],
   controllers: [MeetingsController],
   providers: [
@@ -69,4 +71,4 @@ import { TTSPreferenceService } from './services/tts-preference.service';
     TranscribeUrlService,
   ],
 })
-export class MeetingsModule {}
+export class MeetingsModule { }

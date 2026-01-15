@@ -26,6 +26,7 @@ import {
   useTTS,
   useMediaDelay,
   useOriginalAudioVolume,
+  useMeetingChat,
   DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
 // New modular components (Main 브랜치의 컴포넌트들)
@@ -33,7 +34,7 @@ import {
   MeetingHeader,
   MeetingControls,
   VideoGrid,
-  TranscriptPanel,
+  CommunicationPanel,
   DeviceSettingsDialog,
   FloatingSubtitle,
   EndMeetingDialog,
@@ -97,10 +98,27 @@ function MeetingRoomContent() {
       initializeAudioOnly();
     }
   }, [meeting, audioInitialized, initializeAudioOnly]);
-  // Meeting start time (timestamp)
-  const meetingStartTime = meeting?.startedAt
-    ? new Date(meeting.startedAt).getTime()
-    : null;
+  // Meeting start time (timestamp) - ensure UTC parsing
+  const meetingStartTime = (() => {
+    if (!meeting?.startedAt) return null;
+    let dateStr = typeof meeting.startedAt === 'string' ? meeting.startedAt : '';
+    if (dateStr) {
+      if (!dateStr.includes('T')) dateStr = dateStr.replace(' ', 'T');
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) dateStr += 'Z';
+    } else {
+      dateStr = new Date(meeting.startedAt).toISOString();
+    }
+    return new Date(dateStr).getTime();
+  })();
+
+  useEffect(() => {
+    console.log('[MeetingPage] meetingStartTime debug:', {
+      hasMeeting: !!meeting,
+      startedAt: meeting?.startedAt,
+      meetingStartTime,
+      now: Date.now()
+    });
+  }, [meeting, meetingStartTime]);
 
   // 세션 종료 시 핸들러 (호스트가 회의를 종료했을 때 다른 참가자들 자동 퇴장)
   const handleSessionEnded = useCallback(async (reason: string) => {
@@ -137,6 +155,23 @@ function MeetingRoomContent() {
     currentAttendeeId,
     onSessionEnded: handleSessionEnded,
   });
+
+  // Meeting Chat hook
+  const { messages: chatMessages, sendMessage } = useMeetingChat({
+    meetingId,
+    currentUser: currentUser || undefined,
+    meetingStartTime,
+  });
+
+  // Debug currentUser in Page
+  useEffect(() => {
+    console.log('[MeetingPage] User/Chat Debug:', {
+      userId,
+      hasCurrentUser: !!currentUser,
+      currentUserName: currentUser?.name,
+      chatMessagesLength: chatMessages.length
+    });
+  }, [userId, currentUser, chatMessages]);
 
   // Chime SDK hooks (음소거 상태 먼저 가져오기)
   const { muted, toggleMute } = useToggleLocalMute();
@@ -356,9 +391,10 @@ function MeetingRoomContent() {
             </>
           )}
         </div>
-        {/* Transcript Panel - Always visible on right */}
-        <TranscriptPanel
+        {/* Unified Communication Panel - Always visible on right */}
+        <CommunicationPanel
           transcripts={syncedTranscripts}
+          messages={chatMessages}
           isTranscribing={isTranscribing}
           isLoadingHistory={isLoadingHistory}
           selectedLanguage={selectedLanguage}
@@ -368,6 +404,8 @@ function MeetingRoomContent() {
           getParticipantByAttendeeId={getParticipantByAttendeeId}
           translationEnabled={translationEnabled}
           getTranslation={getTranslation}
+          onSendMessage={(content) => sendMessage(content, selectedLanguage)}
+          meetingStartTime={meetingStartTime}
         />
       </main>
       {/* Controls */}

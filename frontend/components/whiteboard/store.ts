@@ -42,6 +42,12 @@ interface WhiteboardState {
     setPenSize: (size: number) => void;
     setEraserSize: (size: number) => void;
 
+    currentStamp: string;
+    setCurrentStamp: (stamp: string) => void;
+
+    stampMenuPosition: { x: number, y: number } | null;
+    setStampMenuPosition: (pos: { x: number, y: number } | null) => void;
+
     setSmoothness: (smoothness: number) => void;
 
     // Stamp
@@ -103,6 +109,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     magicPenColor: '#000000',
     penSize: 2,
     eraserSize: 20,
+    currentStamp: 'thumbs-up',
+    setCurrentStamp: (stamp) => set({ currentStamp: stamp }),
+    stampMenuPosition: null,
+    setStampMenuPosition: (pos) => set({ stampMenuPosition: pos }),
     smoothness: 7,
     setTool: (tool) => set((state) => {
         let newColor = state.color;

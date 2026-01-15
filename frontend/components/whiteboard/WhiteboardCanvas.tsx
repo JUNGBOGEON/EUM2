@@ -662,6 +662,7 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
             className="relative w-full h-full bg-white touch-none overflow-hidden select-none outline-none"
             onDrop={handleDropReal}
             onDragOver={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
             onPointerDown={() => { setIsToolbarSettingsOpen(false); setContextMenu(null); }}
         >
             {/* Grid Background */}

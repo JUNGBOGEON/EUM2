@@ -128,6 +128,8 @@ export function useWhiteboardDrawing(
     const currentParentOrigin = useRef<{ x: number, y: number } | null>(null);
     const currentParentColor = useRef<string | null>(null);
 
+    const currentErasureId = useRef<string | null>(null);
+
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
         const { tool: currentTool } = stateRef.current;
@@ -137,13 +139,20 @@ export function useWhiteboardDrawing(
         useWhiteboardStore.getState().setIsDrawing(true); // Trigger UI Fade
         currentPath.current = [];
         lastRenderedIndex.current = 0;
-        currentParentId.current = null; // Reset parent
+        currentParentId.current = null;
         currentParentOrigin.current = null;
         currentParentColor.current = null;
         eraserCoverage.current.clear(); // Reset coverage tracking for eraser
         // Cleanup any existing eraser glow effects
         eraserGlowGraphics.current.forEach(g => g.destroy());
         eraserGlowGraphics.current.clear();
+
+        // Reset Erasure ID for new stroke
+        if (currentTool === 'eraser') {
+            currentErasureId.current = uuidv4();
+        } else {
+            currentErasureId.current = null;
+        }
 
         filterX.current.reset();
         filterY.current.reset();
@@ -557,9 +566,6 @@ export function useWhiteboardDrawing(
                 for (let i = 1; i < newPoints.length; i++) {
                     glow.lineTo(newPoints[i].x, newPoints[i].y);
                 }
-                // Glow uses same color but wider and possibly lighter/different? 
-                // Let's use the same color with blur filter applied to the graphics container.
-                // We just draw a thicker line here.
                 glow.stroke({ width: width + 10 / currentZoom, color, alpha: 0.6, cap: 'round', join: 'round' });
             }
 
@@ -596,8 +602,6 @@ export function useWhiteboardDrawing(
                 finalPoints.push({ x: finalPoints[0].x + 0.01, y: finalPoints[0].y });
             }
 
-            let isRecognized = false;
-
             // GHOST FILTERING: Ignore tiny dots/strokes
             const minDimension = 10 / currentZoom; // 10px visual threshold
             const xs = finalPoints.map(p => p.x);
@@ -605,8 +609,6 @@ export function useWhiteboardDrawing(
             const w = Math.max(...xs) - Math.min(...xs);
             const h = Math.max(...ys) - Math.min(...ys);
 
-            // Filter out accidental clicks (dots) unless it's a deliberate dot (e.g. thick pen tap)
-            // For Magic Pen, be stricter.
             if (currentTool === 'magic-pen') {
                 if (w < 20 / currentZoom && h < 20 / currentZoom) {
                     // Too small for magic pen -> Discard
@@ -614,22 +616,43 @@ export function useWhiteboardDrawing(
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
-                    renderManager.renderItems(useWhiteboardStore.getState().items);
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
                     return;
                 }
-            } else {
-                // For regular pen, if only 1 point or super tiny, maybe ignore?
-                // Current logic handles point length >= 1 check below. 
-                // Leaving regular pen capable of dots.
+
+                // Recognize Shape
+                const result = detectShape(capturedPoints);
+                if (result.type !== 'none' && result.correctedPoints) {
+                    finalPoints = result.correctedPoints;
+                    // Redraw recognized shape temporarily
+                    if (currentGraphics.current) {
+                        currentGraphics.current.clear();
+                        const g = currentGraphics.current;
+                        const color = parseInt(currentColorStr.replace('#', ''), 16);
+                        const width = currentPenSize / currentZoom;
+                        g.moveTo(finalPoints[0].x, finalPoints[0].y);
+                        for (let i = 1; i < finalPoints.length; i++) {
+                            g.lineTo(finalPoints[i].x, finalPoints[i].y);
+                        }
+                        g.stroke({ width, color, cap: 'round', join: 'round' });
+                    }
+                } else {
+                    // Unrecognized magic pen stroke -> Discard
+                    if (currentGraphics.current) {
+                        currentGraphics.current.destroy();
+                        currentGraphics.current = null;
+                    }
+                    if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                    return;
+                }
             }
 
             if (currentTool === 'eraser') {
-                // ERASER LOGIC: attached erasure for paths, deletion for other items
-                // 1. Identify valid unique Eraser Path
-                if (!capturedPoints || capturedPoints.length < 2) return;
+                console.log('[Eraser] onPointerUp triggered. Points:', capturedPoints.length);
 
-                // 2. Check Intersection with existing items
-                // Simple AABB check for now against the whole stroke AABB
+                // ERASER LOGIC: attached erasure for paths, deletion for other items
+                const eraseR = (currentEraserSize / currentZoom) / 2;
+                // Bounding box of the entire stroke
                 const xs = capturedPoints.map(p => p.x);
                 const ys = capturedPoints.map(p => p.y);
                 const minX = Math.min(...xs);
@@ -637,14 +660,13 @@ export function useWhiteboardDrawing(
                 const minY = Math.min(...ys);
                 const maxY = Math.max(...ys);
 
-                // Expand slightly for stroke width
-                const eraseR = (currentEraserSize / currentZoom) / 2;
                 const hitArea = { x: minX - eraseR, y: minY - eraseR, width: (maxX - minX) + eraseR * 2, height: (maxY - minY) + eraseR * 2 };
 
                 const hits: any[] = [];
                 if (renderManager) {
                     renderManager.quadTree.retrieve(hits, hitArea);
                 }
+                console.log('[Eraser] QuadTree hits:', hits.length);
 
                 // Delete items that were 50%+ covered during the eraser drag
                 eraserCoverage.current.forEach((coverage, itemId) => {
@@ -699,6 +721,7 @@ export function useWhiteboardDrawing(
 
                         // Create ONE erasure with all points from the stroke
                         const newErasure = {
+                            id: erasureId,
                             points: simplifiedLocal,
                             size: (currentEraserSize / currentZoom) / (avgScale || 1)
                         };
@@ -707,7 +730,7 @@ export function useWhiteboardDrawing(
                         const updatePayload = {
                             data: {
                                 ...item.data,
-                                erasures: [...existingErasures, newErasure]
+                                erasures: newErasuresList
                             }
                         };
 
@@ -766,8 +789,11 @@ export function useWhiteboardDrawing(
                     renderManager.renderItems(useWhiteboardStore.getState().items);
                     return; // EARLY RETURN
                 }
+                if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
+                return;
             }
 
+            // --- Create New Path Item (Pen/Magic Pen/Stamp?? No stamp handled usage separately) ---
             let simplified = simplifyPoints(finalPoints, 0.5 / currentZoom);
 
             // If inside Post-it, convert World Points to Local Points
@@ -776,6 +802,7 @@ export function useWhiteboardDrawing(
                 const oy = currentParentOrigin.current.y;
                 simplified = simplified.map(p => ({ x: p.x - ox, y: p.y - oy }));
             }
+
             const newItem: StoreItem = {
                 id: uuidv4(),
                 type: 'path',
@@ -794,18 +821,14 @@ export function useWhiteboardDrawing(
             addItem(newItem);
 
             // Hand off persistence to Gateway (via broadcastEvent)
-            // Optimistic broadcast
-            if (broadcastEvent) {
-                const success = broadcastEvent('add_item', newItem);
-                if (!success) {
-                    console.warn("Broadcast skipped (likely disconnected)");
-                }
+            if (broadcastEventRef.current) {
+                broadcastEventRef.current('add_item', newItem);
             } else {
                 console.warn("[WhiteboardDrawing] No broadcastEvent function available");
             }
         }
 
-        // Clean up: Remove the progressive graphics strictly
+        // Cleanup current graphics
         if (currentGraphics.current) {
             currentGraphics.current.destroy();
             currentGraphics.current = null;
@@ -816,7 +839,7 @@ export function useWhiteboardDrawing(
             const items = useWhiteboardStore.getState().items;
             renderManager.renderItems(items);
         }
-    }, [renderManager, addItem, meetingId, flushBatch, broadcastEvent]);
+    }, [renderManager, addItem, meetingId, flushBatch]);
 
     useEffect(() => {
         if (!renderManager) return;

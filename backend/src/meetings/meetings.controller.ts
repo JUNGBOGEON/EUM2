@@ -125,6 +125,26 @@ export class MeetingsController {
   }
 
   // ==========================================
+  // 글로벌 캘린더 API
+  // ==========================================
+
+  /**
+   * 내 캘린더 조회 (모든 워크스페이스 일정)
+   */
+  @Get('my-calendar')
+  getMyCalendar(@Req() req: any) {
+    return this.meetingsService.getMyCalendar(getAuthUser(req).id);
+  }
+
+  /**
+   * 내 아카이브 조회 (모든 워크스페이스의 종료된 미팅)
+   */
+  @Get('my-archives')
+  getMyArchives(@Req() req: any) {
+    return this.meetingsService.getMyArchives(getAuthUser(req).id);
+  }
+
+  // ==========================================
   // 트랜스크립션 API
   // ==========================================
 

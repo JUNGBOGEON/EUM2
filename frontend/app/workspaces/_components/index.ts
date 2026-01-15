@@ -4,5 +4,7 @@ export { WorkspacePreviewDeck } from './workspace-preview-deck';
 export { EditDialog } from './edit-dialog';
 export { LeaveDialog, DeleteDialog } from './workspace-dialogs-standard';
 export { CreateWorkspaceModal } from './create-workspace-modal';
+export { GlobalCalendar } from './global-calendar';
+export { GlobalArchives } from './global-archives';
 export { WorkspaceRow } from './workspace-row';
 export { WorkspaceMonolith } from './workspace-monolith';

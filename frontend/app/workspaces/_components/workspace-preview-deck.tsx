@@ -74,9 +74,11 @@ export function WorkspacePreviewDeck({ workspace, onEnter, onEdit }: WorkspacePr
 
                     {/* Meta Badge */}
                     <div className="flex items-center gap-3 mb-8">
-                        <span className="px-3 py-1 rounded-full bg-white/10 border border-white/5 text-[11px] font-mono tracking-wider text-white uppercase backdrop-blur-md">
-                            {workspace.members?.find(m => m.role === 'owner')?.name || 'UNKNOWN'} 소유
-                        </span>
+                        {workspace.owner && (
+                            <span className="px-3 py-1 rounded-full bg-white/10 border border-white/5 text-[11px] font-mono tracking-wider text-white uppercase backdrop-blur-md">
+                                {workspace.owner.name} 소유
+                            </span>
+                        )}
                         <span className="flex items-center gap-1.5 text-xs text-white/40 font-mono">
                             <Clock size={12} />
                             마지막 업데이트 {formatRelativeTime(workspace.updatedAt || workspace.createdAt)}

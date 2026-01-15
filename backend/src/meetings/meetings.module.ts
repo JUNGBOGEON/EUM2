@@ -6,6 +6,7 @@ import { MeetingSession } from './entities/meeting-session.entity';
 import { SessionParticipant } from './entities/session-participant.entity';
 import { Transcription } from './entities/transcription.entity';
 import { Workspace } from '../workspaces/entities/workspace.entity';
+import { WorkspaceEvent } from '../workspaces/entities/workspace-event.entity';
 import { RedisModule } from '../redis/redis.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AiModule } from '../ai/ai.module';
@@ -34,6 +35,7 @@ import { TTSPreferenceService } from './services/tts-preference.service';
       SessionParticipant,
       Transcription,
       Workspace,
+      WorkspaceEvent,
     ]),
     RedisModule,
     WorkspacesModule,
@@ -69,4 +71,4 @@ import { TTSPreferenceService } from './services/tts-preference.service';
     TranscribeUrlService,
   ],
 })
-export class MeetingsModule {}
+export class MeetingsModule { }

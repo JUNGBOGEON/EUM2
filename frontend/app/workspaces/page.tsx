@@ -10,6 +10,8 @@ import {
   LeaveDialog,
   DeleteDialog,
   CreateWorkspaceModal,
+  GlobalCalendar,
+  GlobalArchives,
   type TabType,
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
@@ -129,12 +131,16 @@ export default function WorkspacesPage() {
         </div>
       )}
 
-      {/* Other Tabs (Placeholders) */}
+      {/* 3. Global Calendar Tab */}
       {activeTab === 'calendar' && (
-        <PlaceholderView title="캘린더" icon={Calendar} desc="Calendar View" />
+        <div className="flex-1 p-0 animate-in zoom-in-95 duration-500">
+          <GlobalCalendar />
+        </div>
       )}
       {activeTab === 'notifications' && (
-        <PlaceholderView title="회의록 보관함" icon={Inbox} desc="Archives View" />
+        <div className="flex-1 p-0 animate-in zoom-in-95 duration-500">
+          <GlobalArchives />
+        </div>
       )}
       {activeTab === 'settings' && (
         <PlaceholderView title="설정" icon={Settings} desc="Settings View" />

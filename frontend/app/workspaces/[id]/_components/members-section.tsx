@@ -35,6 +35,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -48,17 +51,22 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { WorkspaceOwner, WorkspaceMember, UserInfo } from '../_lib/types';
 import type { InvitableUser, PendingInvitation } from '@/lib/types';
+import type { WorkspaceRole } from '@/lib/types/workspace';
+import { DEFAULT_ROLES } from '@/lib/types/workspace';
 
 interface MembersSectionProps {
   owner: WorkspaceOwner | null;
   members: WorkspaceMember[];
   currentUser: UserInfo | null;
   isOwner: boolean;
+  canManagePermissions?: boolean;
+  roles?: WorkspaceRole[];
   pendingInvitations?: PendingInvitation[];
   onInviteMember: (userId: string) => Promise<void>;
   onKickMember: (memberId: string) => Promise<void>;
   onCancelInvitation?: (invitationId: string) => Promise<void>;
   onSearchUsers: (query: string) => Promise<InvitableUser[]>;
+  onUpdateMemberRole?: (memberId: string, roleId: string) => Promise<void>;
 }
 
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -68,15 +76,19 @@ export function MembersSection({
   members,
   currentUser,
   isOwner,
+  canManagePermissions = false,
+  roles = DEFAULT_ROLES,
   pendingInvitations = [],
   onInviteMember,
   onKickMember,
   onCancelInvitation,
   onSearchUsers,
+  onUpdateMemberRole,
 }: MembersSectionProps) {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [showKickDialog, setShowKickDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<WorkspaceMember | null>(null);
+  const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<InvitableUser[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -265,6 +277,47 @@ export function MembersSection({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      {(isOwner || canManagePermissions) && onUpdateMemberRole && (
+                        <>
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <Shield className="mr-2 h-4 w-4" />
+                              {t('roles.change_role')}
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              {roles.map((role) => {
+                                const isCurrentRole = member.roleId === role.id ||
+                                  (!member.roleId && role.isDefault);
+                                return (
+                                  <DropdownMenuItem
+                                    key={role.id}
+                                    disabled={changingRoleFor === member.id}
+                                    onClick={async () => {
+                                      if (isCurrentRole) return;
+                                      setChangingRoleFor(member.id);
+                                      try {
+                                        await onUpdateMemberRole(member.id, role.id);
+                                      } finally {
+                                        setChangingRoleFor(null);
+                                      }
+                                    }}
+                                  >
+                                    <div
+                                      className="w-2 h-2 rounded-full mr-2"
+                                      style={{ backgroundColor: role.color }}
+                                    />
+                                    {role.name}
+                                    {isCurrentRole && (
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
+                                  </DropdownMenuItem>
+                                );
+                              })}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => {

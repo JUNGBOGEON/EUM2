@@ -25,6 +25,7 @@ export interface WorkspaceMember {
   email?: string;
   profileImage?: string;
   isOnline?: boolean;
+  roleId?: string;
 }
 
 export interface UserInfo {
@@ -166,7 +167,7 @@ export interface CreateEventDto {
 }
 
 // 이벤트 수정 DTO
-export interface UpdateEventDto extends Partial<CreateEventDto> {}
+export interface UpdateEventDto extends Partial<CreateEventDto> { }
 
 // 이벤트 타입 생성 DTO
 export interface CreateEventTypeDto {

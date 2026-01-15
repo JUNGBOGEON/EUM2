@@ -37,6 +37,7 @@ export default function WorkspaceDetailPage() {
     events,
     eventTypes,
     isOwner,
+    userPermissions,
 
     // Navigation
     activeNav,
@@ -189,6 +190,7 @@ export default function WorkspaceDetailPage() {
                     onJoinSession={joinSession}
                     isStarting={isStartingMeeting}
                     isJoining={isJoiningSession}
+                    canJoinCalls={userPermissions?.joinCalls !== false}
                   />
                 )}
 
@@ -197,6 +199,7 @@ export default function WorkspaceDetailPage() {
                   <ChatSection
                     workspaceId={workspaceId}
                     currentUser={user}
+                    canSendMessages={userPermissions?.sendMessages !== false}
                   />
                 )}
 
@@ -246,11 +249,17 @@ export default function WorkspaceDetailPage() {
                     members={members}
                     currentUser={user}
                     isOwner={isOwner}
+                    canManagePermissions={isOwner}
                     pendingInvitations={pendingInvitations}
                     onInviteMember={inviteMember}
                     onKickMember={kickMember}
                     onCancelInvitation={cancelInvitation}
                     onSearchUsers={searchUsers}
+                    onUpdateMemberRole={async (memberId, roleId) => {
+                      // TODO: Implement backend API call
+                      console.log('Update member role:', memberId, roleId);
+                      // Temporary: just log for now until backend is ready
+                    }}
                   />
                 )}
 

@@ -9,6 +9,7 @@ import {
   Req,
   Query,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -22,6 +23,7 @@ import {
   TranscribeUrlService,
   SupportedLanguage,
 } from './services/transcribe-url.service';
+import { WorkspaceRolesService } from '../workspaces/workspace-roles.service';
 
 @Controller('meetings')
 @UseGuards(JwtAuthGuard)
@@ -29,6 +31,7 @@ export class MeetingsController {
   constructor(
     private readonly meetingsService: MeetingsService,
     private readonly transcribeUrlService: TranscribeUrlService,
+    private readonly rolesService: WorkspaceRolesService,
   ) { }
 
   // ==========================================
@@ -41,10 +44,22 @@ export class MeetingsController {
    * - 없으면 새 세션 생성 후 참가
    */
   @Post('sessions/start')
-  startSession(@Body() dto: StartSessionDto, @Req() req: any) {
+  async startSession(@Body() dto: StartSessionDto, @Req() req: any) {
+    const userId = getAuthUser(req).id;
+
+    // Check joinCalls permission
+    const hasPermission = await this.rolesService.checkPermission(
+      dto.workspaceId,
+      userId,
+      'joinCalls',
+    );
+    if (!hasPermission) {
+      throw new ForbiddenException('You do not have permission to join calls');
+    }
+
     return this.meetingsService.startSession(
       dto.workspaceId,
-      getAuthUser(req).id,
+      userId,
       dto.title,
     );
   }
@@ -53,8 +68,26 @@ export class MeetingsController {
    * 세션 참가
    */
   @Post('sessions/:sessionId/join')
-  joinSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.meetingsService.joinSession(sessionId, getAuthUser(req).id);
+  async joinSession(@Param('sessionId') sessionId: string, @Req() req: any) {
+    const userId = getAuthUser(req).id;
+
+    // Get session to find workspaceId
+    const session = await this.meetingsService.findSession(sessionId);
+    if (!session) {
+      throw new BadRequestException('Session not found');
+    }
+
+    // Check joinCalls permission
+    const hasPermission = await this.rolesService.checkPermission(
+      session.workspaceId,
+      userId,
+      'joinCalls',
+    );
+    if (!hasPermission) {
+      throw new ForbiddenException('You do not have permission to join calls');
+    }
+
+    return this.meetingsService.joinSession(sessionId, userId);
   }
 
   /**

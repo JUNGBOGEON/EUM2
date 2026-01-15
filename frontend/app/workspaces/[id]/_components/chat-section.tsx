@@ -23,7 +23,7 @@ import {
     DialogTrigger,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { Plus, Send, Hash, MessageSquare } from 'lucide-react';
+import { Plus, Send, Hash, MessageSquare, MessageSquareOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { UserInfo } from '../_lib/types';
@@ -31,9 +31,10 @@ import type { UserInfo } from '../_lib/types';
 interface ChatSectionProps {
     workspaceId: string;
     currentUser: UserInfo | null;
+    canSendMessages?: boolean;
 }
 
-export function ChatSection({ workspaceId, currentUser }: ChatSectionProps) {
+export function ChatSection({ workspaceId, currentUser, canSendMessages = true }: ChatSectionProps) {
     const { t } = useLanguage();
     const {
         channels,
@@ -182,20 +183,27 @@ export function ChatSection({ workspaceId, currentUser }: ChatSectionProps) {
 
             {/* Input Area */}
             <div className="p-4 border-t bg-card/50">
-                <form
-                    onSubmit={handleSendMessage}
-                    className="flex gap-2 items-center"
-                >
-                    <Input
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder={t('chat.placeholder')}
-                        className="flex-1 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input"
-                    />
-                    <Button type="submit" size="icon" disabled={!newMessage.trim()}>
-                        <Send className="h-4 w-4" />
-                    </Button>
-                </form>
+                {canSendMessages ? (
+                    <form
+                        onSubmit={handleSendMessage}
+                        className="flex gap-2 items-center"
+                    >
+                        <Input
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            placeholder={t('chat.placeholder')}
+                            className="flex-1 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input"
+                        />
+                        <Button type="submit" size="icon" disabled={!newMessage.trim()}>
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </form>
+                ) : (
+                    <div className="flex items-center justify-center gap-2 py-2 text-muted-foreground">
+                        <MessageSquareOff className="h-5 w-5" />
+                        <span className="text-sm">{t('chat.restricted')}</span>
+                    </div>
+                )}
             </div>
 
             {/* Create Channel Dialog */}

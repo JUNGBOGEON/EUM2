@@ -37,6 +37,7 @@ import {
 import { toast } from 'sonner';
 import type { Workspace } from '../_lib/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { RoleManagementSection } from './role-management-section';
 
 interface SettingsSectionProps {
   workspace: Workspace;
@@ -377,6 +378,17 @@ export function SettingsSection({
           </div>
         </div>
       </div>
+
+      {/* Role Management Section */}
+      {isOwner && (
+        <>
+          <Separator />
+          <RoleManagementSection
+            workspaceId={workspace.id}
+            isOwner={isOwner}
+          />
+        </>
+      )}
 
       {/* Danger Zone */}
       {isOwner && (

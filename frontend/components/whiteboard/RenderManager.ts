@@ -4,6 +4,7 @@ import { getProxiedUrl } from './utils/urlUtils';
 import { loadTexture } from './utils/textureLoader';
 import { WhiteboardItem } from './store';
 import { QuadTree, Rect } from './utils/QuadTree';
+import { STAMP_ICONS } from './utils/stampAssets';
 
 // Use Base64 encoding for SVGs to avoid parsing errors in PixiJS/Browser
 const svgToBase64 = (svg: string) => `data:image/svg+xml;base64,${btoa(svg)}`;
@@ -33,6 +34,8 @@ export class RenderManager {
     public dragLayer: PIXI.Container;
     public ghostLayer: PIXI.Container;
     public cursorLayer: PIXI.Container;
+    public effectLayer: PIXI.Container;
+    private activeEffects: { update: (dt: number) => boolean }[] = [];
     public width: number;
     public height: number;
     private remoteCursors: Map<string, PIXI.Container> = new Map();
@@ -95,6 +98,7 @@ export class RenderManager {
         this.staticLayer = new PIXI.Container();
         this.dynamicLayer = new PIXI.Container();
         this.drawingLayer = new PIXI.Container();
+        this.effectLayer = new PIXI.Container();
         this.selectionLayer = new PIXI.Container();
         this.dragLayer = new PIXI.Container();
         this.ghostLayer = new PIXI.Container();
@@ -149,10 +153,12 @@ export class RenderManager {
 
             this.app.stage.addChild(this.drawingLayer);
             this.app.stage.addChild(this.ghostLayer);
+            this.app.stage.addChild(this.effectLayer);
             this.app.stage.addChild(this.selectionLayer);
             this.app.stage.addChild(this.dragLayer);
             this.app.stage.addChild(this.cursorLayer);
             this.app.stage.eventMode = 'none';
+            this.effectLayer.eventMode = 'none';
 
             // Disable PixiJS internal cursor management
             this.app.renderer.events.cursorStyles.default = 'inherit';
@@ -174,10 +180,19 @@ export class RenderManager {
     }
 
     private preloadIcons() {
+        // Preload Stamps (PNG images)
+        Object.entries(STAMP_ICONS).forEach(([key, url]) => {
+            const cacheKey = `stamp-${key}`;
+
+            PIXI.Assets.load({ src: url })
+                .then(tex => {
+                    this.iconTextures.set(cacheKey, tex);
+                    console.log(`[RenderManager] Loaded stamp texture: ${key}`);
+                })
+                .catch(err => console.warn("Failed to load stamp", key, err));
+        });
+
         Object.entries(SVG_ICONS).forEach(([key, url]) => {
-            // Using Base64 Data URI, no need for special parser options usually
-            // but providing format hint is good.
-            // Removed deprecated 'loadParser' option.
             PIXI.Assets.load({ src: url, format: 'svg' })
                 .then(tex => this.iconTextures.set(key, tex))
                 .catch(err => console.warn("Failed to load icon", key, err));
@@ -191,8 +206,18 @@ export class RenderManager {
     }
 
     // TODO: Implement Baking Logic
-    tick() {
+    tick(ticker: PIXI.Ticker) {
         if (!this.initialized) return;
+
+        const dt = ticker?.deltaTime || 1;
+        for (let i = this.activeEffects.length - 1; i >= 0; i--) {
+            const effect = this.activeEffects[i];
+            const keep = effect.update(dt);
+            if (!keep) {
+                this.activeEffects.splice(i, 1);
+            }
+        }
+
         const lerpFactor = 0.25; // Smoothness factor (higher = faster/less lag, lower = smoother)
 
         this.remoteCursors.forEach((cursor, id) => {
@@ -355,6 +380,12 @@ export class RenderManager {
             return { x: 0, y: 0, width: w, height: h };
         }
 
+        if (item.type === 'stamp') {
+            const w = item.data?.width || 200;
+            const h = item.data?.height || 200;
+            return { x: 0, y: 0, width: w, height: h };
+        }
+
         return { x: 0, y: 0, width: 0, height: 0 };
     }
 
@@ -404,7 +435,7 @@ export class RenderManager {
             }
         });
 
-        // Sort root items by zIndex
+        // Sort root items by zIndex only
         rootItems.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
         rootItems.forEach((item) => {
@@ -426,6 +457,7 @@ export class RenderManager {
 
     addItem(item: WhiteboardItem, isEditing: boolean = false) {
         if (!this.initialized) return;
+        if (item.isDeleted) return; // FIX: Do not render deleted items
 
         // Insert into QuadTree
         this.quadTree.insert({ ...item, getBounds: () => this.getItemBounds(item) });
@@ -484,21 +516,27 @@ export class RenderManager {
                     const w = erase.size || 20;
 
                     if (erase.points && erase.points.length > 0) {
-                        eg.moveTo(erase.points[0].x, erase.points[0].y);
-                        for (let i = 1; i < erase.points.length; i++) {
-                            const p1 = erase.points[i - 1];
-                            const p2 = erase.points[i];
-                            const midX = (p1.x + p2.x) / 2;
-                            const midY = (p1.y + p2.y) / 2;
-                            eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
-                        }
-                        // Line to last
-                        if (erase.points.length > 1) {
+                        if (erase.points.length === 1) {
+                            // Single point - draw a circle for real-time erasing
+                            const p = erase.points[0];
+                            eg.circle(p.x, p.y, w / 2);
+                            eg.fill({ color: 0xffffff });
+                        } else {
+                            // Multiple points - draw a path
+                            eg.moveTo(erase.points[0].x, erase.points[0].y);
+                            for (let i = 1; i < erase.points.length; i++) {
+                                const p1 = erase.points[i - 1];
+                                const p2 = erase.points[i];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            }
+                            // Line to last
                             const last = erase.points[erase.points.length - 1];
                             eg.lineTo(last.x, last.y);
+                            eg.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
                         }
                     }
-                    eg.stroke({ width: w, color: 0xffffff, cap: 'round', join: 'round' });
                     container.addChild(eg);
                 });
 
@@ -663,7 +701,7 @@ export class RenderManager {
             // Wait, useWhiteboardDrawing calculates local points based on `getLocalBounds`.
             // getLocalBounds for Image returns {x: 0, y: 0, width: w, height: h}.
             // Center is (w/2, h/2).
-            // So Pivot in World is (tx + w/2, ty + h/2).
+            // So Pivot in World is (tx + w/2, ty + w/2).
             // Inverse Transform subtracts Pivot (World). 
             // So the resulting local points are relative to Pivot (World)?
             // No, in useWhiteboardDrawing:
@@ -753,6 +791,68 @@ export class RenderManager {
 
             this.staticLayer.addChild(container);
         }
+
+        // STAMP RENDERING
+        if (item.type === 'stamp') {
+            const content = this.createStampContent(item);
+            if (content) {
+                const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+                const bounds = this.getLocalBounds(item);
+                const cx = bounds.width / 2;
+                const cy = bounds.height / 2;
+
+                // Check for erasures
+                const hasErasures = item.data?.erasures && item.data.erasures.length > 0;
+                let finalContent: PIXI.Container | PIXI.Sprite = content;
+
+                if (hasErasures) {
+                    const container = new PIXI.Container();
+
+                    // Reset content transform to be local to the wrapper
+                    // Content pivot is (cx, cy).
+                    // We place it at (cx, cy) so its top-left (0,0) aligns with wrapper (0,0)
+                    content.position.set(cx, cy);
+                    content.scale.set(1, 1);
+                    content.rotation = 0;
+
+                    container.addChild(content);
+
+                    item.data.erasures.forEach((erase: any) => {
+                        const eg = new PIXI.Graphics();
+                        eg.blendMode = 'erase';
+                        const ew = erase.size || 20;
+
+                        if (erase.points && erase.points.length > 0) {
+                            eg.moveTo(erase.points[0].x, erase.points[0].y);
+                            for (let i = 1; i < erase.points.length; i++) {
+                                const p1 = erase.points[i - 1];
+                                const p2 = erase.points[i];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                eg.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                            }
+                            if (erase.points.length > 1) {
+                                const last = erase.points[erase.points.length - 1];
+                                eg.lineTo(last.x, last.y);
+                            }
+                        }
+                        eg.stroke({ width: ew, color: 0xffffff, cap: 'round', join: 'round' });
+                        container.addChild(eg);
+                    });
+
+                    container.filters = [new PIXI.AlphaFilter({ alpha: 1 })];
+                    finalContent = container;
+                }
+
+                // Apply transforms to the final content wrapper
+                finalContent.pivot.set(cx, cy);
+                finalContent.position.set(t.x + cx, t.y + cy);
+                finalContent.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+                finalContent.rotation = t.rotation ?? 0;
+
+                this.staticLayer.addChild(finalContent);
+            }
+        }
     }
 
     // Render Post-it with its children in a single container (Unity-like parent-child hierarchy)
@@ -793,6 +893,8 @@ export class RenderManager {
 
         // Render children inside the content container
         children.forEach(child => {
+            if (child.isDeleted) return; // FIX: Do not render deleted children
+
             // Insert child into QuadTree with parent-adjusted bounds
             this.quadTree.insert({ ...child, getBounds: () => this.getItemBounds(child) });
 
@@ -840,6 +942,9 @@ export class RenderManager {
         }
         if (item.type === 'image') {
             return this.createImageContent(item);
+        }
+        if (item.type === 'stamp') {
+            return this.createStampContent(item);
         }
         // Add more types as needed
         return null;
@@ -938,6 +1043,49 @@ export class RenderManager {
         container.addChild(sprite);
         container.pivot.set(w / 2, h / 2);
         container.position.set(t.x + w / 2, t.y + h / 2);
+        container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+        container.rotation = t.rotation ?? 0;
+
+        return container;
+    }
+
+    private createStampContent(item: WhiteboardItem): PIXI.Container | null {
+        const stampType = item.data?.stampType || 'thumbs-up';
+        const cacheKey = `stamp-${stampType}`;
+        const texture = this.iconTextures.get(cacheKey);
+
+        if (!texture) {
+            console.warn(`[RenderManager] Missing texture for stamp: ${stampType}`);
+            return null;
+        }
+
+        console.log(`[RenderManager] Creating stamp content for ${item.id} (${stampType})`);
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+
+        const w = item.data?.width || 200;
+        const h = item.data?.height || 200;
+
+        // Ensure non-zero size
+        const safeW = w || 50;
+        const safeH = h || 50;
+
+        sprite.width = safeW;
+        sprite.height = safeH;
+
+        const container = new PIXI.Container();
+
+        // Pivot/Anchor Logic
+        // LocalBounds returns x=0, y=0, w, h. Center is w/2, h/2.
+        const cx = safeW / 2;
+        const cy = safeH / 2;
+
+        sprite.position.set(cx, cy);
+        container.addChild(sprite);
+
+        const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 };
+        container.pivot.set(cx, cy);
+        container.position.set(t.x + cx, t.y + cy);
         container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
         container.rotation = t.rotation ?? 0;
 
@@ -1502,14 +1650,13 @@ export class RenderManager {
     // Interactive Ghost Rendering
     private ghostSprite: PIXI.Sprite | null = null;
 
-    renderGhost(type: 'image' | 'postit' | null, x: number, y: number, w: number = 0, h: number = 0, data?: any) {
+    renderGhost(type: 'image' | 'postit' | 'stamp' | null, x: number, y: number, w: number = 0, h: number = 0, data?: any) {
         if (!this.initialized) return;
 
         // Clear existing children from ghostLayer first (for Post-it graphics)
         this.ghostLayer.removeChildren();
 
         if (!type) {
-            // Hide ghost sprite if it exists
             if (this.ghostSprite) {
                 this.ghostSprite.visible = false;
             }
@@ -1520,11 +1667,8 @@ export class RenderManager {
             if (!this.ghostSprite) {
                 this.ghostSprite = new PIXI.Sprite();
                 this.ghostSprite.anchor.set(0.5);
-                this.ghostLayer.addChild(this.ghostSprite); // Use ghostLayer
+                this.ghostLayer.addChild(this.ghostSprite);
             } else {
-                // Ensure sprite is on the ghostLayer if it was elsewhere? 
-                // It might have been on dragLayer previously. Let's re-add to be sure or just assume logic is clean.
-                // Better to assume new architecture.
                 if (this.ghostSprite.parent !== this.ghostLayer) {
                     this.ghostLayer.addChild(this.ghostSprite);
                 }
@@ -1537,7 +1681,6 @@ export class RenderManager {
                 this.ghostSprite.x = x;
                 this.ghostSprite.y = y;
 
-                // Load texture if needed
                 if (this.ghostSprite.label !== url) {
                     const proxied = getProxiedUrl(url);
                     loadTexture(proxied).then(tex => {
@@ -1571,9 +1714,80 @@ export class RenderManager {
 
             this.ghostLayer.addChild(g);
             this.ghostLayer.position.set(x, y);
+        } else if (type === 'stamp') {
+            if (this.ghostSprite) this.ghostSprite.visible = false;
+
+            if (!this.ghostSprite) {
+                this.ghostSprite = new PIXI.Sprite();
+                this.ghostSprite.anchor.set(0.5);
+                this.ghostLayer.addChild(this.ghostSprite);
+            } else {
+                if (this.ghostSprite.parent !== this.ghostLayer) {
+                    this.ghostLayer.addChild(this.ghostSprite);
+                }
+            }
+
+            const stampType = data?.stampType || 'thumbs-up';
+            const cacheKey = `stamp-${stampType}`;
+            const texture = this.iconTextures.get(cacheKey);
+
+            if (texture) {
+                this.ghostSprite.texture = texture;
+                this.ghostSprite.visible = true;
+                this.ghostSprite.alpha = 0.6;
+                this.ghostSprite.x = x;
+                this.ghostSprite.y = y;
+                this.ghostSprite.width = w;
+                this.ghostSprite.height = h;
+            }
         }
     }
 
+    public playStampEffect(x: number, y: number) {
+        const lines: PIXI.Graphics[] = [];
+        const count = 8;
+        const startOffset = 45; // Start outside the stamp
+        const lineLen = 15;
+
+        for (let i = 0; i < count; i++) {
+            const g = new PIXI.Graphics();
+            g.moveTo(startOffset, 0);
+            g.lineTo(startOffset + lineLen, 0);
+            g.stroke({ width: 3, color: 0xFFD700, cap: 'round' });
+            g.position.set(x, y);
+            g.rotation = (i / count) * Math.PI * 2;
+            lines.push(g);
+            this.effectLayer.addChild(g);
+        }
+
+        let time = 0;
+        this.activeEffects.push({
+            update: (dt: number) => {
+                time += dt;
+                const progress = Math.min(time / 20, 1);
+
+                lines.forEach(l => {
+                    const speed = 3;
+                    l.position.x += Math.cos(l.rotation) * speed * dt;
+                    l.position.y += Math.sin(l.rotation) * speed * dt;
+                    l.alpha = 1 - progress;
+                });
+
+                if (progress >= 1) {
+                    lines.forEach(l => l.destroy());
+                    return false;
+                }
+                return true;
+            }
+        });
+    }
+
+
+
+    public getStampTexture(stampType: string): PIXI.Texture | undefined {
+        const cacheKey = `stamp-${stampType}`;
+        return this.iconTextures.get(cacheKey);
+    }
 
     destroy() {
         this.destroyed = true;

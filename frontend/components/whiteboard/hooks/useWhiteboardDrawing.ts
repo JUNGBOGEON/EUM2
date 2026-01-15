@@ -6,6 +6,8 @@ import { RenderManager } from '../RenderManager';
 import { simplifyPoints } from '../utils/simplifyPoints';
 import { OneEuroFilter } from '../utils/oneEuroFilter';
 import { detectShape } from '../utils/shapeRecognition';
+import { STAMP_ICONS } from '../utils/stampAssets';
+import { getProxiedUrl } from '../utils/urlUtils';
 // import { useWhiteboardSync } from './useWhiteboardSync'; // Removed logic duplication
 import { Point } from '../types';
 import { useParams } from 'next/navigation';
@@ -25,20 +27,26 @@ export function useWhiteboardDrawing(
 
 
     const {
-        tool, color: colorStr, penSize, eraserSize, zoom, pan, addItem
+        tool, color: colorStr, penSize, eraserSize, zoom, pan, addItem,
+        currentStamp, pendingImage
     } = useWhiteboardStore();
 
     // Stable State Ref
-    const stateRef = useRef({ tool, colorStr, penSize, eraserSize, zoom, pan });
+    const stateRef = useRef({ tool, colorStr, penSize, eraserSize, zoom, pan, currentStamp, pendingImage });
     useEffect(() => {
-        stateRef.current = { tool, colorStr, penSize, eraserSize, zoom, pan };
-    }, [tool, colorStr, penSize, eraserSize, zoom, pan]);
+        stateRef.current = { tool, colorStr, penSize, eraserSize, zoom, pan, currentStamp, pendingImage };
+    }, [tool, colorStr, penSize, eraserSize, zoom, pan, currentStamp, pendingImage]);
 
     const isDrawing = useRef(false);
     const currentPath = useRef<Point[]>([]);
     const currentGraphics = useRef<PIXI.Graphics | null>(null);
     const glowGraphics = useRef<PIXI.Graphics | null>(null); // For Magic Pen effect
     const lastRenderedIndex = useRef(0); // Track which points we've already rendered
+
+    // Track eraser coverage for items (id -> covered area in pixels²)
+    const eraserCoverage = useRef<Map<string, { covered: number, total: number }>>(new Map());
+    // Glow overlays for items with 50%+ coverage (red warning glow)
+    const eraserGlowGraphics = useRef<Map<string, PIXI.Container>>(new Map());
 
     // Filters for Jitter Reduction
     const filterX = useRef(new OneEuroFilter(1.0, 0.23));
@@ -126,11 +134,16 @@ export function useWhiteboardDrawing(
         if (currentTool !== 'pen' && currentTool !== 'magic-pen' && currentTool !== 'eraser') return;
 
         isDrawing.current = true;
+        useWhiteboardStore.getState().setIsDrawing(true); // Trigger UI Fade
         currentPath.current = [];
         lastRenderedIndex.current = 0;
         currentParentId.current = null; // Reset parent
         currentParentOrigin.current = null;
         currentParentColor.current = null;
+        eraserCoverage.current.clear(); // Reset coverage tracking for eraser
+        // Cleanup any existing eraser glow effects
+        eraserGlowGraphics.current.forEach(g => g.destroy());
+        eraserGlowGraphics.current.clear();
 
         filterX.current.reset();
         filterY.current.reset();
@@ -188,12 +201,39 @@ export function useWhiteboardDrawing(
     }, 50)).current;
 
     const onPointerMove = useCallback((e: PointerEvent) => {
-        if (!isDrawing.current || !renderManager || !currentGraphics.current) return;
+        if (!renderManager) return;
 
-        const { tool: currentTool, zoom: currentZoom, colorStr: currentColorStr, penSize: currentPenSize, eraserSize: currentEraserSize } = stateRef.current;
+        const {
+            tool: currentTool,
+            zoom: currentZoom,
+            colorStr: currentColorStr,
+            penSize: currentPenSize,
+            eraserSize: currentEraserSize,
+            currentStamp,
+            pendingImage
+        } = stateRef.current;
+
         const rawPoint = getLocalPoint(e);
         let x = filterX.current.filter(rawPoint.x);
         let y = filterY.current.filter(rawPoint.y);
+
+        // Preview Ghost Updates
+        if (currentTool === 'stamp') {
+            renderManager.renderGhost('stamp', x, y, 0, 0, { stampType: currentStamp });
+        } else if (currentTool === 'image' && pendingImage) {
+            renderManager.renderGhost('image', x, y, pendingImage.width, pendingImage.height, { url: pendingImage.url });
+        } else if (currentTool === 'postit') {
+            renderManager.renderGhost('postit', x, y, 200, 200);
+        } else {
+            renderManager.renderGhost(null, 0, 0);
+        }
+
+        if (!isDrawing.current || !currentGraphics.current) {
+            // Even if not drawing, broadcast cursor
+            const point = { x, y };
+            throttledBroadcast(point.x, point.y, currentTool);
+            return;
+        }
 
         // Shift Key Constraint: Straight Lines
         if (e.shiftKey && currentPath.current.length > 0) {
@@ -222,7 +262,7 @@ export function useWhiteboardDrawing(
         // 2. Add to Batch Buffer for Streaming Drawing
         batchBuffer.current.push(point);
 
-        // 3. REAL-TIME ERASER: Delete text/image/shape items immediately when touched
+        // 3. REAL-TIME ERASER: Delete/erase items immediately when touched
         if (currentTool === 'eraser') {
             const eraseR = (currentEraserSize / currentZoom) / 2;
             const hitArea = {
@@ -235,53 +275,266 @@ export function useWhiteboardDrawing(
             const hits: any[] = [];
             renderManager.quadTree.retrieve(hits, hitArea);
 
-            // Find deletable items - only shapes can be deleted by eraser
-            // Text must be selected and deleted, images/paths get erasures attached
-            const deletableItems = hits.filter(item => {
-                if (item.type !== 'shape') {
-                    return false;
+            // Track coverage for deletable items (shape, stamp, image, text)
+            // They will be deleted in onPointerUp if 50%+ is covered
+            hits.forEach(item => {
+                if (item.type !== 'shape' && item.type !== 'stamp' && item.type !== 'image' && item.type !== 'text') {
+                    return;
                 }
                 const lBounds = renderManager.getLocalBounds(item);
                 const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
                 const worldMinX = t.x;
                 const worldMinY = t.y;
-                const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
-                const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
+                const worldWidth = lBounds.width * (t.scaleX || 1);
+                const worldHeight = lBounds.height * (t.scaleY || 1);
+                const worldMaxX = worldMinX + worldWidth;
+                const worldMaxY = worldMinY + worldHeight;
 
-                return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
-                    hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
-            });
+                // Check if eraser intersects this item
+                if (hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
+                    hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY) {
 
-            // Delete immediately
-            deletableItems.forEach(item => {
-                console.log(`[Eraser] Real-time deleting ${item.type}:`, item.id);
-                useWhiteboardStore.getState().deleteItem(item.id);
-                if (broadcastEventRef.current) {
-                    broadcastEventRef.current('delete_item', { id: item.id });
+                    // Calculate intersection area
+                    const overlapMinX = Math.max(hitArea.x, worldMinX);
+                    const overlapMinY = Math.max(hitArea.y, worldMinY);
+                    const overlapMaxX = Math.min(hitArea.x + hitArea.width, worldMaxX);
+                    const overlapMaxY = Math.min(hitArea.y + hitArea.height, worldMaxY);
+                    const overlapArea = Math.max(0, overlapMaxX - overlapMinX) * Math.max(0, overlapMaxY - overlapMinY);
+
+                    const totalArea = worldWidth * worldHeight;
+
+                    // Accumulate coverage for this item
+                    const existing = eraserCoverage.current.get(item.id);
+                    if (existing) {
+                        existing.covered = Math.min(existing.covered + overlapArea, totalArea);
+                    } else {
+                        eraserCoverage.current.set(item.id, { covered: overlapArea, total: totalArea });
+                    }
                 }
             });
 
-            // Re-render if items were deleted
-            if (deletableItems.length > 0) {
-                renderManager.renderItems(useWhiteboardStore.getState().items);
+            // Check coverage and render glow effect for items > 50% covered
+            eraserCoverage.current.forEach((value, id) => {
+                const percent = value.covered / value.total;
+                if (percent >= 0.5) {
+                    // If not already glowing, create glow graphic
+                    if (!eraserGlowGraphics.current.has(id)) {
+                        const item = useWhiteboardStore.getState().items.get(id);
+                        if (item) {
+                            let glow: PIXI.Container;
+                            const lBounds = renderManager.getLocalBounds(item);
+                            const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+
+                            // UNIFIED GLOW CONFIGURATION
+                            const GLOW = {
+                                color: 0xFF2060,
+                                outlineThickness: 4,  // Matches Sprite offset
+                                textStroke: 8,       // Matches Text stroke (approx 2x outline)
+                                bloomBlur: 10,
+                                bloomAlpha: 0.4,
+                                coreBlur: 2,
+                                coreAlpha: 0.25
+                            };
+
+                            if (item.type === 'stamp' || item.type === 'image') {
+                                // Try to use Sprite for Contour Glow
+                                let texture: PIXI.Texture | null = null;
+
+                                if (item.type === 'stamp' && item.data?.stampType) {
+                                    texture = renderManager.getStampTexture(item.data.stampType) || null;
+                                } else if (item.type === 'image' && item.data?.url) {
+                                    const url = getProxiedUrl(item.data.url);
+                                    if (url && PIXI.Assets.cache.has(url)) {
+                                        texture = PIXI.Assets.get(url);
+                                    }
+                                }
+
+                                if (texture) {
+                                    const container = new PIXI.Container();
+                                    const w = lBounds.width * (t.scaleX || 1);
+                                    const h = lBounds.height * (t.scaleY || 1);
+                                    const cx = w / 2;
+                                    const cy = h / 2;
+
+                                    // 1. Outline (Fake Stroke via 8-way offset)
+                                    const thickness = GLOW.outlineThickness;
+                                    const offsets = [
+                                        [-thickness, 0], [thickness, 0], [0, -thickness], [0, thickness],
+                                        [-thickness * 0.7, -thickness * 0.7], [thickness * 0.7, -thickness * 0.7],
+                                        [-thickness * 0.7, thickness * 0.7], [thickness * 0.7, thickness * 0.7]
+                                    ];
+
+                                    const outlineC = new PIXI.Container();
+                                    offsets.forEach(([ox, oy]) => {
+                                        const s = new PIXI.Sprite(texture);
+                                        s.anchor.set(0.5);
+                                        s.width = w;
+                                        s.height = h;
+                                        s.tint = GLOW.color; // Neon Pink
+                                        s.alpha = 0.8;
+                                        s.position.set(cx + ox, cy + oy);
+                                        outlineC.addChild(s);
+                                    });
+                                    // Slight blur to merge offsets into a solid stroke
+                                    outlineC.filters = [new PIXI.BlurFilter({ strength: 1, quality: 3 })];
+                                    container.addChild(outlineC);
+
+                                    // 2. Outer Bloom (Strong Blur + ADD)
+                                    const bloom = new PIXI.Sprite(texture);
+                                    bloom.anchor.set(0.5);
+                                    bloom.width = w;
+                                    bloom.height = h;
+                                    bloom.tint = GLOW.color;
+                                    bloom.alpha = GLOW.bloomAlpha;
+                                    bloom.blendMode = 'add';
+                                    bloom.filters = [new PIXI.BlurFilter({ strength: GLOW.bloomBlur, quality: 4 })];
+                                    bloom.position.set(cx, cy);
+                                    container.addChild(bloom);
+
+                                    // 3. Inner Core (Weak Blur + Normal)
+                                    const core = new PIXI.Sprite(texture);
+                                    core.anchor.set(0.5);
+                                    core.width = w;
+                                    core.height = h;
+                                    core.tint = GLOW.color;
+                                    core.alpha = GLOW.coreAlpha; // Reduced inner intensity
+                                    core.filters = [new PIXI.BlurFilter({ strength: GLOW.coreBlur, quality: 4 })];
+                                    core.position.set(cx, cy);
+                                    container.addChild(core);
+
+                                    container.pivot.set(cx, cy);
+                                    container.position.set(t.x + cx, t.y + cy);
+                                    container.rotation = t.rotation || 0;
+                                    glow = container;
+                                } else {
+                                    // Fallback to Box
+                                    const container = new PIXI.Container();
+                                    const w = lBounds.width * (t.scaleX || 1);
+                                    const h = lBounds.height * (t.scaleY || 1);
+                                    const cx = w / 2;
+                                    const cy = h / 2;
+
+                                    const drawBox = (blur: number, alpha: number, blend: boolean, strokeW: number = 4) => {
+                                        const g = new PIXI.Graphics();
+                                        g.rect(0, 0, w, h);
+                                        g.fill({ color: GLOW.color, alpha: alpha * 0.4 });
+                                        g.stroke({ width: strokeW, color: GLOW.color, alpha: alpha });
+                                        if (blend) g.blendMode = 'add';
+                                        g.filters = [new PIXI.BlurFilter({ strength: blur, quality: 3 })];
+                                        return g;
+                                    };
+
+                                    container.addChild(drawBox(GLOW.bloomBlur, GLOW.bloomAlpha, true, GLOW.textStroke)); // Bloom + outline
+                                    container.addChild(drawBox(GLOW.coreBlur, GLOW.coreAlpha, false, GLOW.textStroke - 2)); // Core + outline
+
+                                    container.pivot.set(cx, cy);
+                                    container.position.set(t.x + cx, t.y + cy);
+                                    container.rotation = t.rotation || 0;
+                                    glow = container;
+                                }
+                            } else if (item.type === 'text' && item.data?.text) {
+                                // Text Contour Glow + Stroke
+                                const { text, fontSize, fontFamily } = item.data;
+                                const style = new PIXI.TextStyle({
+                                    fontFamily: fontFamily || 'Arial, sans-serif',
+                                    fontSize: fontSize || 24,
+                                    fill: GLOW.color,
+                                    stroke: { width: GLOW.textStroke, color: GLOW.color, join: 'round' },
+                                    align: 'left',
+                                    wordWrap: false,
+                                    lineHeight: (fontSize || 24) * 1.4,
+                                });
+
+                                const dummy = new PIXI.Text({ text, style });
+                                const w = dummy.width;
+                                const h = dummy.height;
+                                const cx = w / 2;
+                                const cy = h / 2;
+                                dummy.destroy();
+
+                                const container = new PIXI.Container();
+
+                                const createText = (blur: number, alpha: number, blend: boolean) => {
+                                    const tObj = new PIXI.Text({ text, style });
+                                    tObj.resolution = 2;
+                                    tObj.alpha = alpha;
+                                    if (blend) tObj.blendMode = 'add';
+                                    tObj.filters = [new PIXI.BlurFilter({ strength: blur, quality: 3 })];
+                                    tObj.anchor.set(0.5);
+                                    tObj.position.set(cx, cy);
+                                    return tObj;
+                                };
+
+                                container.addChild(createText(GLOW.bloomBlur, GLOW.bloomAlpha, true)); // Bloom
+                                container.addChild(createText(GLOW.coreBlur, GLOW.coreAlpha, false)); // Core + Outline
+
+                                container.pivot.set(cx, cy);
+                                container.position.set(t.x + cx, t.y + cy);
+                                container.rotation = t.rotation || 0;
+                                container.scale.set(t.scaleX ?? 1, t.scaleY ?? 1);
+
+                                glow = container;
+                            } else {
+                                // Default Graphics Bloom
+                                const container = new PIXI.Container();
+                                const w = lBounds.width * (t.scaleX || 1);
+                                const h = lBounds.height * (t.scaleY || 1);
+                                const cx = w / 2;
+                                const cy = h / 2;
+
+                                const drawBox = (blur: number, alpha: number, blend: boolean, strokeW: number = 4) => {
+                                    const g = new PIXI.Graphics();
+                                    g.rect(0, 0, w, h);
+                                    g.fill({ color: GLOW.color, alpha: alpha * 0.4 });
+                                    g.stroke({ width: strokeW, color: GLOW.color, alpha: alpha });
+                                    if (blend) g.blendMode = 'add';
+                                    g.filters = [new PIXI.BlurFilter({ strength: blur, quality: 3 })];
+                                    return g;
+                                };
+
+                                container.addChild(drawBox(GLOW.bloomBlur, GLOW.bloomAlpha, true, GLOW.textStroke));
+                                container.addChild(drawBox(GLOW.coreBlur, GLOW.coreAlpha, false, GLOW.textStroke - 2));
+
+                                container.pivot.set(cx, cy);
+                                container.position.set(t.x + cx, t.y + cy);
+                                container.rotation = t.rotation || 0;
+                                glow = container;
+                            }
+
+                            renderManager.drawingLayer.addChild(glow);
+                            eraserGlowGraphics.current.set(id, glow);
+                        }
+                    }
+                }
+            });
+
+            // Draw eraser preview trail on liveLayer for visual feedback
+            const g = currentGraphics.current;
+            if (g && currentPath.current.length >= 2) {
+                g.clear();
+                // Semi-transparent cyan stroke to differentiate from red glow
+                const eraserColor = 0x00FFFF;
+                const eraserAlpha = 0.3;
+                const eraserWidth = currentEraserSize / currentZoom;
+
+                g.moveTo(currentPath.current[0].x, currentPath.current[0].y);
+                for (let i = 1; i < currentPath.current.length; i++) {
+                    g.lineTo(currentPath.current[i].x, currentPath.current[i].y);
+                }
+                g.stroke({ width: eraserWidth, color: eraserColor, alpha: eraserAlpha, cap: 'round', join: 'round' });
             }
+
+            // Path erasure is handled in onPointerUp with the full stroke
+            // This prevents creating hundreds of tiny erasure objects
+            return;
         }
 
         const g = currentGraphics.current;
         const glow = glowGraphics.current;
 
         let color = parseInt(currentColorStr.replace('#', ''), 16);
-        // Eraser Color Logic
-        if (currentTool === 'eraser') {
-            if (currentParentColor.current) {
-                // Use Post-it background color to mimic erasing inside it
-                color = parseInt(currentParentColor.current.replace('#', ''), 16);
-            } else {
-                color = 0xffffff; // Default White Eraser
-            }
-        }
 
-        const width = (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom;
+        const width = currentPenSize / currentZoom;
 
         // PROGRESSIVE RENDERING: Draw only the NEW segment from last rendered point
         const startIdx = lastRenderedIndex.current;
@@ -296,11 +549,7 @@ export function useWhiteboardDrawing(
             for (let i = 1; i < newPoints.length; i++) {
                 g.lineTo(newPoints[i].x, newPoints[i].y);
             }
-            if (currentTool === 'eraser') {
-                g.stroke({ width, color: 0xffffff, cap: 'round', join: 'round' });
-            } else {
-                g.stroke({ width, color, cap: 'round', join: 'round' });
-            }
+            g.stroke({ width, color, cap: 'round', join: 'round' });
 
             // Draw Magic Pen Glow
             if (currentTool === 'magic-pen' && glow) {
@@ -321,6 +570,7 @@ export function useWhiteboardDrawing(
     const onPointerUp = useCallback((e: PointerEvent) => {
         if (!isDrawing.current || !renderManager) return;
         isDrawing.current = false;
+        useWhiteboardStore.getState().setIsDrawing(false); // Restore UI
 
         // CAPTURE AND CLEAR (Data Safety)
         const capturedPoints = [...currentPath.current];
@@ -396,84 +646,64 @@ export function useWhiteboardDrawing(
                     renderManager.quadTree.retrieve(hits, hitArea);
                 }
 
-                // Filter true intersections (approximate) and process by type
-                const intersectedItems = hits.filter(item => {
-                    // Get bounds - works for all item types via getLocalBounds
-                    const lBounds = renderManager!.getLocalBounds(item);
-                    const t = item.transform || { x: 0, y: 0, scaleX: 1, scaleY: 1 };
-                    const worldMinX = t.x;
-                    const worldMinY = t.y;
-                    const worldMaxX = t.x + lBounds.width * (t.scaleX || 1);
-                    const worldMaxY = t.y + lBounds.height * (t.scaleY || 1);
-
-                    // Basic AABB intersection
-                    return hitArea.x < worldMaxX && hitArea.x + hitArea.width > worldMinX &&
-                        hitArea.y < worldMaxY && hitArea.y + hitArea.height > worldMinY;
-                });
-
-                if (intersectedItems.length > 0) {
-                    console.log("[Eraser] Hit Items:", intersectedItems.map(i => `${i.id}(${i.type})`));
-
-                    // Separate items by type
-                    // Path and Image items get erasures attached (partial deletion)
-                    const erasableItems = intersectedItems.filter(item =>
-                        item.type === 'path' || item.type === 'image'
-                    );
-                    // Only shapes can be deleted entirely by eraser
-                    const deletableItems = intersectedItems.filter(item =>
-                        item.type === 'shape'
-                    );
-
-                    // DELETE text, image, shape items completely
-                    deletableItems.forEach(item => {
-                        console.log(`[Eraser] Deleting ${item.type} item:`, item.id);
-                        useWhiteboardStore.getState().deleteItem(item.id);
-                        if (broadcastEvent) {
-                            broadcastEvent('delete_item', { id: item.id });
+                // Delete items that were 50%+ covered during the eraser drag
+                eraserCoverage.current.forEach((coverage, itemId) => {
+                    const coveragePercent = coverage.covered / coverage.total;
+                    if (coveragePercent >= 0.5) {
+                        console.log(`[Eraser] Deleting item ${itemId} (${(coveragePercent * 100).toFixed(0)}% covered)`);
+                        useWhiteboardStore.getState().deleteItem(itemId);
+                        if (broadcastEventRef.current) {
+                            broadcastEventRef.current('delete_item', { id: itemId });
                         }
-                    });
+                    }
+                });
+                eraserCoverage.current.clear();
+                // Cleanup glow effects
+                eraserGlowGraphics.current.forEach(g => g.destroy());
+                eraserGlowGraphics.current.clear();
 
-                    // ATTACH erasures to path and image items
-                    erasableItems.forEach(item => {
-                        // Transform Global Points -> Local Points
+                // Filter to path items only for erasure attachment
+                const pathItems = hits.filter(item => item.type === 'path');
+
+                if (pathItems.length > 0) {
+                    console.log(`[Eraser] Applying erasure to ${pathItems.length} paths`);
+
+                    pathItems.forEach(hitItem => {
+                        const item = useWhiteboardStore.getState().items.get(hitItem.id);
+                        if (!item) return;
+
+                        // Transform eraser points from world space to local space
                         const lBounds = renderManager!.getLocalBounds(item);
                         const cx = lBounds.x + lBounds.width / 2;
                         const cy = lBounds.y + lBounds.height / 2;
 
-                        const sX = item.transform.scaleX || 1;
-                        const sY = item.transform.scaleY || 1;
-                        const rot = item.transform.rotation || 0;
-                        const tx = item.transform.x + cx; // Pivot World X
-                        const ty = item.transform.y + cy; // Pivot World Y
+                        const sX = item.transform?.scaleX || 1;
+                        const sY = item.transform?.scaleY || 1;
+                        const rot = item.transform?.rotation || 0;
+                        const tx = (item.transform?.x || 0) + cx;
+                        const ty = (item.transform?.y || 0) + cy;
 
                         const cos = Math.cos(-rot);
                         const sin = Math.sin(-rot);
 
                         const localPoints = capturedPoints.map(p => {
-                            // 1. Translate back (World -> Pivot)
                             const dx = p.x - tx;
                             const dy = p.y - ty;
-                            // 2. Rotate Inverse
                             const rx = dx * cos - dy * sin;
                             const ry = dx * sin + dy * cos;
-                            // 3. Scale Inverse
-                            const sx = rx / sX;
-                            const sy = ry / sY;
-                            // 4. Pivot Offset (Pivot -> Local Origin)
-                            // Pivot was at (cx, cy) in local space.
-                            // So we are now relative to Pivot. To get absolute local, add Pivot.
-                            return { x: sx + cx, y: sy + cy };
+                            return { x: rx / sX + cx, y: ry / sY + cy };
                         });
 
                         const simplifiedLocal = simplifyPoints(localPoints, 0.5 / currentZoom);
-                        // Normalize eraser size by scale (approximate average scale) to maintain visual width
                         const avgScale = (Math.abs(sX) + Math.abs(sY)) / 2;
+
+                        // Create ONE erasure with all points from the stroke
                         const newErasure = {
                             points: simplifiedLocal,
                             size: (currentEraserSize / currentZoom) / (avgScale || 1)
                         };
 
-                        const existingErasures = item.data.erasures || [];
+                        const existingErasures = item.data?.erasures || [];
                         const updatePayload = {
                             data: {
                                 ...item.data,
@@ -481,31 +711,30 @@ export function useWhiteboardDrawing(
                             }
                         };
 
-                        // Update Store
                         useWhiteboardStore.getState().updateItem(item.id, updatePayload);
 
-                        // Persist/Broadcast Update
+                        // Broadcast the update
                         if (broadcastEvent) {
-                            console.log("[Eraser] Broadcasting Update for", item.id);
-                            broadcastEvent('update_item', { id: item.id, ...updatePayload });
-                        } else {
-                            console.warn("[Eraser] No broadcastEvent available");
+                            console.log(`[Eraser] Broadcasting erasure for ${item.id}`);
+                            broadcastEvent('update_item', { id: item.id, data: updatePayload.data });
                         }
                     });
 
-                    // Cleanup current graphics
+                    // Cleanup and re-render
                     if (currentGraphics.current) {
                         currentGraphics.current.destroy();
                         currentGraphics.current = null;
                     }
                     if (renderManager) renderManager.renderItems(useWhiteboardStore.getState().items);
-                    return; // Done, do not create global item
+                    return;
                 }
 
-                // If NO valid intersection, fall through to create global 'white' stroke?
-                // Or just do nothing? 
-                // Let's allow global eraser strokes for background cleaning if desired.
-                // Fall through.
+                // If no paths hit, just cleanup the eraser graphics
+                if (currentGraphics.current) {
+                    currentGraphics.current.destroy();
+                    currentGraphics.current = null;
+                }
+                return;
             }
 
 
@@ -552,8 +781,8 @@ export function useWhiteboardDrawing(
                 type: 'path',
                 data: {
                     points: simplified,
-                    color: currentTool === 'eraser' ? '#ffffff' : currentColorStr,
-                    brushSize: (currentTool === 'eraser' ? currentEraserSize : currentPenSize) / currentZoom
+                    color: currentColorStr,
+                    brushSize: currentPenSize / currentZoom
                 },
                 transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
                 zIndex: Date.now(),

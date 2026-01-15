@@ -30,6 +30,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 import { useWhiteboardPanning } from './hooks/useWhiteboardPanning';
 import { WhiteboardContextMenu } from './WhiteboardContextMenu';
 import { TextInputOverlay } from './TextInputOverlay';
+import { StampMenu } from './StampMenu';
 
 interface WhiteboardCanvasProps {
     meetingId: string;
@@ -698,6 +699,9 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
                     onAction={handleMenuAction}
                 />
             )}
+
+            {/* Stamp Menu */}
+            <StampMenu />
 
             {/* Zoom Controls */}
             <ZoomControls

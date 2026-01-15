@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit';
+export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit' | 'stamp';
 
 export interface PendingImage {
     url: string;
@@ -12,7 +12,7 @@ export interface PendingImage {
 
 export interface WhiteboardItem {
     id: string;
-    type: 'path' | 'image' | 'text' | 'shape' | 'postit';
+    type: 'path' | 'image' | 'text' | 'shape' | 'postit' | 'stamp';
     data: any;
     parentId?: string; // For objects inside a Post-it
     transform: {
@@ -44,6 +44,12 @@ interface WhiteboardState {
 
     setSmoothness: (smoothness: number) => void;
 
+    // Stamp
+    currentStamp: string | null;
+    setCurrentStamp: (stamp: string) => void;
+    stampMenuPosition: { x: number; y: number } | null;
+    setStampMenuPosition: (pos: { x: number; y: number } | null) => void;
+
     // Session Context
     meetingId: string | null;
     setMeetingId: (id: string | null) => void;
@@ -57,6 +63,10 @@ interface WhiteboardState {
     // Image Placement
     pendingImage: PendingImage | null;
     setPendingImage: (image: PendingImage | null) => void;
+
+    // UI Interactive State
+    isDrawing: boolean;
+    setIsDrawing: (isDrawing: boolean) => void;
 
     // Data
     items: Map<string, WhiteboardItem>;
@@ -122,7 +132,12 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     }),
     setPenSize: (size) => set({ penSize: size }),
     setEraserSize: (size) => set({ eraserSize: size }),
-    setSmoothness: (smoothness) => set({ smoothness }),
+    setSmoothness: (smoothness: number) => set({ smoothness }),
+
+    currentStamp: 'thumbs-up',
+    setCurrentStamp: (stamp) => set({ currentStamp: stamp }),
+    stampMenuPosition: null,
+    setStampMenuPosition: (pos) => set({ stampMenuPosition: pos }),
 
     meetingId: null,
     setMeetingId: (id) => set({ meetingId: id }),
@@ -134,6 +149,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
 
     pendingImage: null,
     setPendingImage: (image) => set({ pendingImage: image }),
+
+    // UI State
+    isDrawing: false,
+    setIsDrawing: (isDrawing) => set({ isDrawing }),
 
     items: new Map(),
     addItem: (item) => {

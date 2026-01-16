@@ -38,10 +38,12 @@ import { toast } from 'sonner';
 import type { Workspace } from '../_lib/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { RoleManagementSection } from './role-management-section';
+import type { MemberPermissions } from '@/lib/types/workspace';
 
 interface SettingsSectionProps {
   workspace: Workspace;
   isOwner: boolean;
+  permissions?: MemberPermissions;
   onUpdateWorkspace: (data: {
     name?: string;
     description?: string;
@@ -54,6 +56,7 @@ interface SettingsSectionProps {
 export function SettingsSection({
   workspace,
   isOwner,
+  permissions,
   onUpdateWorkspace,
   onDeleteWorkspace,
 }: SettingsSectionProps) {
@@ -380,12 +383,13 @@ export function SettingsSection({
       </div>
 
       {/* Role Management Section */}
-      {isOwner && (
+      {(isOwner || permissions?.managePermissions) && (
         <>
           <Separator />
           <RoleManagementSection
             workspaceId={workspace.id}
             isOwner={isOwner}
+            canManagePermissions={permissions?.managePermissions}
           />
         </>
       )}

@@ -269,7 +269,7 @@ export function MembersSection({
                     )}
                   </p>
                 </div>
-                {isOwner && currentUser?.id !== member.id && (
+                {(isOwner || canManagePermissions) && currentUser?.id !== member.id && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">

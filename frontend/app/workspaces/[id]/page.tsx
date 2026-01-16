@@ -37,7 +37,9 @@ export default function WorkspaceDetailPage() {
     events,
     eventTypes,
     isOwner,
+
     userPermissions,
+    roles, // Destructure roles
 
     // Navigation
     activeNav,
@@ -79,8 +81,12 @@ export default function WorkspaceDetailPage() {
     deleteEventType,
 
     // Workspace Actions
+    // Workspace Actions
     updateWorkspace,
     deleteWorkspace,
+
+    // Role Actions
+    assignRole,
 
     // Action states
     isStartingMeeting,
@@ -216,6 +222,7 @@ export default function WorkspaceDetailPage() {
                     onCreateEventType={createEventType}
                     onUpdateEventType={updateEventType}
                     onDeleteEventType={deleteEventType}
+                    canEditCalendar={isOwner || userPermissions?.editCalendar !== false}
                   />
                 )}
 
@@ -249,17 +256,14 @@ export default function WorkspaceDetailPage() {
                     members={members}
                     currentUser={user}
                     isOwner={isOwner}
-                    canManagePermissions={isOwner}
+                    canManagePermissions={isOwner || (!!userPermissions?.managePermissions)}
                     pendingInvitations={pendingInvitations}
                     onInviteMember={inviteMember}
                     onKickMember={kickMember}
                     onCancelInvitation={cancelInvitation}
                     onSearchUsers={searchUsers}
-                    onUpdateMemberRole={async (memberId, roleId) => {
-                      // TODO: Implement backend API call
-                      console.log('Update member role:', memberId, roleId);
-                      // Temporary: just log for now until backend is ready
-                    }}
+                    roles={roles} // Pass roles
+                    onUpdateMemberRole={assignRole} // Use real function
                   />
                 )}
 
@@ -268,6 +272,7 @@ export default function WorkspaceDetailPage() {
                   <SettingsSection
                     workspace={workspace}
                     isOwner={isOwner}
+                    permissions={userPermissions ?? undefined} // Pass permissions (handle structure mismatch if any, types seem compatible)
                     onUpdateWorkspace={updateWorkspace}
                     onDeleteWorkspace={deleteWorkspace}
                   />

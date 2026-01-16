@@ -4,12 +4,15 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkspaceFile, FileType } from './entities/workspace-file.entity';
 import { S3StorageService } from '../storage/s3-storage.service';
 import { v4 as uuidv4 } from 'uuid';
+import { WorkspaceRolesService } from './workspace-roles.service';
 
 const ALLOWED_MIME_TYPES = {
   image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
@@ -32,7 +35,9 @@ export class WorkspaceFilesService {
     @InjectRepository(WorkspaceFile)
     private fileRepository: Repository<WorkspaceFile>,
     private s3StorageService: S3StorageService,
-  ) {}
+    @Inject(forwardRef(() => WorkspaceRolesService))
+    private rolesService: WorkspaceRolesService,
+  ) { }
 
   /**
    * 워크스페이스에 파일 업로드
@@ -59,6 +64,16 @@ export class WorkspaceFilesService {
     uploaderId: string,
     file: Express.Multer.File,
   ): Promise<WorkspaceFile> {
+    // Check upload permission
+    const hasPermission = await this.rolesService.checkPermission(
+      workspaceId,
+      uploaderId,
+      'uploadFiles',
+    );
+    if (!hasPermission) {
+      throw new ForbiddenException('파일을 업로드할 권한이 없습니다');
+    }
+
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       throw new BadRequestException('파일 크기가 10MB를 초과합니다');

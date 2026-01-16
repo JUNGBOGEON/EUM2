@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkspaceRole, MemberPermissions, DEFAULT_PERMISSIONS } from './entities/workspace-role.entity';
@@ -52,6 +52,8 @@ const DEFAULT_ROLES = [
 
 @Injectable()
 export class WorkspaceRolesService {
+    private readonly logger = new Logger(WorkspaceRolesService.name);
+
     constructor(
         @InjectRepository(WorkspaceRole)
         private roleRepository: Repository<WorkspaceRole>,
@@ -195,8 +197,10 @@ export class WorkspaceRolesService {
      * 멤버에게 역할 할당
      */
     async assignRole(workspaceId: string, userId: string, roleId: string): Promise<WorkspaceMemberRole> {
+        this.logger.debug(`[AssignRole] Request: workspace=${workspaceId}, user=${userId}, role=${roleId}`);
         const role = await this.roleRepository.findOne({ where: { id: roleId, workspaceId } });
         if (!role) {
+            this.logger.error(`[AssignRole] Role not found: ${roleId}`);
             throw new NotFoundException('Role not found in this workspace');
         }
 
@@ -206,36 +210,51 @@ export class WorkspaceRolesService {
         });
 
         if (memberRole) {
+            this.logger.debug(`[AssignRole] Updating existing role for user ${userId} to ${role.name} (${roleId})`);
             memberRole.roleId = roleId;
-            return this.memberRoleRepository.save(memberRole);
+        } else {
+            this.logger.debug(`[AssignRole] Creating new role assignment for user ${userId} to ${role.name} (${roleId})`);
+            memberRole = this.memberRoleRepository.create({
+                workspaceId,
+                userId,
+                roleId,
+            });
         }
 
-        memberRole = this.memberRoleRepository.create({
-            workspaceId,
-            userId,
-            roleId,
-        });
-
-        return this.memberRoleRepository.save(memberRole);
+        const saved = await this.memberRoleRepository.save(memberRole);
+        this.logger.debug(`[AssignRole] Saved: ${JSON.stringify(saved)}`);
+        return saved;
     }
 
     /**
      * 멤버의 역할 조회
      */
     async getMemberRole(workspaceId: string, userId: string): Promise<WorkspaceRole | null> {
+        this.logger.debug(`[GetMemberRole] Querying for workspace=${workspaceId}, user=${userId}`);
         const memberRole = await this.memberRoleRepository.findOne({
             where: { workspaceId, userId },
             relations: ['role'],
         });
 
         if (memberRole) {
+            this.logger.debug(`[GetMemberRole] Found assigned role for user ${userId}: ${memberRole.role.name} (ID: ${memberRole.role.id})`);
             return memberRole.role;
+        } else {
+            this.logger.warn(`[GetMemberRole] No assigned role found in DB for user ${userId}`);
         }
 
         // 역할이 없으면 기본 역할 반환
-        return this.roleRepository.findOne({
+        const defaultRole = await this.roleRepository.findOne({
             where: { workspaceId, isDefault: true },
         });
+
+        if (defaultRole) {
+            this.logger.debug(`[GetMemberRole] Returning default role: ${defaultRole.name}`);
+        } else {
+            this.logger.warn(`[GetMemberRole] No role and no default role found for user ${userId} in workspace ${workspaceId}`);
+        }
+
+        return defaultRole;
     }
 
     /**
@@ -252,15 +271,25 @@ export class WorkspaceRolesService {
         });
 
         if (workspace?.ownerId === userId) {
+            this.logger.debug(`User ${userId} is owner of workspace ${workspaceId}, permission granted`);
             return true; // 오너는 모든 권한 있음
         }
 
         const role = await this.getMemberRole(workspaceId, userId);
         if (!role) {
+            this.logger.warn(`Permission check failed: User ${userId} has no role in workspace ${workspaceId}`);
             return false;
         }
 
-        return role.permissions[permission] === true;
+        const hasPermission = role.permissions && role.permissions[permission] === true;
+        this.logger.warn(`[DEBUG_PROBE] checkPermission('${permission}'):
+            User: ${userId}
+            Role: ${role.name} (${role.id})
+            PermissionsObject: ${JSON.stringify(role.permissions)}
+            CalculatedResult: ${hasPermission}
+        `);
+
+        return hasPermission;
     }
 
     /**
@@ -273,5 +302,41 @@ export class WorkspaceRolesService {
         });
 
         return memberRoles;
+    }
+
+    /**
+     * Debugging method to inspect role state
+     */
+    async debugRoleState(workspaceId: string, userId: string) {
+        const memberRole = await this.memberRoleRepository.findOne({
+            where: { workspaceId, userId },
+            relations: ['role'],
+        });
+
+        const defaultRoles = await this.roleRepository.find({
+            where: { workspaceId, isDefault: true },
+        });
+
+        const workspace = await this.workspaceRepository.findOne({ where: { id: workspaceId } });
+        const isOwner = workspace?.ownerId === userId;
+
+        const resolvedRole = await this.getMemberRole(workspaceId, userId);
+        const editCalendar = await this.checkPermission(workspaceId, userId, 'editCalendar');
+
+        return {
+            workspaceId,
+            userId,
+            isOwner,
+            dbState: {
+                assignedMemberRole: memberRole,
+                defaultRolesInWorkspace: defaultRoles,
+            },
+            resolution: {
+                resolvedRole,
+                checkPermissionResult: {
+                    editCalendar
+                }
+            }
+        };
     }
 }

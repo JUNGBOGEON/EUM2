@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,6 +16,7 @@ import {
 } from './entities/workspace-invitation.entity';
 import { Workspace } from './entities/workspace.entity';
 import { User } from '../users/entities/user.entity';
+import { WorkspaceRolesService } from './workspace-roles.service';
 
 @Injectable()
 export class WorkspaceInvitationsService {
@@ -26,7 +29,9 @@ export class WorkspaceInvitationsService {
     private workspaceRepository: Repository<Workspace>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+    @Inject(forwardRef(() => WorkspaceRolesService))
+    private rolesService: WorkspaceRolesService,
+  ) { }
 
   /**
    * 워크스페이스 초대 생성
@@ -193,6 +198,13 @@ export class WorkspaceInvitationsService {
     }
     workspace.members.push(user);
     await this.workspaceRepository.save(workspace);
+
+    // [Fix] 신규 멤버에게 기본 역할 부여
+    const defaultRole = await this.rolesService.getRoles(workspace.id)
+      .then(roles => roles.find(r => r.isDefault));
+    if (defaultRole) {
+      await this.rolesService.assignRole(workspace.id, userId, defaultRole.id);
+    }
 
     // 초대 상태 업데이트
     invitation.status = InvitationStatus.ACCEPTED;

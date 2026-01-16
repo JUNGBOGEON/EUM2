@@ -13,6 +13,7 @@ import { useWorkspaceSessions } from './use-workspace-sessions';
 import { useWorkspaceFiles } from './use-workspace-files';
 import { useWorkspaceMembers } from './use-workspace-members';
 import { useWorkspaceEvents } from './use-workspace-events';
+import { useWorkspaceRoles } from './use-workspace-roles';
 
 interface UseWorkspaceDetailProps {
   workspaceId: string;
@@ -50,9 +51,10 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     onWorkspaceUpdate: workspaceData.fetchWorkspace,
   });
   const eventsData = useWorkspaceEvents({ workspaceId });
+  const rolesData = useWorkspaceRoles({ workspaceId, onRoleChange: workspaceData.fetchWorkspace });
 
   // User permissions state
-  const [userPermissions, setUserPermissions] = useState<MemberPermissions | null>(null);
+
 
   // Update members when workspace data changes
   useEffect(() => {
@@ -61,41 +63,7 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     }
   }, [workspaceData.workspace?.members, membersData.setMembers]);
 
-  // Fetch user permissions
-  useEffect(() => {
-    const fetchUserPermissions = async () => {
-      if (!workspaceData.user?.id) return;
 
-      // Owner has all permissions
-      if (workspaceData.isOwner) {
-        setUserPermissions({
-          sendMessages: true,
-          joinCalls: true,
-          editCalendar: true,
-          uploadFiles: true,
-          managePermissions: true,
-        });
-        return;
-      }
-
-      try {
-        const response = await fetch(
-          `${API_URL}/api/workspaces/${workspaceId}/roles/members/${workspaceData.user.id}`,
-          { credentials: 'include' }
-        );
-        if (response.ok) {
-          const role = await response.json();
-          if (role?.permissions) {
-            setUserPermissions(role.permissions);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch user permissions:', error);
-      }
-    };
-
-    fetchUserPermissions();
-  }, [workspaceId, workspaceData.user?.id, workspaceData.isOwner]);
 
   // Socket.IO connection
   useEffect(() => {
@@ -204,9 +172,12 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     sessionsData.fetchSessions();
     sessionsData.fetchActiveSessions();
     filesData.fetchFiles();
-    membersData.fetchPendingInvitations();
+    if (workspaceData.isOwner || (workspaceData.permissions?.managePermissions)) {
+      membersData.fetchPendingInvitations();
+    }
     eventsData.fetchEvents();
     eventsData.fetchEventTypes();
+    rolesData.fetchRoles();
   }, [
     workspaceData.fetchWorkspace,
     workspaceData.fetchUser,
@@ -216,6 +187,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     membersData.fetchPendingInvitations,
     eventsData.fetchEvents,
     eventsData.fetchEventTypes,
+    rolesData.fetchRoles,
+    workspaceData.isOwner,
+    workspaceData.permissions,
   ]);
 
   return {
@@ -230,7 +204,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     events: eventsData.events,
     eventTypes: eventsData.eventTypes,
     isOwner: workspaceData.isOwner,
-    userPermissions,
+    userPermissions: workspaceData.permissions,
+    roles: rolesData.roles,
 
     // Navigation
     activeNav,
@@ -274,6 +249,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     // Workspace Actions
     updateWorkspace: workspaceData.updateWorkspace,
     deleteWorkspace: workspaceData.deleteWorkspace,
+
+    // Role Actions
+    assignRole: rolesData.assignRole,
 
     // Action states
     isStartingMeeting: sessionsData.isStartingMeeting,

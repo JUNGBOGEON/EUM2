@@ -61,7 +61,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     if (workspaceData.workspace?.members) {
       membersData.setMembers(workspaceData.workspace.members);
     }
-  }, [workspaceData.workspace?.members, membersData.setMembers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceData.workspace?.members]);
 
 
 
@@ -163,34 +164,22 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [workspaceId, sessionsData.fetchSessions, sessionsData.fetchActiveSessions, eventsData.fetchEvents, setActiveNav]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
-  // Initial data fetch
+  // Initial data fetch - only run once when workspaceId changes
   useEffect(() => {
     workspaceData.fetchWorkspace();
     workspaceData.fetchUser();
     sessionsData.fetchSessions();
     sessionsData.fetchActiveSessions();
     filesData.fetchFiles();
-    if (workspaceData.isOwner || (workspaceData.permissions?.managePermissions)) {
-      membersData.fetchPendingInvitations();
-    }
+    membersData.fetchPendingInvitations();
     eventsData.fetchEvents();
     eventsData.fetchEventTypes();
     rolesData.fetchRoles();
-  }, [
-    workspaceData.fetchWorkspace,
-    workspaceData.fetchUser,
-    sessionsData.fetchSessions,
-    sessionsData.fetchActiveSessions,
-    filesData.fetchFiles,
-    membersData.fetchPendingInvitations,
-    eventsData.fetchEvents,
-    eventsData.fetchEventTypes,
-    rolesData.fetchRoles,
-    workspaceData.isOwner,
-    workspaceData.permissions,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   return {
     // Data

@@ -289,3 +289,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .serena
 .env.*
 KRAFTON-JUNGLE-EUM/
+docs/

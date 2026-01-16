@@ -29,6 +29,7 @@ interface CalendarSectionProps {
   onCreateEventType: (data: CreateEventTypeDto) => Promise<void>;
   onUpdateEventType: (typeId: string, data: UpdateEventTypeDto) => Promise<void>;
   onDeleteEventType: (typeId: string) => Promise<void>;
+  canEditCalendar?: boolean;
 }
 
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -44,6 +45,7 @@ export function CalendarSection({
   onCreateEventType,
   onUpdateEventType,
   onDeleteEventType,
+  canEditCalendar = true,
 }: CalendarSectionProps) {
   // Calendar navigation state
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -106,6 +108,7 @@ export function CalendarSection({
 
   // Event handlers
   const handleDateClick = (date: Date) => {
+    if (!canEditCalendar) return;
     setEditingEvent(null);
     const defaultType = eventTypes.find(t => t.name === '기타') || eventTypes[0];
     setFormData({
@@ -204,14 +207,18 @@ export function CalendarSection({
           <h2 className="text-lg font-semibold">{t('calendar.title')}</h2>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowEventTypesDialog(true)}>
-            <Settings2 className="h-4 w-4 mr-2" />
-            {t('calendar.manage_types')}
-          </Button>
-          <Button onClick={() => handleDateClick(new Date())}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('calendar.add_event')}
-          </Button>
+          {canEditCalendar && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowEventTypesDialog(true)}>
+                <Settings2 className="h-4 w-4 mr-2" />
+                {t('calendar.manage_types')}
+              </Button>
+              <Button onClick={() => handleDateClick(new Date())}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('calendar.add_event')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

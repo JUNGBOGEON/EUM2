@@ -1,10 +1,19 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { API_URL } from '../_lib/constants';
 import type { Workspace, UserInfo } from '../_lib/types';
+import type { WorkspaceRole, MemberPermissions } from '@/lib/types/workspace'; // Import types
+
+const DEFAULT_PERMISSIONS: MemberPermissions = {
+  sendMessages: true,
+  joinCalls: true,
+  editCalendar: true,
+  uploadFiles: true,
+  managePermissions: false,
+};
 
 interface UseWorkspaceDataProps {
   workspaceId: string;
@@ -13,6 +22,8 @@ interface UseWorkspaceDataProps {
 interface UseWorkspaceDataReturn {
   workspace: Workspace | null;
   user: UserInfo | null;
+  userRole: WorkspaceRole | null; // Added
+  permissions: MemberPermissions; // Added convenience accessor
   isOwner: boolean;
   isLoading: boolean;
   fetchWorkspace: () => Promise<void>;
@@ -30,9 +41,31 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataProps): UseWor
   const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [userRole, setUserRole] = useState<WorkspaceRole | null>(null);
+  const [permissions, setPermissions] = useState<MemberPermissions>(DEFAULT_PERMISSIONS); // Default safe
   const [isLoading, setIsLoading] = useState(true);
 
   const isOwner = !!(user && workspace?.owner && user.id === workspace.owner.id);
+
+  // Fetch user's role for this workspace
+  const fetchUserRole = useCallback(async (currentUserId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${workspaceId}/roles/members/${currentUserId}`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const role = await response.json();
+        if (role) {
+          setUserRole(role);
+          if (role.permissions) {
+            setPermissions(role.permissions);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user role:', error);
+    }
+  }, [workspaceId]);
 
   const fetchWorkspace = useCallback(async () => {
     try {
@@ -42,13 +75,18 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataProps): UseWor
       if (!response.ok) throw new Error('Failed to fetch workspace');
       const data = await response.json();
       setWorkspace(data);
+
+      // [Fix] 역할/권한도 함께 갱신
+      if (user?.id) {
+        fetchUserRole(user.id);
+      }
     } catch (error) {
       console.error('Error fetching workspace:', error);
       toast.error('워크스페이스를 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, user?.id, fetchUserRole]);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -64,10 +102,26 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataProps): UseWor
       }
       const data = await response.json();
       setUser(data);
+      return data; // Return user to chain
     } catch (error) {
       console.error('Error fetching user:', error);
+      return null;
     }
   }, [router]);
+
+  // Initial load
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      await fetchWorkspace();
+      const userData = await fetchUser();
+      if (userData && mounted) {
+        await fetchUserRole(userData.id);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [fetchWorkspace, fetchUser, fetchUserRole]);
 
   const updateWorkspace = useCallback(async (data: {
     name?: string;
@@ -118,6 +172,8 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataProps): UseWor
   return {
     workspace,
     user,
+    userRole,
+    permissions,
     isOwner,
     isLoading,
     fetchWorkspace,

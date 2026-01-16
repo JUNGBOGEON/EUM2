@@ -11,6 +11,8 @@ import { Workspace } from './entities/workspace.entity';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { User } from '../users/entities/user.entity';
 import { WorkspaceEventTypesService } from './workspace-event-types.service';
+import { WorkspaceRolesService } from './workspace-roles.service';
+import { WorkspaceMemberRole } from './entities/workspace-member-role.entity';
 
 @Injectable()
 export class WorkspacesService {
@@ -19,9 +21,13 @@ export class WorkspacesService {
     private workspacesRepository: Repository<Workspace>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(WorkspaceMemberRole) // Inject member role repo
+    private memberRoleRepository: Repository<WorkspaceMemberRole>,
     @Inject(forwardRef(() => WorkspaceEventTypesService))
     private eventTypesService: WorkspaceEventTypesService,
-  ) {}
+    @Inject(forwardRef(() => WorkspaceRolesService))
+    private rolesService: WorkspaceRolesService,
+  ) { }
 
   async create(
     createWorkspaceDto: CreateWorkspaceDto,
@@ -36,6 +42,13 @@ export class WorkspacesService {
 
     // 기본 이벤트 타입 생성
     await this.eventTypesService.createDefaultTypes(savedWorkspace.id, ownerId);
+
+    // [Fix] 기본 역할 초기화 및 오너에게 관리자 역할 부여
+    const roles = await this.rolesService.initializeDefaultRoles(savedWorkspace.id);
+    const adminRole = roles.find(r => r.name === '관리자');
+    if (adminRole) {
+      await this.rolesService.assignRole(savedWorkspace.id, ownerId, adminRole.id);
+    }
 
     return savedWorkspace;
   }
@@ -81,9 +94,29 @@ export class WorkspacesService {
       where: { id },
       relations: ['owner', 'members'],
     });
+
     if (!workspace) {
       throw new NotFoundException(`Workspace with ID ${id} not found`);
     }
+
+    // [Fix] 멤버들의 역할 정보 함께 조회하여 주입
+    const memberRoles = await this.memberRoleRepository.find({
+      where: { workspaceId: id },
+    });
+
+    const roleMap = new Map<string, string>();
+    memberRoles.forEach((mr) => {
+      roleMap.set(mr.userId, mr.roleId);
+    });
+
+    if (workspace.members) {
+      workspace.members = workspace.members.map((member) => {
+        const roleId = roleMap.get(member.id);
+        // User 엔티티에 roleId 필드가 없으므로 강제 주입 (프론트엔드에서 사용)
+        return { ...member, roleId } as any;
+      });
+    }
+
     return workspace;
   }
 

@@ -1,26 +1,38 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { FolderOpen, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useCallback, useEffect } from 'react';
+import { Calendar, Inbox, Settings } from 'lucide-react';
 import {
-  SidebarInset,
-  SidebarProvider,
-} from '@/components/ui/sidebar';
-import {
-  AppSidebar,
-  WorkspaceCard,
+  AppNavigation,
+  WorkspaceGlassList,
+  WorkspacePreviewDeck,
   EditDialog,
   LeaveDialog,
   DeleteDialog,
   CreateWorkspaceModal,
+  GlobalCalendar,
+  GlobalArchives,
+  type TabType,
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
 import { useInvitations } from './_hooks/use-invitations';
-import { useLanguage } from '@/contexts/LanguageContext';
+
+// Placeholder View Component
+const PlaceholderView = ({ title, icon: Icon, desc }: { title: string, icon: any, desc: string }) => (
+  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-black/50 animate-in fade-in zoom-in-95 duration-300">
+    <div className="w-20 h-20 rounded-full bg-neutral-900 border border-white/5 flex items-center justify-center mb-6">
+      <Icon className="text-white/20" size={32} />
+    </div>
+    <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
+    <p className="text-neutral-500 max-w-sm text-center">{desc}</p>
+  </div>
+);
 
 export default function WorkspacesPage() {
+  const [activeTab, setActiveTab] = useState<TabType>('workspaces');
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  // View State for Master-Detail
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
 
   const {
     workspaces,
@@ -57,129 +69,104 @@ export default function WorkspacesPage() {
     isLoading: isLoadingInvitations,
   } = useInvitations({ userId: user?.id });
 
+  // Auto-select first workspace on load if none selected
+  useEffect(() => {
+    if (workspaces.length > 0 && !selectedPreviewId) {
+      setSelectedPreviewId(workspaces[0].id);
+    }
+  }, [workspaces, selectedPreviewId]);
+
   // 초대 수락 후 워크스페이스 목록 갱신
   const handleAcceptInvitation = useCallback(async (invitationId: string) => {
     await acceptInvitation(invitationId);
     await refreshWorkspaces();
   }, [acceptInvitation, refreshWorkspaces]);
 
-  const { t } = useLanguage();
+  // Find the full workspace object for the preview deck
+  const currentPreviewWorkspace = workspaces.find(w => w.id === selectedPreviewId) || null;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        <div className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar
+    <div className="flex h-screen bg-black text-white font-sans overflow-hidden selection:bg-white/20">
+
+      {/* 1. SPA Sidebar */}
+      <AppNavigation
         user={user}
         onLogout={handleLogout}
         invitations={pendingInvitations}
-        isLoadingInvitations={isLoadingInvitations}
-        onAcceptInvitation={handleAcceptInvitation}
-        onRejectInvitation={rejectInvitation}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
-      <SidebarInset>
-        <div className="flex flex-1 flex-col">
-          <div className="flex-1 overflow-auto">
-            <div className="max-w-[1200px] mx-auto p-8 pt-14">
-              {/* Welcome Header */}
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h1 className="text-3xl font-bold text-foreground">
-                    {t('workspaces.welcome').replace('{name}', user?.name || '')}
-                  </h1>
-                  <p className="text-muted-foreground mt-1">{t('workspaces.greeting')}</p>
-                </div>
-                <Button
-                  onClick={() => setCreateModalOpen(true)}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t('workspaces.create_new')}
-                </Button>
-              </div>
+      {/* 2. Master-Detail Split View (Workspaces Tab) */}
+      {activeTab === 'workspaces' && (
+        <div className="flex-1 flex animate-in fade-in duration-500">
 
-              {/* Empty State or Workspace Grid */}
-              {workspaces.length === 0 ? (
-                <div className="border border-dashed border-border rounded-xl p-16 text-center bg-card/50">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <FolderOpen className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
-                    {t('workspaces.no_workspaces')}
-                  </h3>
-                  <p className="text-muted-foreground mb-6">
-                    {t('workspaces.empty_guide')}
-                  </p>
-                  <Button
-                    onClick={() => setCreateModalOpen(true)}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('workspaces.create_first')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {workspaces.map((workspace) => (
-                    <WorkspaceCard
-                      key={workspace.id}
-                      workspace={workspace}
-                      user={user}
-                      onEdit={openEditDialog}
-                      onDelete={openDeleteDialog}
-                      onLeave={openLeaveDialog}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Left Panel: The List (Glass List) */}
+          <aside className="w-[320px] xl:w-[380px] border-r border-white/5 bg-neutral-900/30 flex-shrink-0">
+            <WorkspaceGlassList
+              workspaces={workspaces}
+              selectedId={selectedPreviewId}
+              onSelect={setSelectedPreviewId}
+              onCreate={() => setCreateModalOpen(true)}
+            />
+          </aside>
+
+          {/* Right Panel: The Deck (Preview) */}
+          <main className="flex-1 relative bg-neutral-900/10 min-w-0">
+            <WorkspacePreviewDeck
+              workspace={currentPreviewWorkspace}
+              onEnter={(id) => window.location.href = `/workspaces/${id}`}
+              onEdit={openEditDialog}
+            />
+          </main>
+
         </div>
-      </SidebarInset>
+      )}
 
-      {/* Create Workspace Modal */}
+      {/* 3. Global Calendar Tab */}
+      {activeTab === 'calendar' && (
+        <div className="flex-1 p-0 animate-in zoom-in-95 duration-500">
+          <GlobalCalendar />
+        </div>
+      )}
+      {activeTab === 'notifications' && (
+        <div className="flex-1 p-0 animate-in zoom-in-95 duration-500">
+          <GlobalArchives />
+        </div>
+      )}
+      {activeTab === 'settings' && (
+        <PlaceholderView title="설정" icon={Settings} desc="Settings View" />
+      )}
+
+      {/* Modals */}
       <CreateWorkspaceModal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onSuccess={refreshWorkspaces}
       />
-
-      {/* Dialogs */}
       <EditDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        editName={editName}
-        editDescription={editDescription}
-        onEditNameChange={setEditName}
-        onEditDescriptionChange={setEditDescription}
-        onSubmit={handleEditSubmit}
-        isSubmitting={isSubmitting}
+        open={editDialogOpen} onOpenChange={setEditDialogOpen}
+        editName={editName} onEditNameChange={setEditName}
+        editDescription={editDescription} onEditDescriptionChange={setEditDescription}
+        onSubmit={handleEditSubmit} isSubmitting={isSubmitting}
       />
-
       <LeaveDialog
-        open={leaveDialogOpen}
-        onOpenChange={setLeaveDialogOpen}
-        workspace={selectedWorkspace}
-        onLeave={handleLeave}
-        isSubmitting={isSubmitting}
+        open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}
+        workspace={selectedWorkspace} onLeave={handleLeave} isSubmitting={isSubmitting}
       />
-
       <DeleteDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        workspace={selectedWorkspace}
-        deleteConfirmName={deleteConfirmName}
-        onDeleteConfirmNameChange={setDeleteConfirmName}
-        onDelete={handleDelete}
-        isSubmitting={isSubmitting}
+        open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}
+        workspace={selectedWorkspace} deleteConfirmName={deleteConfirmName}
+        onDeleteConfirmNameChange={setDeleteConfirmName} onDelete={handleDelete} isSubmitting={isSubmitting}
       />
-    </SidebarProvider>
+    </div>
   );
 }

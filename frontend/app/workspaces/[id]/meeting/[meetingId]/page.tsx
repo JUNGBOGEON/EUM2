@@ -221,16 +221,7 @@ function MeetingRoomContent() {
     userId,
   });
 
-  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
-  const {
-    originalVolume,
-    setOriginalVolume,
-    isFading: isOriginalVolumeFading,
-  } = useOriginalAudioVolume({
-    translationEnabled,
-  });
-
-  // TTS hook (번역된 자막 음성 재생)
+  // TTS hook (번역된 자막 음성 재생) - Original Audio Volume보다 먼저 호출
   const {
     ttsEnabled,
     isTogglingTTS,
@@ -244,6 +235,15 @@ function MeetingRoomContent() {
   } = useTTS({
     meetingId,
     userId,
+  });
+
+  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
+  const {
+    targetVolume: originalVolume,
+    setTargetVolume: setOriginalVolume,
+    isFading: isOriginalVolumeFading,
+  } = useOriginalAudioVolume({
+    translationEnabled,
   });
 
   // Voice Focus hook (노이즈 억제 - 기본 활성화)

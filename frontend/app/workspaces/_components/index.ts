@@ -1,4 +1,10 @@
-export { AppSidebar } from './app-sidebar';
-export { WorkspaceCard } from './workspace-card';
-export { EditDialog, LeaveDialog, DeleteDialog } from './workspace-dialogs';
+export { AppNavigation, type TabType } from './app-navigation';
+export { WorkspaceGlassList } from './workspace-glass-list';
+export { WorkspacePreviewDeck } from './workspace-preview-deck';
+export { EditDialog } from './edit-dialog';
+export { LeaveDialog, DeleteDialog } from './workspace-dialogs-standard';
 export { CreateWorkspaceModal } from './create-workspace-modal';
+export { GlobalCalendar } from './global-calendar';
+export { GlobalArchives } from './global-archives';
+export { WorkspaceRow } from './workspace-row';
+export { WorkspaceMonolith } from './workspace-monolith';

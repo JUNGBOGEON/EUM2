@@ -9,6 +9,10 @@ import {
 } from 'typeorm';
 import { MeetingSession } from '../../entities/meeting-session.entity';
 import { User } from '../../../users/entities/user.entity';
+import {
+    encryptedTextTransformer,
+    encryptedJsonTransformer,
+} from '../../../common/crypto';
 
 @Entity('meeting_chat_messages')
 export class MeetingChatMessage {
@@ -29,15 +33,16 @@ export class MeetingChatMessage {
     @JoinColumn({ name: 'senderId' })
     sender: User;
 
-    @Column('text')
-    content: string; // Original content
+    // 채팅 내용 (암호화됨)
+    @Column({ type: 'text', transformer: encryptedTextTransformer })
+    content: string;
 
     @Column()
     sourceLanguage: string;
 
-    // Stores translated versions of the content
+    // 번역된 메시지 (암호화된 JSON)
     // Structure: { "en": "Hello", "ko": "안녕하세요" }
-    @Column('jsonb', { default: {} })
+    @Column({ type: 'text', default: '{}', transformer: encryptedJsonTransformer })
     translations: Record<string, string>;
 
     @CreateDateColumn()

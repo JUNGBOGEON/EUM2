@@ -9,13 +9,15 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Channel } from './channel.entity';
+import { encryptedTextTransformer } from '../../common/crypto';
 
 @Entity('messages')
 export class Message {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column('text')
+    // 메시지 내용 (암호화됨)
+    @Column({ type: 'text', transformer: encryptedTextTransformer })
     content: string;
 
     @ManyToOne(() => User, { onDelete: 'CASCADE' })

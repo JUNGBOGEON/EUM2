@@ -13,6 +13,7 @@ import { ChatModule } from './chat/chat.module';
 import { HealthModule } from './health/health.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { EncryptionModule } from './common/crypto';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { join } from 'path';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    EncryptionModule, // 필드 레벨 암호화 (AES-256-GCM)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

@@ -35,7 +35,6 @@ export class RenderManager {
     public ghostLayer: PIXI.Container;
     public effectLayer: PIXI.Container; // New Layer for Effects
     public cursorLayer: PIXI.Container;
-    public effectLayer: PIXI.Container;
     private activeEffects: { update: (dt: number) => boolean }[] = [];
     public width: number;
     public height: number;
@@ -49,9 +48,6 @@ export class RenderManager {
     private destroyed: boolean = false;
     public currentZoom: number = 1;
     private selectionOverride: { cx: number, cy: number, w: number, h: number, rotation: number } | null = null;
-
-    // Animation Effects
-    private activeEffects: { update: (dt: number) => boolean }[] = [];
 
     // User Color Management
     private userColors: Map<string, number> = new Map();

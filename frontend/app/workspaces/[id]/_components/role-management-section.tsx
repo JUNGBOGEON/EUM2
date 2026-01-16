@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 interface RoleManagementSectionProps {
     workspaceId: string;
     isOwner: boolean;
+    canManagePermissions?: boolean; // [Fix] 권한 관리 권한이 있는 유저도 접근 가능
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -37,6 +38,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 export function RoleManagementSection({
     workspaceId,
     isOwner,
+    canManagePermissions = false,
 }: RoleManagementSectionProps) {
     const { t } = useLanguage();
     const [roles, setRoles] = useState<WorkspaceRole[]>([]);
@@ -153,7 +155,8 @@ export function RoleManagementSection({
         return Object.values(role.permissions).filter(Boolean).length;
     };
 
-    if (!isOwner) {
+    // [Fix] 오너 또는 권한 관리 권한이 있는 사용자만 접근 가능
+    if (!isOwner && !canManagePermissions) {
         return null;
     }
 

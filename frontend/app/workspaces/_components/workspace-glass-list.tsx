@@ -4,6 +4,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Workspace } from '../_lib/types';
 import Image from 'next/image';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface WorkspaceGlassListProps {
     workspaces: Workspace[];
@@ -13,12 +14,13 @@ interface WorkspaceGlassListProps {
 }
 
 export function WorkspaceGlassList({ workspaces, selectedId, onSelect, onCreate }: WorkspaceGlassListProps) {
+    const { t } = useLanguage();
 
     return (
         <div className="w-full h-full flex flex-col">
             {/* Header */}
             <div className="h-20 px-6 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-10">
-                <h2 className="text-sm font-bold text-white tracking-widest uppercase">워크스페이스</h2>
+                <h2 className="text-sm font-bold text-white tracking-widest uppercase">{t('workspaces.title')}</h2>
                 <button
                     onClick={onCreate}
                     className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white"

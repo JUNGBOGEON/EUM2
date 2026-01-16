@@ -6,5 +6,6 @@ export { LeaveDialog, DeleteDialog } from './workspace-dialogs-standard';
 export { CreateWorkspaceModal } from './create-workspace-modal';
 export { GlobalCalendar } from './global-calendar';
 export { GlobalArchives } from './global-archives';
+export { GlobalSettings } from './global-settings';
 export { WorkspaceRow } from './workspace-row';
 export { WorkspaceMonolith } from './workspace-monolith';

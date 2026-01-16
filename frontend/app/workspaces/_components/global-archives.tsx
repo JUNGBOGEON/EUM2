@@ -1,23 +1,31 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Inbox, FileText, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, enUS, zhCN, ja } from 'date-fns/locale';
 import { meetingsApi } from '@/lib/api';
 import type { MeetingSession } from '@/lib/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface GlobalArchivesProps {
     onSessionClick?: (session: MeetingSession) => void;
 }
 
 export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
+    const { language, t } = useLanguage();
     const [sessions, setSessions] = useState<MeetingSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+    // Locale mapping for date-fns
+    const locale = useMemo(() => {
+        const locales = { ko, en: enUS, 'zh-CN': zhCN, ja };
+        return locales[language as keyof typeof locales] || ko;
+    }, [language]);
 
     // Fetch Archives using the centralized API
     const fetchArchives = useCallback(async () => {
@@ -33,7 +41,7 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
             console.log('[GlobalArchives] Fetched archives:', sessionsArray.length);
         } catch (err) {
             console.error('[GlobalArchives] Failed to fetch archives:', err);
-            setError(err instanceof Error ? err.message : '회의록을 불러오는데 실패했습니다.');
+            setError(err instanceof Error ? err.message : t('archives.error'));
             setSessions([]);
         } finally {
             setLoading(false);
@@ -63,7 +71,7 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                         onClick={fetchArchives}
                         className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
                     >
-                        다시 시도
+                        {t('common.retry')}
                     </button>
                 </div>
             </div>
@@ -81,16 +89,16 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                             <Inbox size={20} className="text-indigo-400" />
-                            회의록 보관함
+                            {t('archives.title')}
                         </h2>
-                        <span className="text-xs font-mono text-neutral-500">{filteredSessions.length}개의 기록</span>
+                        <span className="text-xs font-mono text-neutral-500">{t('archives.count').replace('{count}', String(filteredSessions.length))}</span>
                     </div>
 
                     <div className="relative group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-white transition-colors" size={16} />
                         <input
                             type="text"
-                            placeholder="회의 제목 또는 워크스페이스 검색..."
+                            placeholder={t('archives.search_placeholder')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-white/30 focus:bg-black/80 transition-all placeholder:text-neutral-600"
@@ -105,7 +113,7 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                             <Loader2 className="w-8 h-8 text-white/40 animate-spin" />
                         </div>
                     ) : filteredSessions.length === 0 ? (
-                        <div className="p-8 text-center text-neutral-600 text-sm">기록이 없습니다.</div>
+                        <div className="p-8 text-center text-neutral-600 text-sm">{t('archives.no_records')}</div>
                     ) : (
                         filteredSessions.map((session) => (
                             <button
@@ -126,10 +134,10 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                                         </span>
                                     </div>
                                     <h3 className={`font-bold text-sm mb-1 line-clamp-1 ${selectedSessionId === session.id ? 'text-white' : 'text-neutral-300 group-hover:text-white'}`}>
-                                        {session.title || '제목 없음'}
+                                        {session.title || t('archives.no_title')}
                                     </h3>
                                     <p className="text-xs text-neutral-500 line-clamp-2 leading-relaxed">
-                                        {session.summaryStatus === 'completed' ? 'AI 요약이 완료되었습니다. 클릭하여 확인하세요.' : '종료된 회의입니다.'}
+                                        {session.summaryStatus === 'completed' ? t('archives.summary_completed') : t('archives.meeting_ended')}
                                     </p>
                                 </div>
 
@@ -156,19 +164,19 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                                     </span>
                                     <span className="text-neutral-500 text-sm flex items-center gap-1.5">
                                         <Calendar size={14} />
-                                        {format(new Date(selectedSession.startedAt || selectedSession.createdAt), 'PPP p', { locale: ko })}
+                                        {format(new Date(selectedSession.startedAt || selectedSession.createdAt), 'PPP p', { locale })}
                                     </span>
                                 </div>
                                 <h1 className="text-4xl font-black text-white leading-tight">
-                                    {selectedSession.title || '제목 없는 회의'}
+                                    {selectedSession.title || t('archives.untitled_meeting')}
                                 </h1>
                                 <div className="flex items-center gap-4 text-sm text-neutral-400">
                                     <span className="flex items-center gap-2">
                                         <Clock size={16} />
-                                        {selectedSession.durationSec ? `${Math.floor(selectedSession.durationSec / 60)}분` : '시간 정보 없음'}
+                                        {selectedSession.durationSec ? t('archives.duration').replace('{min}', String(Math.floor(selectedSession.durationSec / 60))) : t('archives.no_duration')}
                                     </span>
                                     <span className="w-1 h-1 rounded-full bg-neutral-700" />
-                                    <span>참여자 {selectedSession.participants?.length || 0}명</span>
+                                    <span>{t('archives.participants').replace('{count}', String(selectedSession.participants?.length || 0))}</span>
                                 </div>
                             </div>
 
@@ -182,29 +190,29 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                                     className="px-6 py-3 bg-white text-black font-bold rounded-xl flex items-center gap-2 hover:bg-neutral-200 transition-colors"
                                 >
                                     <FileText size={18} />
-                                    회의록 상세 보기
+                                    {t('archives.view_detail')}
                                 </button>
                             </div>
 
                             {/* Preview Content */}
                             <div className="prose prose-invert prose-neutral max-w-none">
                                 <p className="text-lg text-neutral-300 leading-relaxed">
-                                    이 회의는 <strong>{format(new Date(selectedSession.startedAt || selectedSession.createdAt), 'PPP')}</strong>에 진행되었습니다.
+                                    {t('archives.meeting_date').replace('{date}', format(new Date(selectedSession.startedAt || selectedSession.createdAt), 'PPP', { locale }))}
                                     <br />
-                                    상세한 회의록과 AI 요약을 확인하려면 상단의 '회의록 상세 보기' 버튼을 클릭하세요.
+                                    {t('archives.view_detail_desc')}
                                 </p>
 
                                 <div className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/5">
                                     <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                         <Inbox size={20} />
-                                        회의 개요
+                                        {t('archives.meeting_overview')}
                                     </h3>
                                     <ul className="space-y-2 text-neutral-400 list-disc list-inside">
-                                        <li>워크스페이스: {selectedSession.workspace?.name}</li>
-                                        <li>호스트: {selectedSession.host?.name || '알 수 없음'}</li>
-                                        <li>상태: {selectedSession.status === 'ended' ? '종료됨' : selectedSession.status}</li>
+                                        <li>{t('archives.workspace')}: {selectedSession.workspace?.name}</li>
+                                        <li>{t('archives.host')}: {selectedSession.host?.name || t('common.unknown')}</li>
+                                        <li>{t('archives.status')}: {selectedSession.status === 'ended' ? t('archives.status_ended') : selectedSession.status}</li>
                                         {selectedSession.summaryStatus && (
-                                            <li>AI 요약: {selectedSession.summaryStatus === 'completed' ? '완료' : selectedSession.summaryStatus === 'pending' ? '생성 중' : '미생성'}</li>
+                                            <li>{t('archives.ai_summary')}: {selectedSession.summaryStatus === 'completed' ? t('archives.summary_done') : selectedSession.summaryStatus === 'pending' ? t('archives.summary_pending') : t('archives.summary_none')}</li>
                                         )}
                                     </ul>
                                 </div>
@@ -215,7 +223,7 @@ export function GlobalArchives({ onSessionClick }: GlobalArchivesProps) {
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-neutral-600">
                         <Inbox size={48} className="mb-4 opacity-50" />
-                        <p>회의록을 선택하여 상세 내용을 확인하세요</p>
+                        <p>{t('archives.select_to_view')}</p>
                     </div>
                 )}
             </div>

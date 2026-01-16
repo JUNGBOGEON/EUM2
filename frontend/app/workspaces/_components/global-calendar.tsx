@@ -1,22 +1,62 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, enUS, zhCN, ja } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, AlertCircle } from 'lucide-react';
 import { meetingsApi } from '@/lib/api';
 import type { WorkspaceEvent } from '@/lib/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface GlobalCalendarProps {
     onEventClick?: (event: WorkspaceEvent) => void;
 }
 
 export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
+    const { language, t } = useLanguage();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [events, setEvents] = useState<WorkspaceEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Locale mapping for date-fns
+    const locale = useMemo(() => {
+        const locales = { ko, en: enUS, 'zh-CN': zhCN, ja };
+        return locales[language as keyof typeof locales] || ko;
+    }, [language]);
+
+    // Day names for each language
+    const dayNames = useMemo(() => {
+        const days = {
+            ko: ['일', '월', '화', '수', '목', '금', '토'],
+            en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+            'zh-CN': ['日', '一', '二', '三', '四', '五', '六'],
+            ja: ['日', '月', '火', '水', '木', '金', '土'],
+        };
+        return days[language as keyof typeof days] || days.ko;
+    }, [language]);
+
+    // Date format patterns for each language
+    const dateFormat = useMemo(() => {
+        const formats = {
+            ko: 'yyyy년 M월',
+            en: 'MMMM yyyy',
+            'zh-CN': 'yyyy年 M月',
+            ja: 'yyyy年 M月',
+        };
+        return formats[language as keyof typeof formats] || formats.ko;
+    }, [language]);
+
+    const dateSidebarFormat = useMemo(() => {
+        const formats = {
+            ko: 'M월 d일 (EEE)',
+            en: 'MMM d (EEE)',
+            'zh-CN': 'M月 d日 (EEE)',
+            ja: 'M月 d日 (EEE)',
+        };
+        return formats[language as keyof typeof formats] || formats.ko;
+    }, [language]);
 
     // Fetch events using the centralized API
     const fetchCalendar = useCallback(async () => {
@@ -30,7 +70,7 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
             console.log('[GlobalCalendar] Fetched events:', eventList.length);
         } catch (err) {
             console.error('[GlobalCalendar] Failed to fetch calendar:', err);
-            setError(err instanceof Error ? err.message : '캘린더를 불러오는데 실패했습니다.');
+            setError(err instanceof Error ? err.message : t('calendar.error'));
             setEvents([]);
         } finally {
             setLoading(false);
@@ -71,7 +111,7 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
                         onClick={fetchCalendar}
                         className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
                     >
-                        다시 시도
+                        {t('common.retry') || '다시 시도'}
                     </button>
                 </div>
             </div>
@@ -87,14 +127,14 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-8">
                     <h2 className="text-2xl font-bold text-white tracking-tight">
-                        {format(currentDate, 'yyyy년 M월', { locale: ko })}
+                        {format(currentDate, dateFormat, { locale })}
                     </h2>
                     <div className="flex items-center gap-2">
                         <button onClick={prevMonth} className="p-2 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors">
                             <ChevronLeft size={20} />
                         </button>
                         <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1 text-xs font-mono border border-white/10 rounded-full hover:bg-white/5 text-white/60 hover:text-white">
-                            오늘
+                            {t('calendar.today')}
                         </button>
                         <button onClick={nextMonth} className="p-2 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors">
                             <ChevronRight size={20} />
@@ -104,7 +144,7 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
 
                 {/* Grid Days Header */}
                 <div className="grid grid-cols-7 mb-4">
-                    {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
+                    {dayNames.map((day, i) => (
                         <div key={day} className={`text-center text-sm font-medium ${i === 0 ? 'text-rose-500' : 'text-neutral-500'}`}>
                             {day}
                         </div>
@@ -163,13 +203,13 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
             <div className="w-full md:w-[320px] xl:w-[360px] bg-neutral-900/30 p-6 flex flex-col overflow-y-auto">
                 <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                     <CalendarIcon size={14} />
-                    <span>{format(selectedDate, 'M월 d일 (EEE)', { locale: ko })} 일정</span>
+                    <span>{format(selectedDate, dateSidebarFormat, { locale })} {t('calendar.schedule')}</span>
                 </h3>
 
                 {selectedDayEvents.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-neutral-600 opacity-60">
                         <CalendarIcon size={40} className="mb-4 text-neutral-700" />
-                        <p className="text-sm">일정이 없습니다</p>
+                        <p className="text-sm">{t('calendar.no_events')}</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -184,20 +224,20 @@ export function GlobalCalendar({ onEventClick }: GlobalCalendarProps) {
                                         px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider
                                         ${event.isAllDay ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/20 text-emerald-400'}
                                     `}>
-                                        {event.isAllDay ? '종일' : '예정'}
+                                        {event.isAllDay ? t('calendar.all_day') : t('calendar.scheduled')}
                                     </span>
                                     <span className="text-xs text-neutral-500 font-mono">
-                                        {event.isAllDay ? 'All Day' : format(new Date(event.startTime), 'p', { locale: ko })}
+                                        {event.isAllDay ? t('calendar.all_day') : format(new Date(event.startTime), 'p', { locale })}
                                     </span>
                                 </div>
                                 <h4 className="text-white font-bold text-base mb-1 truncate group-hover:text-indigo-400 transition-colors">
-                                    {event.title || '제목 없음'}
+                                    {event.title || t('calendar.no_title')}
                                 </h4>
                                 <div className="flex items-center gap-2 text-xs text-neutral-500 mb-3">
                                     <span className="text-neutral-400">{event.workspace?.name}</span>
                                     <span>•</span>
                                     <span className="flex items-center gap-1">
-                                        작성자: {event.createdBy?.name || '알 수 없음'}
+                                        {t('calendar.created_by')}: {event.createdBy?.name || t('common.unknown')}
                                     </span>
                                 </div>
 

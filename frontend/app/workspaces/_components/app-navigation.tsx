@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { LogOut, LayoutGrid, Calendar, Inbox, Bell, Settings } from 'lucide-react';
 import type { UserInfo } from '../_lib/types';
 import type { WorkspaceInvitation } from '../_hooks/use-invitations';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Define the available tabs
 export type TabType = 'workspaces' | 'calendar' | 'notifications' | 'settings';
@@ -18,10 +19,10 @@ interface AppNavigationProps {
 }
 
 const NAV_ITEMS = [
-    { label: '워크스페이스', icon: LayoutGrid, id: 'workspaces' as TabType },
-    { label: '캘린더', icon: Calendar, id: 'calendar' as TabType },
-    { label: '회의록', icon: Inbox, id: 'notifications' as TabType },
-    { label: '설정', icon: Settings, id: 'settings' as TabType },
+    { labelKey: 'workspaces.title', icon: LayoutGrid, id: 'workspaces' as TabType },
+    { labelKey: 'menu.calendar', icon: Calendar, id: 'calendar' as TabType },
+    { labelKey: 'archives.title', icon: Inbox, id: 'notifications' as TabType },
+    { labelKey: 'menu.settings', icon: Settings, id: 'settings' as TabType },
 ];
 
 export function AppNavigation({
@@ -31,6 +32,7 @@ export function AppNavigation({
     activeTab,
     onTabChange,
 }: AppNavigationProps) {
+    const { t } = useLanguage();
 
     return (
         <nav className="w-[80px] lg:w-[260px] h-screen bg-black flex flex-col border-r border-white/5 flex-shrink-0 transition-all duration-300">
@@ -65,7 +67,7 @@ export function AppNavigation({
               `}
                         >
                             <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
-                            <span className="hidden lg:block text-[14px]">{item.label}</span>
+                            <span className="hidden lg:block text-[14px]">{t(item.labelKey)}</span>
 
                             {badgeCount > 0 && item.id === 'notifications' && (
                                 <span className="ml-auto hidden lg:flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">

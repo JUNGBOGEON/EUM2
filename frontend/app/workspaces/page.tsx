@@ -12,6 +12,7 @@ import {
   CreateWorkspaceModal,
   GlobalCalendar,
   GlobalArchives,
+  GlobalSettings,
   type TabType,
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
@@ -143,7 +144,7 @@ export default function WorkspacesPage() {
         </div>
       )}
       {activeTab === 'settings' && (
-        <PlaceholderView title="설정" icon={Settings} desc="Settings View" />
+        <GlobalSettings />
       )}
 
       {/* Modals */}

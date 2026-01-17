@@ -227,13 +227,15 @@ export function useWhiteboardDrawing(
         let y = filterY.current.filter(rawPoint.y);
 
         // Preview Ghost Updates
-        if (currentTool === 'stamp') {
-            renderManager.renderGhost('stamp', x, y, 0, 0, { stampType: currentStamp });
+        // Note: When mouse button is pressed (e.buttons & 1), useWhiteboardInteraction handles stamp preview
+        // with its own animate loop (grow effect). Skip here to avoid size conflict.
+        if (currentTool === 'stamp' && !(e.buttons & 1)) {
+            renderManager.renderGhost('stamp', x, y, 100, 100, { stampType: currentStamp });
         } else if (currentTool === 'image' && pendingImage) {
             renderManager.renderGhost('image', x, y, pendingImage.width, pendingImage.height, { url: pendingImage.url });
         } else if (currentTool === 'postit') {
             renderManager.renderGhost('postit', x, y, 200, 200);
-        } else {
+        } else if (currentTool !== 'stamp') {
             renderManager.renderGhost(null, 0, 0);
         }
 

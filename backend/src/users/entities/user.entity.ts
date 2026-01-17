@@ -25,6 +25,16 @@ export class User {
   @Column({ nullable: true })
   profileImage: string;
 
+  // Voice enrollment fields (OpenVoice V2)
+  @Column({ nullable: true })
+  voiceEmbeddingS3Key: string; // S3 key: "voice-embeddings/{userId}.pth"
+
+  @Column({ default: false })
+  voiceDubbingEnabled: boolean; // Whether user has enabled voice dubbing
+
+  @Column({ type: 'timestamp', nullable: true })
+  voiceEnrolledAt: Date; // When voice was enrolled
+
   @OneToMany(() => Workspace, (workspace) => workspace.owner)
   workspaces: Workspace[];
 

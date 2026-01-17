@@ -61,6 +61,9 @@ interface MeetingControlsProps {
   // Original Audio Volume
   originalVolume?: number;
   isOriginalVolumeFading?: boolean;
+  // Voice dubbing (내 목소리)
+  hasVoiceEmbedding?: boolean;
+  voiceDubbingEnabled?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -98,6 +101,8 @@ export function MeetingControls({
   delayMs = 1500,
   originalVolume = 0,
   isOriginalVolumeFading = false,
+  hasVoiceEmbedding = false,
+  voiceDubbingEnabled = false,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
@@ -208,6 +213,8 @@ export function MeetingControls({
             originalVolume={originalVolume}
             isOriginalVolumeFading={isOriginalVolumeFading}
             onSetOriginalVolume={onSetOriginalVolume}
+            hasVoiceEmbedding={hasVoiceEmbedding}
+            voiceDubbingEnabled={voiceDubbingEnabled}
           />
         )}
 

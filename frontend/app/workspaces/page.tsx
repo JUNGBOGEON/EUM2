@@ -13,6 +13,7 @@ import {
   GlobalCalendar,
   GlobalArchives,
   GlobalSettings,
+  InvitationNotifications,
   type TabType,
 } from './_components';
 import { useWorkspaces } from './_hooks/use-workspaces';
@@ -102,6 +103,9 @@ export default function WorkspacesPage() {
         user={user}
         onLogout={handleLogout}
         invitations={pendingInvitations}
+        isLoadingInvitations={isLoadingInvitations}
+        onAcceptInvitation={handleAcceptInvitation}
+        onRejectInvitation={rejectInvitation}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />

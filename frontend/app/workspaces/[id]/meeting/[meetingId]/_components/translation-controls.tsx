@@ -13,11 +13,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -46,6 +41,9 @@ interface TranslationControlsProps {
   originalVolume: number;
   isOriginalVolumeFading?: boolean;
   onSetOriginalVolume: (volume: number) => void;
+  // Voice dubbing (내 목소리)
+  hasVoiceEmbedding?: boolean;
+  voiceDubbingEnabled?: boolean;
 }
 
 export function TranslationControls({
@@ -63,54 +61,49 @@ export function TranslationControls({
   originalVolume,
   isOriginalVolumeFading = false,
   onSetOriginalVolume,
+  hasVoiceEmbedding = false,
+  voiceDubbingEnabled = false,
 }: TranslationControlsProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
     <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className={`h-12 px-3 rounded-full transition-colors gap-1.5 ${
-                translationEnabled
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className={`h-12 px-3 rounded-full transition-colors gap-1.5 relative ${
+            translationEnabled
+              ? 'bg-blue-500 hover:bg-blue-600 text-white'
+              : 'bg-white/10 hover:bg-white/20 text-white'
+          }`}
+        >
+          {isTogglingTranslation ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Languages className="h-5 w-5" />
+          )}
+          <span className="text-sm font-medium">번역</span>
+          <ChevronDown className="h-4 w-4 opacity-70" />
+          {/* TTS Playing indicator */}
+          {translationEnabled && ttsEnabled && isTTSPlaying && (
+            <Badge
+              variant="secondary"
+              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-green-500 text-white text-xs animate-pulse"
             >
-              {isTogglingTranslation ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Languages className="h-5 w-5" />
-              )}
-              <span className="text-sm font-medium">번역</span>
-              <ChevronDown className="h-4 w-4 opacity-70" />
-              {/* TTS Playing indicator */}
-              {translationEnabled && ttsEnabled && isTTSPlaying && (
-                <Badge
-                  variant="secondary"
-                  className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-green-500 text-white text-xs animate-pulse"
-                >
-                  <Volume2 className="h-3 w-3" />
-                </Badge>
-              )}
-              {/* Queue count */}
-              {translationEnabled && ttsEnabled && ttsQueueLength > 0 && !isTTSPlaying && (
-                <Badge
-                  variant="secondary"
-                  className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-blue-600 text-white text-xs"
-                >
-                  {ttsQueueLength > 9 ? '9+' : ttsQueueLength}
-                </Badge>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          <p>번역 설정</p>
-        </TooltipContent>
-      </Tooltip>
+              <Volume2 className="h-3 w-3" />
+            </Badge>
+          )}
+          {/* Queue count */}
+          {translationEnabled && ttsEnabled && ttsQueueLength > 0 && !isTTSPlaying && (
+            <Badge
+              variant="secondary"
+              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-blue-600 text-white text-xs"
+            >
+              {ttsQueueLength > 9 ? '9+' : ttsQueueLength}
+            </Badge>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
 
       <DropdownMenuContent
         className="w-64 bg-[#252525] border-white/10"
@@ -202,7 +195,7 @@ export function TranslationControls({
 
             <DropdownMenuSeparator className="bg-white/10" />
 
-            {/* Voice Settings */}
+            {/* Voice Settings - 내 목소리 설정 포함 */}
             <DropdownMenuItem
               className="flex items-center gap-2 px-3 py-2 text-white focus:bg-white/10 focus:text-white cursor-pointer"
               onClick={(e) => {
@@ -213,6 +206,11 @@ export function TranslationControls({
             >
               <Settings2 className="h-4 w-4 text-white/70" />
               <span className="text-sm">음성 설정</span>
+              {hasVoiceEmbedding && voiceDubbingEnabled && (
+                <Badge variant="secondary" className="ml-auto h-5 px-1.5 bg-purple-500/20 text-purple-400 text-xs">
+                  내 목소리
+                </Badge>
+              )}
             </DropdownMenuItem>
           </>
         )}

@@ -221,6 +221,50 @@ export class WorkspaceGateway
   }
 
   /**
+   * Generic room join handler
+   * Used by frontend for user-specific rooms (e.g., user:{userId})
+   */
+  @SubscribeMessage('joinRoom')
+  handleJoinRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { room: string },
+  ) {
+    const { room } = data || {};
+    if (!room) {
+      return { success: false, error: 'room is required' };
+    }
+
+    client.join(room);
+    const clientCount = this.broadcastService.getRoomClientCount(room);
+
+    this.logger.log(
+      `[joinRoom] Client ${client.id} joined room ${room}. Total clients: ${clientCount}`,
+    );
+
+    return { success: true, room };
+  }
+
+  /**
+   * Generic room leave handler
+   */
+  @SubscribeMessage('leaveRoom')
+  handleLeaveRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { room: string },
+  ) {
+    const { room } = data || {};
+    if (!room) {
+      return { success: false, error: 'room is required' };
+    }
+
+    client.leave(room);
+
+    this.logger.log(`[leaveRoom] Client ${client.id} left room ${room}`);
+
+    return { success: true, room };
+  }
+
+  /**
    * Debug ping handler
    */
   @SubscribeMessage('ping')
@@ -254,11 +298,11 @@ export class WorkspaceGateway
     this.broadcastService.sendInvitationNotification(userId, payload);
   }
 
-  sendTranslatedTranscript(
+  async sendTranslatedTranscript(
     userId: string,
     payload: TranslatedTranscriptPayload,
   ) {
-    this.broadcastService.sendTranslatedTranscript(userId, payload);
+    await this.broadcastService.sendTranslatedTranscript(userId, payload);
   }
 
   broadcastNewTranscript(sessionId: string, payload: NewTranscriptPayload) {
@@ -269,8 +313,8 @@ export class WorkspaceGateway
     this.broadcastService.broadcastLanguageChange(sessionId, payload);
   }
 
-  sendTTSReady(userId: string, payload: TTSReadyPayload) {
-    this.broadcastService.sendTTSReady(userId, payload);
+  async sendTTSReady(userId: string, payload: TTSReadyPayload) {
+    await this.broadcastService.sendTTSReady(userId, payload);
   }
 
   // ==========================================

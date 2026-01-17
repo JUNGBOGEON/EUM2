@@ -292,19 +292,20 @@ export function CommunicationPanel({
                             disabled={isChangingLanguage}
                         >
                             <SelectTrigger className="h-7 bg-white/5 border-white/10 text-white text-xs w-full">
-                                <div className="flex items-center gap-2 truncate">
-                                    <span>{currentLang?.flag}</span>
-                                    <span className="truncate">{currentLang?.name}</span>
-                                </div>
+                                <SelectValue placeholder="언어 선택" />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#252525] border-white/10 max-h-[200px]">
+                            <SelectContent
+                                className="bg-[#252525] border-white/10 max-h-[200px]"
+                                position="popper"
+                                sideOffset={5}
+                            >
                                 {TRANSCRIPTION_LANGUAGES.map((lang) => (
                                     <SelectItem
                                         key={lang.code}
                                         value={lang.code}
                                         className="text-white hover:bg-white/10 focus:bg-white/10 text-xs"
                                     >
-                                        {lang.flag} {lang.name} ('{lang.code}')
+                                        {lang.flag} {lang.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

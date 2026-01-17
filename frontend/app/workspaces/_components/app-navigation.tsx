@@ -6,6 +6,7 @@ import { LogOut, LayoutGrid, Calendar, Inbox, Bell, Settings } from 'lucide-reac
 import type { UserInfo } from '../_lib/types';
 import type { WorkspaceInvitation } from '../_hooks/use-invitations';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { InvitationNotifications } from './invitation-notifications';
 
 // Define the available tabs
 export type TabType = 'workspaces' | 'calendar' | 'notifications' | 'settings';
@@ -14,6 +15,9 @@ interface AppNavigationProps {
     user: UserInfo | null;
     onLogout: () => void;
     invitations?: WorkspaceInvitation[];
+    isLoadingInvitations?: boolean;
+    onAcceptInvitation?: (invitationId: string) => Promise<void>;
+    onRejectInvitation?: (invitationId: string) => Promise<void>;
     activeTab: TabType;
     onTabChange: (tab: TabType) => void;
 }
@@ -29,6 +33,9 @@ export function AppNavigation({
     user,
     onLogout,
     invitations = [],
+    isLoadingInvitations = false,
+    onAcceptInvitation,
+    onRejectInvitation,
     activeTab,
     onTabChange,
 }: AppNavigationProps) {
@@ -36,8 +43,8 @@ export function AppNavigation({
 
     return (
         <nav className="w-[80px] lg:w-[260px] h-screen bg-black flex flex-col border-r border-white/5 flex-shrink-0 transition-all duration-300">
-            {/* 1. Header & Logo (Icon Only as requested) */}
-            <div className="h-20 flex items-center justify-center lg:justify-start lg:px-6">
+            {/* 1. Header & Logo */}
+            <div className="h-20 flex items-center justify-between px-4 lg:px-6">
                 <Image
                     src="/logo/eum_black.svg"
                     alt="EUM"
@@ -46,6 +53,17 @@ export function AppNavigation({
                     className="invert opacity-90"
                     style={{ width: 'auto', height: '20px' }}
                 />
+                {/* Invitation Notifications */}
+                {onAcceptInvitation && onRejectInvitation && (
+                    <div className="hidden lg:block">
+                        <InvitationNotifications
+                            invitations={invitations}
+                            isLoading={isLoadingInvitations}
+                            onAccept={onAcceptInvitation}
+                            onReject={onRejectInvitation}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* 2. Navigation Items */}

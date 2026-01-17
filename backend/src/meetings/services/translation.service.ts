@@ -471,12 +471,16 @@ export class TranslationService {
     );
 
     // 발화자의 음성 더빙 활성화 여부 확인
-    const useVoiceDubbing = await this.voiceDubbingTTSService.isVoiceDubbingEnabled(
+    const voiceDubbingEnabled = await this.voiceDubbingTTSService.isVoiceDubbingEnabled(
       speakerUserId,
     );
 
+    // 일본어는 voice dubbing 품질이 낮아 Polly 사용
+    const isJapanese = targetLanguage === 'ja-JP' || targetLanguage === 'ja';
+    const useVoiceDubbing = voiceDubbingEnabled && !isJapanese;
+
     this.logger.log(
-      `[TTS] Speaker ${speakerUserId} voice dubbing: ${useVoiceDubbing ? 'ENABLED' : 'DISABLED'}`,
+      `[TTS] Speaker ${speakerUserId} voice dubbing: ${voiceDubbingEnabled ? 'ENABLED' : 'DISABLED'}${isJapanese ? ' (skipped for Japanese)' : ''}`,
     );
 
     // 음성 더빙 사용 시: 한 번만 생성하고 모든 청취자에게 전송 (동일 언어)

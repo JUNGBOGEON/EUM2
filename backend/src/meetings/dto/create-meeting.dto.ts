@@ -5,8 +5,16 @@ export class CreateMeetingDto {
   title: string;
 
   @IsString()
+  @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsOptional()
+  maxParticipants?: number;
 
   @IsUUID()
   workspaceId: string;

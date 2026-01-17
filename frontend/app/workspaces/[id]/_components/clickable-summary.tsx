@@ -83,14 +83,14 @@ function TranscriptPopover({
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
-        className="w-96 max-h-80 overflow-auto p-0"
+        className="w-96 max-h-80 overflow-auto p-0 bg-neutral-900 border-white/10 text-white"
         side="right"
         align="start"
         sideOffset={8}
       >
-        <div className="p-3 border-b bg-muted/50">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <MessageSquareQuote className="h-4 w-4 text-primary" />
+        <div className="p-3 border-b border-white/10 bg-white/[0.02]">
+          <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <MessageSquareQuote className="h-4 w-4 text-indigo-400" />
             참조된 대화 ({referencedTranscripts.length}개)
           </div>
         </div>
@@ -98,19 +98,19 @@ function TranscriptPopover({
           {referencedTranscripts.map((transcript) => (
             <div
               key={transcript.id}
-              className="p-3 rounded-lg bg-muted/30 border border-border/50"
+              className="p-3 rounded-lg bg-white/5 border border-white/10"
             >
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center">
-                  <span className="text-[10px] font-medium">
+                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                  <span className="text-[10px] font-medium text-neutral-300">
                     {(transcript.speaker?.name || '?')[0]}
                   </span>
                 </div>
-                <span className="text-sm font-medium text-primary">
+                <span className="text-sm font-medium text-indigo-300">
                   {transcript.speaker?.name || '참가자'}
                 </span>
                 {transcript.relativeStartSec !== undefined && (
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-neutral-500">
                     {Math.floor(transcript.relativeStartSec / 60)}:
                     {Math.floor(transcript.relativeStartSec % 60)
                       .toString()
@@ -118,7 +118,7 @@ function TranscriptPopover({
                   </span>
                 )}
               </div>
-              <p className="text-sm pl-7">{transcript.originalText}</p>
+              <p className="text-sm pl-7 text-neutral-300">{transcript.originalText}</p>
             </div>
           ))}
         </div>
@@ -166,7 +166,7 @@ export function ClickableSummary({
       return (
         <div
           key={item.id}
-          className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground"
+          className="prose prose-sm max-w-none prose-invert prose-headings:text-white"
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
         </div>
@@ -178,14 +178,14 @@ export function ClickableSummary({
         className={cn(
           'rounded-md px-2 py-1 -mx-2 transition-all',
           hasRefs &&
-            'cursor-pointer hover:bg-primary/10 hover:ring-1 hover:ring-primary/30'
+          'cursor-pointer hover:bg-white/5 hover:ring-1 hover:ring-white/10'
         )}
       >
-        <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-p:my-0 prose-li:my-0">
+        <div className="prose prose-sm max-w-none prose-invert prose-headings:text-neutral-200 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-p:my-0 prose-li:my-0 prose-strong:text-indigo-300">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
         </div>
         {hasRefs && (
-          <span className="text-[10px] text-muted-foreground ml-1">
+          <span className="text-[10px] text-neutral-500 ml-1">
             💬 {item.transcriptRefs.length}
           </span>
         )}
@@ -210,16 +210,16 @@ export function ClickableSummary({
 
     return (
       <div key={`table-${tableItems[0]?.id}`} className="my-2">
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full text-sm border-collapse border border-white/10">
           <thead>
-            <tr className="border-b border-border">
+            <tr className="border-b border-white/10 bg-white/5">
               {headerItem?.content
                 .split('|')
                 .filter((cell) => cell.trim())
                 .map((cell, idx) => (
                   <th
                     key={idx}
-                    className="px-3 py-2 text-left font-medium text-muted-foreground"
+                    className="px-3 py-2 text-left font-medium text-neutral-300"
                   >
                     {cell.trim()}
                   </th>
@@ -234,8 +234,8 @@ export function ClickableSummary({
               const row = (
                 <tr
                   className={cn(
-                    'border-b border-border transition-all',
-                    hasRefs && 'cursor-pointer hover:bg-primary/10'
+                    'border-b border-white/10 transition-all text-neutral-300',
+                    hasRefs && 'cursor-pointer hover:bg-white/5'
                   )}
                 >
                   {cells.map((cell, idx) => (
@@ -244,7 +244,7 @@ export function ClickableSummary({
                     </td>
                   ))}
                   {hasRefs && (
-                    <td className="px-2 py-2 text-[10px] text-muted-foreground">
+                    <td className="px-2 py-2 text-[10px] text-neutral-500">
                       💬 {item.transcriptRefs.length}
                     </td>
                   )}

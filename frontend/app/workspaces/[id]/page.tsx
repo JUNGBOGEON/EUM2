@@ -141,7 +141,7 @@ export default function WorkspaceDetailPage() {
 
   return (
     <SidebarProvider defaultOpen>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="min-h-screen flex w-full bg-[#050505] text-white selection:bg-white/20 selection:text-white">
         {/* Sidebar */}
         <WorkspaceSidebar
           workspace={workspace}
@@ -153,22 +153,34 @@ export default function WorkspaceDetailPage() {
         />
 
         {/* Main Content Area */}
-        <SidebarInset className="flex-1">
-          <div className="flex flex-col min-h-screen">
-            {/* Header */}
-            <header className="h-14 border-b border-border flex items-center justify-between px-6">
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">
-                  {activeNav === 'meeting' && t('meeting.title')}
-                  {activeNav === 'chat' && t('chat.title')}
-                  {activeNav === 'calendar' && t('calendar.title')}
-                  {activeNav === 'files' && t('files.title')}
-                  {activeNav === 'history' && t('history.title')}
-                  {activeNav === 'members' && t('members.title')}
-                  {activeNav === 'settings' && t('menu.settings')}
+        <SidebarInset className="flex-1 bg-transparent">
+          <div className="flex flex-col min-h-screen relative">
+            {/* Ambient Background - Clean & Sophisticated */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 bg-[#050505]" />
+              {/* Subtle Dot Pattern */}
+              <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:32px_32px] opacity-[0.03]" />
+              {/* Very subtle top gradient for depth */}
+              <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/[0.02] to-transparent" />
+            </div>
+
+            {/* Header - Minimal Solid */}
+            <header className="h-16 px-8 flex items-center justify-between sticky top-0 z-20 bg-neutral-900 border-b border-white/5 transition-all duration-300">
+              <div className="flex items-center gap-4">
+                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
+                  {/* Icon depending on activeNav could go here if needed, keeping it simple for now */}
+                  <span className="bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+                    {activeNav === 'meeting' && t('meeting.title')}
+                    {activeNav === 'chat' && t('chat.title')}
+                    {activeNav === 'calendar' && t('calendar.title')}
+                    {activeNav === 'files' && t('files.title')}
+                    {activeNav === 'history' && t('history.title')}
+                    {activeNav === 'members' && t('members.title')}
+                    {activeNav === 'settings' && t('menu.settings')}
+                  </span>
                 </h1>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <WorkspaceNotifications
                   invitations={myInvitations}
                   isLoading={isLoadingInvitations}
@@ -178,15 +190,17 @@ export default function WorkspaceDetailPage() {
               </div>
             </header>
 
-            {/* Main Content */}
+            {/* Main Content Scroll Area */}
             <main className={cn(
-              "flex-1 flex flex-col",
-              activeNav === 'chat' ? "overflow-hidden p-0" : "overflow-auto p-6"
+              "flex-1 flex flex-col relative z-0",
+              activeNav === 'chat' ? "overflow-hidden p-0" : "overflow-auto p-8"
             )}>
               <div className={cn(
-                "mx-auto transition-all duration-300",
+                "mx-auto transition-all duration-500 ease-out",
+                // Animation entry
+                "animate-in fade-in slide-in-from-bottom-4 duration-500",
                 activeNav === 'chat' ? "h-full w-full" :
-                  ['calendar', 'history', 'files'].includes(activeNav) ? "w-full max-w-[70%]" : "w-full max-w-4xl"
+                  ['calendar', 'history', 'files'].includes(activeNav) ? "w-full max-w-[85%] 2xl:max-w-[75%]" : "w-full max-w-5xl"
               )}>
                 {/* Meeting Section */}
                 {activeNav === 'meeting' && (

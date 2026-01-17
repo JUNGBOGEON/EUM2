@@ -14,6 +14,7 @@ import {
   X,
   Check,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -132,7 +133,6 @@ export function MembersSection({
   };
 
   const formatDate = (dateStr: string) => {
-    // Simple relative date formatting logic remains, or could be replaced by a localized lib
     const date = new Date(dateStr);
     return date.toLocaleDateString();
   };
@@ -166,16 +166,29 @@ export function MembersSection({
   const totalMembers = (owner ? 1 : 0) + members.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">{t('members.title')}</h2>
-          <Badge variant="secondary">{totalMembers}</Badge>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-xl border border-white/10">
+            <Users className="h-5 w-5 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              {t('members.title')}
+              <Badge variant="secondary" className="bg-white/10 text-white hover:bg-white/20 border-none ml-2">
+                {totalMembers}
+              </Badge>
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5">Manage access and roles for your team</p>
+          </div>
         </div>
+
         {isOwner && (
-          <Button onClick={() => setShowInviteDialog(true)}>
+          <Button
+            onClick={() => setShowInviteDialog(true)}
+            className="bg-white text-black hover:bg-neutral-200 border-none font-semibold shadow-lg shadow-white/10"
+          >
             <UserPlus className="h-4 w-4 mr-2" />
             {t('members.invite_btn')}
           </Button>
@@ -185,31 +198,31 @@ export function MembersSection({
       {/* Owner Section */}
       {owner && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-muted-foreground">{t('members.admin')}</p>
-          <div className="flex items-center gap-4 p-4 rounded-xl bg-primary/5 border border-primary/20">
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest px-1">{t('members.admin')}</p>
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20 backdrop-blur-sm">
             <div className="relative">
-              <Avatar className="h-12 w-12">
+              <Avatar className="h-12 w-12 ring-2 ring-yellow-500/30">
                 <AvatarImage src={owner.profileImage} alt={owner.name} />
-                <AvatarFallback className="text-lg">
+                <AvatarFallback className="bg-neutral-800 text-white font-bold">
                   {owner.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
-                <Crown className="h-3 w-3 text-white" />
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center shadow-lg">
+                <Crown className="h-3 w-3 text-black fill-black" />
               </div>
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-foreground">{owner.name}</p>
-                <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 border-none">
+                <p className="font-bold text-white text-lg">{owner.name}</p>
+                <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/20">
                   {t('members.admin')}
                 </Badge>
                 {currentUser?.id === owner.id && (
-                  <Badge variant="outline" className="text-xs">{t('members.me')}</Badge>
+                  <Badge variant="outline" className="text-xs border-white/20 text-neutral-300">{t('members.me')}</Badge>
                 )}
               </div>
               {owner.email && (
-                <p className="text-sm text-muted-foreground">{owner.email}</p>
+                <p className="text-sm text-neutral-400">{owner.email}</p>
               )}
             </div>
           </div>
@@ -218,18 +231,20 @@ export function MembersSection({
 
       {/* Members Section */}
       <div className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">
-          {t('members.title')} {members.length > 0 && `(${members.length})`}
+        <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest px-1">
+          {t('members.title')}
         </p>
 
         {members.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border rounded-xl">
-            <Users className="h-12 w-12 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">{t('members.no_members')}</p>
+          <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
+              <Users className="h-6 w-6 text-neutral-500" />
+            </div>
+            <p className="text-neutral-400 font-medium">{t('members.no_members')}</p>
             {isOwner && (
               <Button
                 variant="link"
-                className="mt-2"
+                className="mt-2 text-indigo-400 hover:text-indigo-300"
                 onClick={() => setShowInviteDialog(true)}
               >
                 {t('members.invite_btn')}
@@ -237,54 +252,61 @@ export function MembersSection({
             )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-4 p-4 rounded-xl border border-border hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-4 p-4 rounded-xl border border-white/5 bg-neutral-900/40 hover:bg-white/5 transition-all duration-300 group"
               >
                 <div className="relative">
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10 ring-1 ring-white/10 transition-all group-hover:ring-white/30">
                     <AvatarImage src={member.profileImage} alt={member.name} />
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-neutral-800 text-neutral-300">
                       {member.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   {member.isOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-neutral-900 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                   )}
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-foreground">{member.name}</p>
+                    <p className="font-medium text-neutral-200 group-hover:text-white truncate">{member.name}</p>
                     {currentUser?.id === member.id && (
-                      <Badge variant="outline" className="text-xs">{t('members.me')}</Badge>
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/10 text-neutral-400">{t('members.me')}</Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {member.isOnline ? (
-                      <span className="text-green-600">{t('members.online')}</span>
-                    ) : (
-                      t('members.offline')
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-neutral-500">
+                      {member.isOnline ? (
+                        <span className="text-green-400 font-medium">{t('members.online')}</span>
+                      ) : (
+                        t('members.offline')
+                      )}
+                    </p>
+                    {member.roleId && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-neutral-400 border border-white/5">
+                        {roles.find(r => r.id === member.roleId)?.name || 'Member'}
+                      </span>
                     )}
-                  </p>
+                  </div>
                 </div>
                 {(isOwner || canManagePermissions) && currentUser?.id !== member.id && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-neutral-500 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="bg-neutral-900 border-white/10 text-white p-1">
                       {(isOwner || canManagePermissions) && onUpdateMemberRole && (
                         <>
                           <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
+                            <DropdownMenuSubTrigger className="focus:bg-white/10 focus:text-white rounded-md">
                               <Shield className="mr-2 h-4 w-4" />
                               {t('roles.change_role')}
                             </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
+                            <DropdownMenuSubContent className="bg-neutral-900 border-white/10 text-white p-1">
                               {roles.map((role) => {
                                 const isCurrentRole = member.roleId === role.id ||
                                   (!member.roleId && role.isDefault);
@@ -292,6 +314,7 @@ export function MembersSection({
                                   <DropdownMenuItem
                                     key={role.id}
                                     disabled={changingRoleFor === member.id}
+                                    className="focus:bg-white/10 focus:text-white rounded-md"
                                     onClick={async () => {
                                       if (isCurrentRole) return;
                                       setChangingRoleFor(member.id);
@@ -315,11 +338,11 @@ export function MembersSection({
                               })}
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
-                          <DropdownMenuSeparator />
+                          <DropdownMenuSeparator className="bg-white/10" />
                         </>
                       )}
                       <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
+                        className="text-red-400 focus:text-red-400 focus:bg-red-500/10 rounded-md"
                         onClick={() => {
                           setSelectedMember(member);
                           setShowKickDialog(true);
@@ -340,9 +363,8 @@ export function MembersSection({
       {/* Pending Invitations Section */}
       {isOwner && pendingInvitations.length > 0 && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            {t('members.pending_invites')} ({pendingInvitations.length})
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest px-1 flex items-center gap-2">
+            {t('members.pending_invites')} <span className="text-white">({pendingInvitations.length})</span>
           </p>
           <div className="space-y-2">
             {pendingInvitations.map((invitation) => {
@@ -350,30 +372,27 @@ export function MembersSection({
               return (
                 <div
                   key={invitation.id}
-                  className="flex items-center gap-4 p-4 rounded-xl border border-dashed border-border bg-muted/30"
+                  className="flex items-center gap-4 p-4 rounded-xl border border-dashed border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10 ring-1 ring-white/10">
                     <AvatarImage src={invitation.invitee.profileImage} alt={invitation.invitee.name} />
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-neutral-800 text-neutral-400">
                       {invitation.invitee.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-foreground truncate">{invitation.invitee.name}</p>
-                      <Badge variant="secondary" className="text-xs">
+                      <p className="font-medium text-white truncate">{invitation.invitee.name}</p>
+                      <Badge variant="secondary" className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                         {t('members.pending')}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">{invitation.invitee.email}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t('members.invited')}
-                    </p>
+                    <p className="text-sm text-neutral-400 truncate">{invitation.invitee.email}</p>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-muted-foreground hover:text-destructive"
+                    className="text-neutral-500 hover:text-red-400 hover:bg-red-500/10"
                     onClick={() => handleCancelInvitation(invitation.id)}
                     disabled={isCancelling}
                   >
@@ -393,33 +412,33 @@ export function MembersSection({
 
       {/* Invite Dialog */}
       <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-neutral-900 border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>{t('members.invite_title')}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-neutral-400">
               {t('members.invite_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500 group-focus-within:text-white" />
               <Input
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder={t('members.search_placeholder')}
-                className="pl-9"
+                className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20"
               />
             </div>
 
             {/* Search Results */}
-            <ScrollArea className="h-[250px]">
+            <ScrollArea className="h-[250px] pr-2">
               {isSearching ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
                 </div>
               ) : searchResults.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-8 text-neutral-500">
                   {searchQuery.length < 2
                     ? t('members.search_short')
                     : t('members.search_empty')}
@@ -433,19 +452,19 @@ export function MembersSection({
                     return (
                       <div
                         key={user.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border"
+                        className="flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.02] hover:bg-white/5 transition-colors"
                       >
-                        <Avatar className="h-10 w-10">
+                        <Avatar className="h-10 w-10 ring-1 ring-white/10">
                           <AvatarImage src={user.profileImage} alt={user.name} />
-                          <AvatarFallback>
+                          <AvatarFallback className="bg-neutral-800 text-neutral-300">
                             {user.name.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">
+                          <p className="font-medium text-white truncate">
                             {user.name}
                           </p>
-                          <p className="text-sm text-muted-foreground truncate">
+                          <p className="text-sm text-neutral-400 truncate">
                             {user.email}
                           </p>
                         </div>
@@ -454,6 +473,7 @@ export function MembersSection({
                           variant={isInvited ? 'secondary' : 'default'}
                           disabled={isLoading || isInvited}
                           onClick={() => handleInvite(user)}
+                          className={isInvited ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-black hover:bg-neutral-200"}
                         >
                           {isLoading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -478,20 +498,20 @@ export function MembersSection({
 
       {/* Kick Confirmation Dialog */}
       <AlertDialog open={showKickDialog} onOpenChange={setShowKickDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-neutral-900 border-white/10 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('members.kick_title')}</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-neutral-400">
               {t('members.kick_confirm').replace('{name}', selectedMember?.name || '')}
               {t('members.kick_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isKicking}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isKicking} className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleKick}
               disabled={isKicking}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20"
             >
               {isKicking ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

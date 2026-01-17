@@ -40,6 +40,8 @@ export type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 
 export interface MeetingSession {
   id: string;
   title: string;
+  category?: string;
+  maxParticipants?: number;
   status: 'active' | 'ended';
   hostId: string;
   host?: {

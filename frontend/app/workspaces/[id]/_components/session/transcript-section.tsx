@@ -38,11 +38,11 @@ export function TranscriptSection({
         {[1, 2, 3].map((i) => (
           <div key={i} className="space-y-2">
             <div className="flex items-center gap-2">
-              <Skeleton className="h-6 w-6 rounded-full" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-6 w-6 rounded-full bg-white/5" />
+              <Skeleton className="h-4 w-20 bg-white/5" />
+              <Skeleton className="h-3 w-12 bg-white/5" />
             </div>
-            <Skeleton className="h-4 w-full ml-8" />
+            <Skeleton className="h-4 w-full ml-8 bg-white/5" />
           </div>
         ))}
       </div>
@@ -52,13 +52,13 @@ export function TranscriptSection({
   if (transcripts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
-          <FileText className="h-7 w-7 text-muted-foreground" />
+        <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-4 ring-1 ring-white/10">
+          <FileText className="h-7 w-7 text-neutral-500" />
         </div>
-        <p className="text-muted-foreground font-medium">
+        <p className="text-neutral-400 font-medium">
           기록된 내용이 없습니다
         </p>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-neutral-600 mt-1">
           회의 중 자막이 기록되지 않았습니다
         </p>
       </div>
@@ -66,35 +66,35 @@ export function TranscriptSection({
   }
 
   return (
-    <div className="py-4 space-y-4">
+    <div className="py-4 space-y-6">
       {transcripts.map((item) => (
-        <div key={item.id}>
-          <div className="flex items-center gap-2 mb-1">
+        <div key={item.id} className="group">
+          <div className="flex items-center gap-2 mb-1.5">
             {item.speaker?.profileImage ? (
               <Image
                 src={item.speaker.profileImage}
                 alt={item.speaker.name}
                 width={24}
                 height={24}
-                className="rounded-full"
+                className="rounded-full ring-1 ring-white/10"
               />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center">
-                <span className="text-[10px] text-primary font-medium">
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/10">
+                <span className="text-[10px] text-neutral-300 font-medium">
                   {(item.speaker?.name || '참').charAt(0).toUpperCase()}
                 </span>
               </div>
             )}
-            <span className="text-sm font-medium text-primary">
+            <span className="text-sm font-medium text-neutral-200">
               {item.speaker?.name || '참가자'}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-neutral-500">
               {item.relativeStartSec !== undefined
                 ? `${Math.floor(item.relativeStartSec / 60)}:${Math.floor(item.relativeStartSec % 60).toString().padStart(2, '0')}`
                 : formatTranscriptTime(item.startTimeMs, sessionStartedAt)}
             </span>
           </div>
-          <p className="text-sm text-foreground leading-relaxed pl-8">
+          <p className="text-sm text-neutral-300 leading-relaxed pl-8 group-hover:text-white transition-colors">
             {item.originalText}
           </p>
         </div>

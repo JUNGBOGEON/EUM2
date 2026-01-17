@@ -95,7 +95,7 @@ function getReferencedTranscripts(
 function TranscriptCard({ transcript, isCompact = false }: { transcript: TranscriptItem; isCompact?: boolean }) {
   return (
     <div className={cn(
-      "group flex gap-3 rounded-lg hover:bg-[#2f2f2f] transition-colors",
+      "group flex gap-3 rounded-lg hover:bg-white/5 transition-colors",
       isCompact ? "p-2" : "p-3"
     )}>
       <div className="flex-shrink-0">
@@ -109,11 +109,11 @@ function TranscriptCard({ transcript, isCompact = false }: { transcript: Transcr
           />
         ) : (
           <div className={cn(
-            "rounded-full bg-[#373737] flex items-center justify-center",
+            "rounded-full bg-white/10 flex items-center justify-center",
             isCompact ? "w-6 h-6" : "w-7 h-7"
           )}>
             <span className={cn(
-              "font-medium text-[#9b9a97]",
+              "font-medium text-neutral-400",
               isCompact ? "text-[10px]" : "text-xs"
             )}>
               {(transcript.speaker?.name || '?')[0].toUpperCase()}
@@ -124,20 +124,20 @@ function TranscriptCard({ transcript, isCompact = false }: { transcript: Transcr
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <span className={cn(
-            "font-medium text-[#ffffffcf]",
+            "font-medium text-neutral-200",
             isCompact ? "text-xs" : "text-sm"
           )}>
             {transcript.speaker?.name || '참가자'}
           </span>
           {transcript.relativeStartSec !== undefined && (
-            <span className="text-[10px] text-[#9b9a97]">
+            <span className="text-[10px] text-neutral-500">
               {Math.floor(transcript.relativeStartSec / 60)}:
               {Math.floor(transcript.relativeStartSec % 60).toString().padStart(2, '0')}
             </span>
           )}
         </div>
         <p className={cn(
-          "text-[#ffffffcf] leading-relaxed",
+          "text-neutral-300 leading-relaxed",
           isCompact ? "text-xs" : "text-sm"
         )}>
           {transcript.originalText}
@@ -163,7 +163,7 @@ function SummarySectionToggle({
   if (section.type === 'title') {
     return (
       <div className="mb-8">
-        <div className="prose prose-lg max-w-none prose-invert prose-headings:text-[#ffffffcf] prose-headings:font-bold prose-h1:text-3xl prose-h1:mb-3">
+        <div className="prose prose-lg max-w-none prose-invert prose-headings:text-white prose-headings:font-bold prose-h1:text-3xl prose-h1:mb-3">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
         </div>
       </div>
@@ -176,8 +176,8 @@ function SummarySectionToggle({
       <div
         className={cn(
           'group flex items-start gap-1 p-3 -ml-3 rounded-lg transition-all',
-          hasRefs && 'cursor-pointer hover:bg-[#252525]',
-          isOpen && hasRefs && 'bg-[#252525]'
+          hasRefs && 'cursor-pointer hover:bg-white/5',
+          isOpen && hasRefs && 'bg-white/5'
         )}
         onClick={() => hasRefs && setIsOpen(!isOpen)}
       >
@@ -186,7 +186,7 @@ function SummarySectionToggle({
           <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center mt-0.5">
             <ChevronRight
               className={cn(
-                'w-4 h-4 text-[#9b9a97] transition-transform duration-200',
+                'w-4 h-4 text-neutral-500 transition-transform duration-200',
                 isOpen && 'rotate-90'
               )}
             />
@@ -195,13 +195,13 @@ function SummarySectionToggle({
 
         {/* 섹션 내용 */}
         <div className={cn("flex-1 min-w-0", !hasRefs && "ml-5")}>
-          <div className="summary-content prose prose-base max-w-none prose-invert prose-headings:text-[#ffffffcf] prose-headings:font-bold prose-h2:text-xl prose-h3:text-lg prose-p:text-[#ffffffcf] prose-p:text-[15px] prose-p:leading-relaxed prose-li:text-[#ffffffcf] prose-li:text-[15px] prose-li:leading-relaxed prose-p:my-2 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-table:text-[#ffffffcf] prose-strong:text-[#4a9eff] prose-strong:font-semibold prose-th:text-[#9b9a97] prose-th:text-sm prose-td:text-[#ffffffcf] prose-td:text-sm prose-em:text-[#f59e0b] prose-em:not-italic prose-em:bg-[#f59e0b]/10 prose-em:px-1 prose-em:rounded">
+          <div className="summary-content prose prose-base max-w-none prose-invert prose-headings:text-neutral-200 prose-headings:font-bold prose-h2:text-xl prose-h3:text-lg prose-p:text-neutral-300 prose-p:text-[15px] prose-p:leading-relaxed prose-li:text-neutral-300 prose-li:text-[15px] prose-li:leading-relaxed prose-p:my-2 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-table:text-neutral-300 prose-strong:text-indigo-400 prose-strong:font-semibold prose-th:text-neutral-500 prose-th:text-sm prose-td:text-neutral-300 prose-td:text-sm prose-em:text-yellow-500 prose-em:not-italic prose-em:bg-yellow-500/10 prose-em:px-1 prose-em:rounded">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
           </div>
 
           {/* 참조 힌트 */}
           {hasRefs && !isOpen && (
-            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#2f2f2f] text-xs text-[#9b9a97] hover:bg-[#373737] transition-colors">
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white/5 text-xs text-neutral-400 hover:bg-white/10 transition-colors">
               <MessageSquare className="w-3.5 h-3.5" />
               {referencedTranscripts.length}개 대화 참조
             </div>
@@ -211,9 +211,9 @@ function SummarySectionToggle({
 
       {/* 참조된 자막 목록 (토글) */}
       {hasRefs && isOpen && (
-        <div className="ml-5 mt-2 mb-5 pl-4 border-l-2 border-[#4a9eff]/40 bg-[#1e1e1e] rounded-r-lg">
+        <div className="ml-5 mt-2 mb-5 pl-4 border-l-2 border-indigo-500/40 bg-white/[0.02] rounded-r-lg">
           <div className="py-3">
-            <div className="text-xs font-medium text-[#4a9eff] mb-3 px-2 flex items-center gap-2">
+            <div className="text-xs font-medium text-indigo-400 mb-3 px-2 flex items-center gap-2">
               <MessageSquare className="w-3.5 h-3.5" />
               참조된 대화 ({referencedTranscripts.length})
             </div>
@@ -234,10 +234,10 @@ function ParticipantStatsCompact({ speakerStats }: { speakerStats: SpeakerStats[
   const totalWords = speakerStats.reduce((sum, s) => sum + s.wordCount, 0);
 
   return (
-    <div className="p-4 bg-[#1a1a1a] rounded-lg border border-[#2f2f2f]">
+    <div className="p-4 bg-neutral-900 rounded-lg border border-white/10">
       <div className="flex items-center gap-2 mb-3">
-        <Users className="w-4 h-4 text-[#4a9eff]" />
-        <span className="text-xs font-medium text-[#ffffffcf]">
+        <Users className="w-4 h-4 text-indigo-400" />
+        <span className="text-xs font-medium text-neutral-200">
           참여자 ({speakerStats.length}명)
         </span>
       </div>
@@ -255,23 +255,23 @@ function ParticipantStatsCompact({ speakerStats }: { speakerStats: SpeakerStats[
                   className="rounded-full"
                 />
               ) : (
-                <div className="w-5 h-5 rounded-full bg-[#373737] flex items-center justify-center">
-                  <span className="text-[9px] font-medium text-[#9b9a97]">
+                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                  <span className="text-[9px] font-medium text-neutral-400">
                     {speaker.name[0].toUpperCase()}
                   </span>
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-[#ffffffcf] truncate">{speaker.name}</span>
-                  <span className="text-[10px] text-[#9b9a97] ml-2">{percentage}%</span>
+                  <span className="text-xs text-neutral-300 truncate">{speaker.name}</span>
+                  <span className="text-[10px] text-neutral-500 ml-2">{percentage}%</span>
                 </div>
-                <div className="h-1 bg-[#2f2f2f] rounded-full overflow-hidden">
+                <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${percentage}%`,
-                      backgroundColor: idx === 0 ? '#4a9eff' : idx === 1 ? '#34d399' : '#9b9a97'
+                      backgroundColor: idx === 0 ? '#818cf8' : idx === 1 ? '#34d399' : '#9ca3af'
                     }}
                   />
                 </div>
@@ -298,7 +298,7 @@ export function SummaryFullView({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="!max-w-[100vw] !w-screen !h-screen !max-h-screen p-0 rounded-none flex flex-col overflow-hidden bg-[#191919] [&>button]:hidden"
+        className="!max-w-[100vw] !w-screen !h-screen !max-h-screen p-0 rounded-none flex flex-col overflow-hidden bg-neutral-950 [&>button]:hidden text-white border-0"
       >
         <VisuallyHidden>
           <DialogTitle>{session.title} - 전체 보기</DialogTitle>
@@ -306,13 +306,13 @@ export function SummaryFullView({
         </VisuallyHidden>
 
         {/* 헤더 - 컴팩트 */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-[#2f2f2f] flex-shrink-0 bg-[#191919]">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 flex-shrink-0 bg-neutral-900/50 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold text-[#ffffffcf]">
+            <h1 className="text-lg font-semibold text-white">
               {session.title}
             </h1>
             {/* 인라인 통계 */}
-            <div className="hidden md:flex items-center gap-4 text-xs text-[#9b9a97]">
+            <div className="hidden md:flex items-center gap-4 text-xs text-neutral-400">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
                 <span>{formatDate(session.startedAt)}</span>
@@ -335,7 +335,7 @@ export function SummaryFullView({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="text-[#9b9a97] hover:text-[#ffffffcf] hover:bg-[#2f2f2f] h-8 w-8"
+            className="text-neutral-400 hover:text-white hover:bg-white/10 h-8 w-8"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -344,7 +344,7 @@ export function SummaryFullView({
         {/* 메인 컨텐츠 - 2열 레이아웃 */}
         <div className="flex flex-1 min-h-0">
           {/* 왼쪽: 요약 (65%) */}
-          <div className="w-[65%] border-r border-[#2f2f2f] flex flex-col min-h-0">
+          <div className="w-[65%] border-r border-white/10 flex flex-col min-h-0 bg-black/20">
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-3xl mx-auto px-8 py-6">
                 {structuredSummary.sections.map((section) => (
@@ -359,14 +359,14 @@ export function SummaryFullView({
           </div>
 
           {/* 오른쪽: 자막 + 통계 (35%) */}
-          <div className="w-[35%] flex flex-col min-h-0 bg-[#1e1e1e]">
+          <div className="w-[35%] flex flex-col min-h-0 bg-neutral-900/30 backdrop-blur-sm">
             {/* 자막 헤더 */}
-            <div className="px-4 py-3 border-b border-[#2f2f2f] flex-shrink-0 bg-[#1a1a1a]">
+            <div className="px-4 py-3 border-b border-white/10 flex-shrink-0 bg-neutral-900/50">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[#ffffffcf]">
+                <span className="text-xs font-medium text-white">
                   전체 자막
                 </span>
-                <span className="text-[10px] text-[#9b9a97] bg-[#2f2f2f] px-2 py-0.5 rounded-full">
+                <span className="text-[10px] text-neutral-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
                   {transcripts.length}개
                 </span>
               </div>
@@ -378,7 +378,7 @@ export function SummaryFullView({
                 {transcripts.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="text-3xl mb-2">💬</div>
-                    <p className="text-xs text-[#9b9a97]">
+                    <p className="text-xs text-neutral-500">
                       자막 기록이 없습니다
                     </p>
                   </div>
@@ -391,7 +391,7 @@ export function SummaryFullView({
             </div>
 
             {/* 참여자 통계 (하단 고정) */}
-            <div className="flex-shrink-0 p-3 border-t border-[#2f2f2f]">
+            <div className="flex-shrink-0 p-3 border-t border-white/10">
               <ParticipantStatsCompact speakerStats={speakerStats} />
             </div>
           </div>

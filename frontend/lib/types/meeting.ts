@@ -42,6 +42,8 @@ export interface MeetingSession {
   title?: string;
   workspaceId: string;
   workspace?: Workspace;
+  category?: string;
+  maxParticipants?: number;
   hostId: string;
   host?: UserInfo;
   status: SessionStatus;

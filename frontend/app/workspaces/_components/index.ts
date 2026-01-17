@@ -9,3 +9,4 @@ export { GlobalArchives } from './global-archives';
 export { GlobalSettings } from './global-settings';
 export { WorkspaceRow } from './workspace-row';
 export { WorkspaceMonolith } from './workspace-monolith';
+export { InvitationNotifications } from './invitation-notifications';

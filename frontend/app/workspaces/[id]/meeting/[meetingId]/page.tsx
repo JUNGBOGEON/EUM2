@@ -29,6 +29,7 @@ import {
   useMeetingChat,
   DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
+import { useVoiceEnrollment } from '@/hooks/useVoiceEnrollment';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
   MeetingHeader,
@@ -61,6 +62,39 @@ function MeetingRoomContent() {
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
+
+  // Voice dubbing state (내 목소리 TTS)
+  const [hasVoiceEmbedding, setHasVoiceEmbedding] = useState(false);
+  const [voiceDubbingEnabled, setVoiceDubbingEnabled] = useState(false);
+  const [isTogglingVoiceDubbing, setIsTogglingVoiceDubbing] = useState(false);
+  const { getVoiceStatus, toggleVoiceDubbing } = useVoiceEnrollment();
+
+  // Fetch voice status on mount
+  useEffect(() => {
+    const fetchVoiceStatus = async () => {
+      try {
+        const status = await getVoiceStatus();
+        setHasVoiceEmbedding(status.hasVoiceEmbedding);
+        setVoiceDubbingEnabled(status.voiceDubbingEnabled);
+      } catch (err) {
+        console.warn('[MeetingPage] Failed to fetch voice status:', err);
+      }
+    };
+    fetchVoiceStatus();
+  }, [getVoiceStatus]);
+
+  // Handle voice dubbing toggle
+  const handleToggleVoiceDubbing = useCallback(async (enabled: boolean) => {
+    setIsTogglingVoiceDubbing(true);
+    try {
+      const result = await toggleVoiceDubbing(enabled);
+      setVoiceDubbingEnabled(result.voiceDubbingEnabled);
+    } catch (err) {
+      console.error('[MeetingPage] Failed to toggle voice dubbing:', err);
+    } finally {
+      setIsTogglingVoiceDubbing(false);
+    }
+  }, [toggleVoiceDubbing]);
 
   // Debug logging for Whiteboard entry point
   useEffect(() => {
@@ -444,6 +478,8 @@ function MeetingRoomContent() {
         originalVolume={originalVolume}
         isOriginalVolumeFading={isOriginalVolumeFading}
         onSetOriginalVolume={setOriginalVolume}
+        hasVoiceEmbedding={hasVoiceEmbedding}
+        voiceDubbingEnabled={voiceDubbingEnabled}
         onOpenTTSSettings={() => setShowTTSSettings(true)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
@@ -476,6 +512,10 @@ function MeetingRoomContent() {
         onOpenChange={setShowTTSSettings}
         selectedVoices={selectedVoices}
         onSelectVoice={selectVoice}
+        hasVoiceEmbedding={hasVoiceEmbedding}
+        voiceDubbingEnabled={voiceDubbingEnabled}
+        isTogglingVoiceDubbing={isTogglingVoiceDubbing}
+        onToggleVoiceDubbing={handleToggleVoiceDubbing}
       />
     </div>
   );

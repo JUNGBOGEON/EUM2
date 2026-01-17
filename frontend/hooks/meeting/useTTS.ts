@@ -52,7 +52,7 @@ export function useTTS({
   meetingId,
   userId,
 }: UseTTSOptions): UseTTSReturn {
-  const { on, isConnected } = useSocket();
+  const { on, isConnected, joinRoom, leaveRoom } = useSocket();
 
   // TTS 상태
   const [ttsEnabled, setTtsEnabled] = useState(false);
@@ -188,6 +188,20 @@ export function useTTS({
       playAudio(nextItem);
     }
   }, [ttsEnabled, isPlaying, queue, playAudio]);
+
+  // user:{userId} 룸 참가 (TTS 이벤트 수신을 위해)
+  useEffect(() => {
+    if (!isConnected || !userId) return;
+
+    const userRoom = `user:${userId}`;
+    console.log('[TTS] Joining user room:', userRoom);
+    joinRoom(userRoom);
+
+    return () => {
+      console.log('[TTS] Leaving user room:', userRoom);
+      leaveRoom(userRoom);
+    };
+  }, [isConnected, userId, joinRoom, leaveRoom]);
 
   // TTS Ready WebSocket 리스너
   useEffect(() => {

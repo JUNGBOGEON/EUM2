@@ -1846,9 +1846,9 @@ export class RenderManager {
                 this.ghostSprite.alpha = 0.6;
                 this.ghostSprite.x = x;
                 this.ghostSprite.y = y;
-                // Fix: Use texture size or default if w/h not provided (preview mode)
-                this.ghostSprite.width = w || texture.width || 80;
-                this.ghostSprite.height = h || texture.height || 80;
+                // Use explicit size, or safe default (avoid using texture.width which can be very large for SVGs)
+                this.ghostSprite.width = w || 100;
+                this.ghostSprite.height = h || 100;
             }
         }
     }

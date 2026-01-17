@@ -6,25 +6,16 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { NAV_ITEMS, type NavItemId } from '../_lib/constants';
 import type { Workspace, UserInfo, WorkspaceMember } from '../_lib/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 
 interface WorkspaceSidebarProps {
   workspace: Workspace;
@@ -40,109 +31,169 @@ export function WorkspaceSidebar({
   user,
   activeNav,
   onNavChange,
-  members = [],
-  isConnected,
 }: WorkspaceSidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
 
+  const primaryNav = NAV_ITEMS.filter(item => item.id !== 'settings');
+  const secondaryNav = NAV_ITEMS.filter(item => item.id === 'settings');
+
   return (
     <Sidebar
-      collapsible="icon"
-      className="border-r border-white/10 bg-black text-white selection:bg-white/20"
+      collapsible="none"
+      className="border-r border-neutral-800 bg-neutral-950 w-64"
       variant="sidebar"
     >
-      {/* Header - Minimal & Sharp */}
-      <SidebarHeader className="h-20 flex items-center justify-center border-b border-white/5 bg-black p-0">
-        <div className="flex items-center justify-center w-full h-full group-data-[collapsible=icon]:p-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white text-black flex items-center justify-center font-bold text-lg tracking-tighter">
-              {workspace.name.substring(0, 1).toUpperCase()}
+      {/* Header */}
+      <SidebarHeader className="h-20 border-b border-neutral-800/30">
+        <div className="flex h-full items-center px-5">
+          <div className="flex items-center gap-4 w-full">
+            {/* Monogram */}
+            <div className="h-11 w-11 bg-white flex items-center justify-center shrink-0">
+              <span className="text-[15px] font-bold text-neutral-950 uppercase tracking-[-0.02em]">
+                {workspace.name.substring(0, 2)}
+              </span>
             </div>
-            <div className="flex flex-col group-data-[collapsible=icon]:hidden animate-in fade-in duration-300">
-              <span className="font-bold text-sm tracking-wide uppercase">{workspace.name}</span>
-              <span className="text-[10px] text-neutral-500 font-mono">WORKSPACE</span>
+
+            {/* Workspace Info */}
+            <div className="flex flex-col min-w-0 flex-1 gap-1">
+              <span className="text-[16px] font-semibold text-neutral-50 truncate tracking-[-0.015em] leading-none">
+                {workspace.name}
+              </span>
+              {workspace.description && (
+                <span className="text-[12px] text-neutral-500 truncate tracking-[-0.005em] leading-tight font-light">
+                  {workspace.description}
+                </span>
+              )}
             </div>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="bg-black py-6">
-        {/* Navigation - Vertical Command List */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1 px-0">
-              {NAV_ITEMS.map((item) => {
-                const isActive = activeNav === item.id;
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => onNavChange(item.id)}
-                      tooltip={t(item.label)}
-                      className={cn(
-                        "h-12 w-full transition-all duration-200 rounded-none border-l-2",
-                        isActive
-                          ? "border-white bg-white/5 text-white"
-                          : "border-transparent text-neutral-500 hover:text-white hover:bg-white/[0.02] hover:border-white/20"
-                      )}
-                    >
-                      <div className="flex items-center gap-4 px-2 w-full">
-                        <item.icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-white" : "text-neutral-500 group-hover:text-white")} />
-                        <span className={cn(
-                          "text-sm font-medium tracking-wide group-data-[collapsible=icon]:hidden uppercase",
-                          isActive ? "text-white" : "text-neutral-500 group-hover:text-white"
-                        )}>
-                          {t(item.label)}
-                        </span>
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <div className="my-6 px-4 group-data-[collapsible=icon]:hidden">
-          <div className="h-px w-full bg-white/10" />
-        </div>
-
-        {/* User Status / Minimal Profile - Bottom anchored in mobile, but here inline */}
-        <SidebarGroup className="mt-auto group-data-[collapsible=icon]:hidden">
-          <div className="px-6 py-2">
-            <p className="text-[10px] text-neutral-600 font-mono uppercase tracking-widest mb-4">
-              Active User
-            </p>
-            {user && (
-              <div className="flex items-center gap-3">
-                <Avatar className="h-8 w-8 rounded-none border border-white/20">
-                  <AvatarImage src={user.profileImage} />
-                  <AvatarFallback className="bg-neutral-900 text-white rounded-none">{user.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-white">{user.name}</span>
-                  <span className="text-[10px] text-neutral-500 font-mono">ONLINE</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </SidebarGroup>
-
+      {/* Primary Navigation */}
+      <SidebarContent className="px-3 py-4">
+        <SidebarMenu className="gap-1">
+          {primaryNav.map((item) => {
+            const isActive = activeNav === item.id;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => onNavChange(item.id)}
+                  className={cn(
+                    "h-11 w-full rounded-none px-4",
+                    "text-neutral-400",
+                    isActive && [
+                      "bg-neutral-800/80 text-white",
+                      "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2",
+                      "before:h-5 before:w-[2px] before:bg-white"
+                    ]
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-white" : "text-neutral-500"
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <span className="ml-4 text-[15px] font-normal tracking-[-0.01em]">
+                    {t(item.label)}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
       </SidebarContent>
 
-      {/* Footer - Back Button */}
-      <SidebarFooter className="border-t border-white/5 bg-black p-0">
-        <Button
-          variant="ghost"
-          className="w-full h-16 rounded-none hover:bg-white hover:text-black hover:border-white transition-all text-neutral-500 flex items-center justify-center gap-2 uppercase tracking-wider text-xs font-bold"
+      {/* Footer */}
+      <SidebarFooter className="mt-auto border-t border-neutral-800/50 p-3">
+        {/* Settings */}
+        <SidebarMenu className="mb-3">
+          {secondaryNav.map((item) => {
+            const isActive = activeNav === item.id;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => onNavChange(item.id)}
+                  className={cn(
+                    "h-11 w-full rounded-none px-4",
+                    "text-neutral-400",
+                    isActive && "bg-neutral-800/80 text-white"
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-white" : "text-neutral-500"
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <span className="ml-4 text-[15px] font-normal tracking-[-0.01em]">
+                    {t(item.label)}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+
+        {/* Divider */}
+        <div className="h-px bg-neutral-800/50 mx-2" />
+
+        {/* User Profile */}
+        {user && (
+          <div className="mt-3">
+            <div className="px-3 py-3 mx-1 bg-neutral-900/50 border border-neutral-800/60">
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="h-11 w-11 shrink-0 overflow-hidden bg-gradient-to-br from-neutral-700 to-neutral-800">
+                  {user.profileImage ? (
+                    <img
+                      src={user.profileImage}
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <span className="text-base font-semibold text-neutral-300 uppercase tracking-tight">
+                        {user.name.charAt(0)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* User Info */}
+                <div className="flex flex-col min-w-0 flex-1 gap-1">
+                  <span className="text-[15px] font-medium text-neutral-100 truncate tracking-[-0.01em] leading-tight">
+                    {user.name}
+                  </span>
+                  {user.email && (
+                    <span className="text-[12px] text-neutral-500 truncate tracking-[-0.005em] leading-tight font-mono">
+                      {user.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Back Button */}
+        <button
           onClick={() => router.push('/workspaces')}
+          className="w-full h-10 flex items-center gap-3 px-4 mt-2 text-neutral-500"
         >
-          <ChevronLeft className="h-4 w-4" />
-          <span className="group-data-[collapsible=icon]:hidden">Back to List</span>
-        </Button>
+          <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={1.5} />
+          <span className="text-[14px] tracking-[-0.01em]">
+            All workspaces
+          </span>
+        </button>
       </SidebarFooter>
-      <SidebarRail className="hover:after:bg-white text-white/20" />
+
+      <SidebarRail className="hidden" />
     </Sidebar>
   );
 }

@@ -120,11 +120,13 @@ export function useWhiteboardSync(
         });
 
         socket.on('cursor', (data: any) => {
-            // Data includes socketId probably, but we use data.senderId if sent
-            // Remote cursor logic might rely on specific ID format
-            // data should be { x, y, tool, name, avatar, senderId }
+            // Data includes socketId from backend and senderId from client
+            // data should be { x, y, tool, name, avatar, senderId, socketId }
             if (data.senderId === localId) return;
-            renderManager.updateRemoteCursor(data.senderId, data.x, data.y, data);
+            renderManager.updateRemoteCursor(data.senderId, data.x, data.y, {
+                ...data,
+                socketId: data.socketId, // Pass socketId for cleanup mapping
+            });
         });
 
         socket.on('draw_batch', (data: any) => {

@@ -54,6 +54,15 @@ export interface MeetingSession {
   participantCount?: number;
   summaryStatus?: SummaryStatus;
   summaryS3Key?: string;
+  participants?: {
+    id: string;
+    userId: string;
+    user?: {
+      id: string;
+      name: string;
+      profileImage?: string;
+    };
+  }[];
 }
 
 export interface WorkspaceFile {

@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { Video, Users, ArrowRight, Play, VideoOff } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState, useMemo } from 'react';
+import { Video, Users, ArrowRight, VideoOff, Clock, Plus, X } from 'lucide-react';
 import type { MeetingSession } from '../_lib/types';
-import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface MeetingSectionProps {
   activeSessions: MeetingSession[];
@@ -18,6 +20,14 @@ interface MeetingSectionProps {
   canJoinCalls?: boolean;
 }
 
+const DEFAULT_CATEGORIES = [
+  '일반',
+  '개발',
+  '디자인',
+  '기획',
+  '데일리',
+];
+
 export function MeetingSection({
   activeSessions,
   onStartMeeting,
@@ -26,19 +36,42 @@ export function MeetingSection({
   isJoining,
   canJoinCalls = true,
 }: MeetingSectionProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState('');
-  const [category, setCategory] = useState('General');
+  const [category, setCategory] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
   const [maxParticipants, setMaxParticipants] = useState(50);
-  const { t } = useLanguage();
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
+  // Collect all unique categories from active sessions and defaults
+  const allCategories = useMemo(() => {
+    const sessionCategories = activeSessions
+      .map(s => s.category)
+      .filter((c): c is string => !!c);
+    const combined = [...new Set([...DEFAULT_CATEGORIES, ...sessionCategories])];
+    return combined;
+  }, [activeSessions]);
 
   const handleStart = () => {
-    onStartMeeting(meetingTitle.trim() || undefined, category, maxParticipants);
+    const finalCategory = customCategory.trim() || category || '일반';
+    onStartMeeting(meetingTitle.trim() || undefined, finalCategory, maxParticipants);
+    setIsModalOpen(false);
+    // Reset form
+    setMeetingTitle('');
+    setCategory('');
+    setCustomCategory('');
+    setMaxParticipants(50);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isStarting) {
-      handleStart();
-    }
+  const handleSelectCategory = (cat: string) => {
+    setCategory(cat);
+    setCustomCategory('');
+    setShowCategoryDropdown(false);
+  };
+
+  const handleCustomCategoryChange = (value: string) => {
+    setCustomCategory(value);
+    setCategory('');
   };
 
   const formatDuration = (startedAt: string) => {
@@ -49,190 +82,340 @@ export function MeetingSection({
     const minutes = Math.floor((diff % 3600) / 60);
 
     if (hours > 0) {
-      return t('meeting.duration_format')
-        .replace('{hours}', hours.toString())
-        .replace('{minutes}', minutes.toString());
+      return `${hours}시간 ${minutes}분`;
     }
-    return t('meeting.duration_format_min')
-      .replace('{minutes}', minutes.toString());
+    return `${minutes}분`;
   };
 
-  // If user can't join calls, show restriction message
+  // Restricted access state
   if (!canJoinCalls) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center border-b border-white/5">
-        <div className="w-16 h-16 rounded-full bg-neutral-900 flex items-center justify-center mb-6">
-          <VideoOff className="h-8 w-8 text-neutral-500" />
+      <div className="flex flex-col items-center justify-center py-40 border-b border-neutral-800">
+        <div className="w-20 h-20 border border-neutral-800 flex items-center justify-center mb-8">
+          <VideoOff className="h-8 w-8 text-neutral-600" />
         </div>
-        <h3 className="text-lg font-medium text-white mb-2">
-          {t('meeting.restricted')}
+        <h3 className="text-lg font-medium text-white mb-3 tracking-tight">
+          접근 제한됨
         </h3>
-        <p className="text-neutral-500 max-w-sm">
-          {t('meeting.restricted_desc')}
+        <p className="text-base text-neutral-500 max-w-sm text-center leading-relaxed">
+          회의 참여 권한이 없습니다. 관리자에게 문의하세요.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
-
-      {/* Header & Controls */}
-      <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
-            실시간 세션
-          </h2>
-          <p className="text-neutral-500 font-medium">
-            팀원들과 자유롭게 소통하고 협업하세요.
-          </p>
+    <div className="space-y-16">
+      {/* Simple Control Bar - Just the button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="text-base text-neutral-500">
+            새 회의를 시작하거나 진행 중인 회의에 참여하세요
+          </span>
         </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className={cn(
+            "h-12 px-6 bg-white text-black text-base font-medium",
+            "hover:bg-neutral-200 active:bg-neutral-300",
+            "transition-colors flex items-center gap-3"
+          )}
+        >
+          <Plus className="w-5 h-5" />
+          <span>새 회의</span>
+        </button>
+      </div>
 
-        {/* Create Session Control Bar */}
-        <div className="bg-neutral-900/80 backdrop-blur border border-white/10 p-1 flex flex-col md:flex-row gap-1">
-          {/* Title Input */}
-          <div className="flex-1 min-w-[300px]">
-            <input
-              type="text"
-              value={meetingTitle}
-              onChange={(e) => setMeetingTitle(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="회의 주제를 입력하세요..."
-              className="w-full h-12 px-4 bg-transparent text-white placeholder:text-neutral-600 focus:bg-white/5 focus:outline-none transition-colors"
-            />
-          </div>
-
-          <div className="flex gap-1 border-t md:border-t-0 md:border-l border-white/10">
-            {/* Category Select */}
-            <div className="relative w-40">
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full h-12 pl-4 pr-10 bg-transparent text-white appearance-none focus:bg-white/5 focus:outline-none cursor-pointer transition-colors text-sm"
+      {/* New Meeting Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent
+          className={cn(
+            "bg-black border border-neutral-800 p-0 gap-0",
+            "sm:max-w-lg"
+          )}
+          showCloseButton={false}
+        >
+          {/* Modal Header */}
+          <DialogHeader className="p-8 pb-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-medium text-white tracking-tight">
+                새 회의 만들기
+              </DialogTitle>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-10 h-10 flex items-center justify-center text-neutral-500 hover:text-white transition-colors"
               >
-                <option value="General" className="bg-neutral-900">대화/잡담</option>
-                <option value="Development" className="bg-neutral-900">개발 회의</option>
-                <option value="Design" className="bg-neutral-900">디자인 리뷰</option>
-                <option value="Planning" className="bg-neutral-900">기획/전략</option>
-                <option value="Daily" className="bg-neutral-900">데일리 스크럼</option>
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500">
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M1 1L5 5L9 1" strokeLinecap="square" />
-                </svg>
-              </div>
+                <X className="w-5 h-5" />
+              </button>
             </div>
+          </DialogHeader>
 
-            {/* Max Participants */}
-            <div className="flex items-center px-4 gap-3 bg-transparent border-l border-white/10 w-48">
-              <span className="text-xs text-neutral-500 font-mono whitespace-nowrap">
-                인원: {maxParticipants}명
-              </span>
+          {/* Modal Body */}
+          <div className="p-8 space-y-8">
+            {/* Meeting Title */}
+            <div className="space-y-3">
+              <label className="text-sm text-neutral-500 uppercase tracking-wider">
+                회의 제목
+              </label>
               <input
-                type="range"
-                min="2"
-                max="50"
-                step="1"
-                value={maxParticipants}
-                onChange={(e) => setMaxParticipants(parseInt(e.target.value))}
-                className="w-full h-1 bg-neutral-800 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white hover:[&::-webkit-slider-thumb]:bg-green-500 transition-colors"
+                type="text"
+                value={meetingTitle}
+                onChange={(e) => setMeetingTitle(e.target.value)}
+                placeholder="제목 없음"
+                className={cn(
+                  "w-full h-14 px-5 bg-transparent text-white text-base",
+                  "border border-neutral-800",
+                  "placeholder:text-neutral-600",
+                  "focus:outline-none focus:border-neutral-600",
+                  "transition-colors"
+                )}
               />
             </div>
 
-            {/* Create Button */}
+            {/* Category */}
+            <div className="space-y-3">
+              <label className="text-sm text-neutral-500 uppercase tracking-wider">
+                카테고리
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={customCategory || category}
+                  onChange={(e) => handleCustomCategoryChange(e.target.value)}
+                  onFocus={() => setShowCategoryDropdown(true)}
+                  placeholder="카테고리 입력 또는 선택"
+                  className={cn(
+                    "w-full h-14 px-5 bg-transparent text-white text-base",
+                    "border border-neutral-800",
+                    "placeholder:text-neutral-600",
+                    "focus:outline-none focus:border-neutral-600",
+                    "transition-colors"
+                  )}
+                />
+                {/* Category Dropdown */}
+                {showCategoryDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-px bg-black border border-neutral-800 z-10">
+                    {allCategories
+                      .filter(cat =>
+                        !customCategory ||
+                        cat.toLowerCase().includes(customCategory.toLowerCase())
+                      )
+                      .map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => handleSelectCategory(cat)}
+                          className={cn(
+                            "w-full h-12 px-5 text-left text-base",
+                            "hover:bg-neutral-900 transition-colors",
+                            category === cat ? "text-white bg-neutral-900" : "text-neutral-400"
+                          )}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    {customCategory && !allCategories.includes(customCategory) && (
+                      <button
+                        onClick={() => {
+                          setCategory('');
+                          setShowCategoryDropdown(false);
+                        }}
+                        className="w-full h-12 px-5 text-left text-base text-neutral-500 hover:bg-neutral-900 transition-colors"
+                      >
+                        "{customCategory}" 새 카테고리로 생성
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Close dropdown when clicking outside */}
+              {showCategoryDropdown && (
+                <div
+                  className="fixed inset-0 z-0"
+                  onClick={() => setShowCategoryDropdown(false)}
+                />
+              )}
+            </div>
+
+            {/* Max Participants */}
+            <div className="space-y-3">
+              <label className="text-sm text-neutral-500 uppercase tracking-wider">
+                최대 참가자
+              </label>
+              <div className="flex items-center gap-5 h-14 px-5 border border-neutral-800">
+                <Users className="w-5 h-5 text-neutral-500" />
+                <input
+                  type="range"
+                  min="2"
+                  max="50"
+                  step="1"
+                  value={maxParticipants}
+                  onChange={(e) => setMaxParticipants(parseInt(e.target.value))}
+                  className={cn(
+                    "flex-1 h-[2px] bg-neutral-800 appearance-none cursor-pointer",
+                    "[&::-webkit-slider-thumb]:appearance-none",
+                    "[&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4",
+                    "[&::-webkit-slider-thumb]:bg-white"
+                  )}
+                />
+                <span className="text-base font-mono tabular-nums text-white w-10 text-right">
+                  {maxParticipants}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-8 pt-0">
             <button
               onClick={handleStart}
               disabled={isStarting}
-              className="h-12 px-8 bg-white text-black font-bold uppercase tracking-wide hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              className={cn(
+                "w-full h-14 bg-white text-black text-base font-medium",
+                "hover:bg-neutral-200 active:bg-neutral-300",
+                "disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed",
+                "transition-colors flex items-center justify-center gap-3"
+              )}
             >
               {isStarting ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  생성 중
-                </span>
+                <>
+                  <span className="w-5 h-5 border-2 border-neutral-400 border-t-black animate-spin" />
+                  <span>생성 중...</span>
+                </>
               ) : (
-                '세션 시작'
+                <>
+                  <Video className="w-5 h-5" />
+                  <span>회의 시작</span>
+                </>
               )}
             </button>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
-      {/* Active Sessions Grid */}
-      <div className="space-y-4">
-        <div className="flex items-end justify-between border-b border-white/10 pb-2">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            진행 중인 세션
+      {/* Sessions Section */}
+      <div>
+        {/* Section Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-medium text-white tracking-tight">
+              진행 중인 회의
+            </h3>
             {activeSessions.length > 0 && (
-              <span className="text-xs bg-green-500 text-black px-1.5 py-0.5 font-bold">
-                LIVE {activeSessions.length}
+              <span className="px-3 py-1 bg-white text-black text-sm font-mono tabular-nums">
+                {activeSessions.length}
               </span>
             )}
-          </h3>
+          </div>
         </div>
 
+        {/* Sessions Grid */}
         {activeSessions.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {activeSessions.map((session) => (
-              <div
+              <button
                 key={session.id}
                 onClick={() => onJoinSession(session.id)}
-                className="group relative h-48 bg-neutral-900 border border-white/10 hover:border-white transition-all cursor-pointer flex flex-col justify-between p-5 overflow-hidden"
+                disabled={isJoining}
+                className={cn(
+                  "group relative bg-black p-10 text-left",
+                  "border border-neutral-800",
+                  "hover:bg-neutral-950 hover:border-neutral-700 transition-colors",
+                  "focus:outline-none focus:border-neutral-600",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
               >
-                {/* Background Pattern on Hover */}
-                <div className="absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                {/* Top: Category & Status */}
-                <div className="relative flex justify-between items-start z-10">
-                  <span className="inline-block px-2 py-1 bg-white/10 text-xs font-medium text-white/80">
-                    {session.category || 'General'}
+                {/* Top Row */}
+                <div className="flex items-start justify-between mb-10">
+                  <span className="text-sm text-neutral-500 font-medium uppercase tracking-wider">
+                    {session.category || '일반'}
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-xs font-mono text-red-500">ON AIR</span>
-                  </div>
+
+                  {/* Avatar Stack */}
+                  {session.participants && session.participants.length > 0 && (
+                    <div className="flex items-center -space-x-2.5">
+                      {session.participants.slice(0, 3).map((participant) => (
+                        <div
+                          key={participant.id}
+                          className="w-9 h-9 border-2 border-black bg-neutral-800 flex items-center justify-center overflow-hidden"
+                          style={{ borderRadius: '50%' }}
+                        >
+                          {participant.user?.profileImage ? (
+                            <img
+                              src={participant.user.profileImage}
+                              alt={participant.user.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-sm text-white font-medium">
+                              {participant.user?.name?.charAt(0).toUpperCase() || '?'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {session.participants.length > 3 && (
+                        <div
+                          className="w-9 h-9 border-2 border-black bg-neutral-700 flex items-center justify-center"
+                          style={{ borderRadius: '50%' }}
+                        >
+                          <span className="text-xs text-white font-medium">
+                            +{session.participants.length - 3}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Middle: Title */}
-                <div className="relative z-10">
-                  <h4 className="text-xl font-bold text-white group-hover:text-green-400 transition-colors line-clamp-2">
-                    {session.title}
-                  </h4>
-                  <p className="text-xs text-neutral-500 mt-1 font-mono">
-                    주최자: {session.host?.name}
-                  </p>
-                </div>
+                {/* Title */}
+                <h4 className="text-2xl font-medium text-white mb-3 line-clamp-2 leading-snug">
+                  {session.title}
+                </h4>
 
-                {/* Bottom: Info & Action */}
-                <div className="relative flex items-end justify-between z-10">
-                  <div className="flex items-center gap-3 text-sm text-neutral-400">
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-4 h-4" />
-                      {session.participantCount || 0} / {session.maxParticipants || 50}
+                {/* Host */}
+                <p className="text-base text-neutral-500 mb-10">
+                  {session.host?.name}
+                </p>
+
+                {/* Bottom Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-6 text-sm text-neutral-500">
+                    <span className="flex items-center gap-2">
+                      <Users className="w-5 h-5" />
+                      <span className="font-mono tabular-nums text-base">
+                        {session.participants?.length || 0}/{session.maxParticipants || 50}
+                      </span>
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-1 h-1 bg-neutral-600 rounded-full" />
-                      {formatDuration(session.startedAt || new Date().toISOString())}
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-5 h-5" />
+                      <span className="font-mono tabular-nums text-base">
+                        {formatDuration(session.startedAt || new Date().toISOString())}
+                      </span>
                     </span>
                   </div>
 
-                  <div className="w-8 h-8 flex items-center justify-center bg-white text-black opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                    <ArrowRight className="w-4 h-4" />
+                  <div className={cn(
+                    "w-10 h-10 flex items-center justify-center",
+                    "border border-neutral-800 text-neutral-600",
+                    "group-hover:border-white group-hover:text-white",
+                    "transition-colors"
+                  )}>
+                    <ArrowRight className="w-5 h-5" />
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
-          <div className="h-64 border border-dashed border-white/10 flex flex-col items-center justify-center text-center p-8">
-            <div className="w-12 h-12 border border-white/10 flex items-center justify-center mb-4">
-              <Video className="w-5 h-5 text-neutral-600" />
+          /* Empty State */
+          <div className="border border-neutral-800 py-28 flex flex-col items-center justify-center">
+            <div className="w-16 h-16 border border-neutral-800 flex items-center justify-center mb-6">
+              <Video className="w-7 h-7 text-neutral-700" />
             </div>
-            <p className="text-neutral-400 font-medium mb-1">
-              진행 중인 세션이 없습니다.
+            <p className="text-base text-neutral-400 mb-2">
+              진행 중인 회의가 없습니다
             </p>
-            <p className="text-neutral-600 text-sm">
-              위의 컨트롤 바를 사용하여 새로운 회의를 시작해보세요.
+            <p className="text-sm text-neutral-600">
+              새 회의를 시작하여 협업을 시작하세요
             </p>
           </div>
         )}

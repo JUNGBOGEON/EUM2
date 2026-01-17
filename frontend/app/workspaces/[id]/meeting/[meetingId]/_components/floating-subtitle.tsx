@@ -9,14 +9,14 @@ interface FloatingSubtitleProps {
 }
 
 /**
- * 플로팅 자막 컴포넌트
- * 
- * 유튜브 스타일의 실시간 번역 자막을 비디오 영역 하단에 오버레이로 표시
- * - 발화자 프로필 이미지
- * - 발화자 이름
- * - 번역된 메시지 (크게)
- * - 원본 메시지 (작게)
- * - 부드러운 등장/퇴장 애니메이션
+ * Floating Subtitle Component
+ *
+ * Displays real-time translated subtitles as an overlay at the bottom of the video area
+ * - Speaker profile image
+ * - Speaker name
+ * - Translated message (large)
+ * - Original message (small)
+ * - Smooth enter/exit animations
  */
 export function FloatingSubtitle({
   translations,
@@ -27,14 +27,14 @@ export function FloatingSubtitle({
   }
 
   return (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
       {translations.map((translation) => {
-        // 발화자 정보 조회
+        // Get speaker info
         const speaker = getParticipantByAttendeeId?.(translation.speakerId);
         const speakerName = speaker?.name || translation.speakerName;
         const speakerProfileImage = speaker?.profileImage;
 
-        // 등장/퇴장 애니메이션 클래스
+        // Enter/exit animation class
         const animationClass = translation.isExiting
           ? 'animate-subtitle-exit'
           : 'animate-subtitle-enter';
@@ -42,44 +42,44 @@ export function FloatingSubtitle({
         return (
           <div
             key={translation.resultId}
-            className={`flex items-center gap-3 px-4 py-3 
-                       bg-black/80 backdrop-blur-md rounded-2xl
-                       shadow-lg border border-white/10
+            className={`flex items-center gap-4 px-5 py-4
+                       bg-black/90 backdrop-blur-sm
+                       border border-neutral-800
                        max-w-2xl ${animationClass}`}
           >
-            {/* 프로필 이미지 */}
+            {/* Profile Image */}
             <div className="flex-shrink-0">
               {speakerProfileImage ? (
                 <Image
                   src={speakerProfileImage}
                   alt={speakerName}
-                  width={36}
-                  height={36}
+                  width={40}
+                  height={40}
                   className="rounded-full"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-blue-500/30 flex items-center justify-center">
-                  <span className="text-sm text-blue-400 font-medium">
+                <div className="w-10 h-10 bg-neutral-900 flex items-center justify-center rounded-full">
+                  <span className="text-sm text-neutral-400 font-medium">
                     {speakerName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* 텍스트 */}
+            {/* Text */}
             <div className="flex-1 min-w-0">
-              {/* 발화자 이름 */}
-              <p className="text-xs text-blue-400 font-medium mb-0.5">
+              {/* Speaker Name */}
+              <p className="text-xs text-neutral-500 font-medium mb-1 tracking-tight">
                 {speakerName}
               </p>
 
-              {/* 번역된 텍스트 */}
-              <p className="text-white text-sm font-medium leading-snug">
+              {/* Translated Text */}
+              <p className="text-white text-base font-medium leading-snug tracking-tight">
                 {translation.translatedText}
               </p>
 
-              {/* 원본 텍스트 (작게) */}
-              <p className="text-white/50 text-xs mt-1 line-clamp-1">
+              {/* Original Text (small) */}
+              <p className="text-neutral-600 text-xs mt-1.5 line-clamp-1 font-mono">
                 {translation.originalText}
               </p>
             </div>

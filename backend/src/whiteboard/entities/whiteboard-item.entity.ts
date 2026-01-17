@@ -45,8 +45,11 @@ export class WhiteboardItem {
     rotation?: number;
   };
 
-  @Column({ default: 0 })
-  zIndex: number;
+  @Column({ type: 'bigint', default: 0, transformer: {
+    to: (value: number) => value,
+    from: (value: string) => parseInt(value, 10),
+  }})
+  zIndex: number; // bigint로 저장하여 Date.now() 값 지원
 
   @Column({ default: false })
   isDeleted: boolean;

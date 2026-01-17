@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsNumber, Min, Max } from 'class-validator';
 
 /**
  * 워크스페이스에서 새 세션 시작 DTO
@@ -11,6 +11,16 @@ export class StartSessionDto {
   @IsString()
   @IsOptional()
   title?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(2)
+  @Max(50)
+  maxParticipants?: number;
 }
 
 /**

@@ -61,6 +61,8 @@ export class MeetingsController {
       dto.workspaceId,
       userId,
       dto.title,
+      dto.category,
+      dto.maxParticipants,
     );
   }
 

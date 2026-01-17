@@ -164,23 +164,25 @@ export default function WorkspaceDetailPage() {
               <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/[0.02] to-transparent" />
             </div>
 
-            {/* Header - Minimal Solid */}
-            <header className="h-16 px-8 flex items-center justify-between sticky top-0 z-20 bg-neutral-900 border-b border-white/5 transition-all duration-300">
-              <div className="flex items-center gap-4">
-                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
-                  {/* Icon depending on activeNav could go here if needed, keeping it simple for now */}
-                  <span className="bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
-                    {activeNav === 'meeting' && t('meeting.title')}
-                    {activeNav === 'chat' && t('chat.title')}
-                    {activeNav === 'calendar' && t('calendar.title')}
-                    {activeNav === 'files' && t('files.title')}
-                    {activeNav === 'history' && t('history.title')}
-                    {activeNav === 'members' && t('members.title')}
-                    {activeNav === 'settings' && t('menu.settings')}
+            {/* Header - Vercel Style: Clean, Minimal, Sharp */}
+            <header className="h-14 px-8 flex items-center justify-between sticky top-0 z-20 bg-black border-b border-neutral-800">
+              <div className="flex items-center gap-6">
+                {/* Breadcrumb-style navigation */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-neutral-500">{workspace.name}</span>
+                  <span className="text-neutral-700">/</span>
+                  <span className="text-white font-medium">
+                    {activeNav === 'meeting' && '회의'}
+                    {activeNav === 'chat' && '채팅'}
+                    {activeNav === 'calendar' && '캘린더'}
+                    {activeNav === 'files' && '파일'}
+                    {activeNav === 'history' && '기록'}
+                    {activeNav === 'members' && '멤버'}
+                    {activeNav === 'settings' && '설정'}
                   </span>
-                </h1>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center">
                 <WorkspaceNotifications
                   invitations={myInvitations}
                   isLoading={isLoadingInvitations}
@@ -200,7 +202,7 @@ export default function WorkspaceDetailPage() {
                 // Animation entry
                 "animate-in fade-in slide-in-from-bottom-4 duration-500",
                 activeNav === 'chat' ? "h-full w-full" :
-                  ['calendar', 'history', 'files'].includes(activeNav) ? "w-full max-w-[85%] 2xl:max-w-[75%]" : "w-full max-w-5xl"
+                  ['calendar', 'history', 'files', 'meeting'].includes(activeNav) ? "w-full max-w-[85%] 2xl:max-w-[75%]" : "w-full max-w-5xl"
               )}>
                 {/* Meeting Section */}
                 {activeNav === 'meeting' && (

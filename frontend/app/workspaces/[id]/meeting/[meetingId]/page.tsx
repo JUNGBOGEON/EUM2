@@ -403,33 +403,29 @@ function MeetingRoomContent() {
         <div className="flex-1 relative flex flex-col h-full">
           {showWhiteboard ? (
             <div className="absolute inset-0 z-10 bg-white">
-              <div className="absolute inset-0 z-10 bg-white">
-                <WhiteboardCanvas
-                  meetingId={meetingId}
-                  currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
-                />
-              </div>
+              <WhiteboardCanvas
+                meetingId={meetingId}
+                currentUser={currentUser ? { id: currentUser.id, name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+              />
             </div>
           ) : (
-            <>
-              <VideoGrid
-                remoteVideoTiles={remoteVideoTiles}
-                isVideoEnabled={isVideoEnabled}
-                currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
-                participants={participants}
-                currentAttendeeId={currentAttendeeId}
-                delayEnabled={delayEnabled}
-                delayMs={delayMs}
-              />
+            <VideoGrid
+              remoteVideoTiles={remoteVideoTiles}
+              isVideoEnabled={isVideoEnabled}
+              currentUser={currentUser ? { name: currentUser.name, profileImage: currentUser.profileImage } : undefined}
+              participants={participants}
+              currentAttendeeId={currentAttendeeId}
+              delayEnabled={delayEnabled}
+              delayMs={delayMs}
+            />
+          )}
 
-              {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) */}
-              {translationEnabled && recentTranslations.length > 0 && (
-                <FloatingSubtitle
-                  translations={recentTranslations}
-                  getParticipantByAttendeeId={getParticipantByAttendeeId}
-                />
-              )}
-            </>
+          {/* 플로팅 자막 오버레이 (번역 ON + 최근 번역이 있을 때만 표시) - 화이트보드 위에도 표시 */}
+          {translationEnabled && recentTranslations.length > 0 && (
+            <FloatingSubtitle
+              translations={recentTranslations}
+              getParticipantByAttendeeId={getParticipantByAttendeeId}
+            />
           )}
         </div>
         {/* Unified Communication Panel - Always visible on right */}

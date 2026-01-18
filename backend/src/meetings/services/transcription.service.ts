@@ -394,6 +394,50 @@ export class TranscriptionService {
       return;
     }
 
+    // ====================================================
+    // 할루시네이션 방지: 텍스트 유효성 검사
+    // ====================================================
+    const text = dto.transcript?.trim() || '';
+
+    // 1. 빈 텍스트 스킵
+    if (!text) {
+      this.logger.debug('[Translation Trigger] ⏭️ Skipping empty text');
+      return;
+    }
+
+    // 2. 최소 길이 검사 (CJK는 2글자, 알파벳은 3글자 이상)
+    const MIN_CJK_LENGTH = 2;
+    const MIN_ALPHA_LENGTH = 3;
+    const isCJK =
+      /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(text);
+    const minLength = isCJK ? MIN_CJK_LENGTH : MIN_ALPHA_LENGTH;
+
+    if (text.length < minLength) {
+      this.logger.debug(
+        `[Translation Trigger] ⏭️ Skipping too short text: "${text}" (${text.length} chars, min: ${minLength})`,
+      );
+      return;
+    }
+
+    // 3. 구두점/특수문자만 있는 텍스트 스킵 (할루시네이션 주요 패턴)
+    const punctuationOnlyPattern = /^[\s。、．，.!?！？…\-_~～・]+$/;
+    if (punctuationOnlyPattern.test(text)) {
+      this.logger.debug(
+        `[Translation Trigger] ⏭️ Skipping punctuation-only text: "${text}"`,
+      );
+      return;
+    }
+
+    // 4. 무의미한 반복 패턴 스킵 (예: "ああああ", "......")
+    const repetitionPattern = /^(.)\1{2,}$/;
+    if (repetitionPattern.test(text)) {
+      this.logger.debug(
+        `[Translation Trigger] ⏭️ Skipping repetitive text: "${text}"`,
+      );
+      return;
+    }
+    // ====================================================
+
     this.logger.log(
       `[Translation Trigger] 👤 Participant found: userId=${participant.userId}, name=${participant.user?.name}`,
     );
@@ -490,6 +534,46 @@ export class TranscriptionService {
       return;
     }
 
+    // 할루시네이션 방지: 텍스트 유효성 검사
+    const text = dto.transcript?.trim() || '';
+
+    // 1. 빈 텍스트 스킵
+    if (!text) {
+      this.logger.debug('[Translation Chunk] ⏭️ Skipping empty text');
+      return;
+    }
+
+    // 2. 최소 길이 검사 (CJK는 2글자, 알파벳은 3글자 이상)
+    const MIN_CJK_LENGTH = 2;
+    const MIN_ALPHA_LENGTH = 3;
+    const isCJK = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(text);
+    const minLength = isCJK ? MIN_CJK_LENGTH : MIN_ALPHA_LENGTH;
+
+    if (text.length < minLength) {
+      this.logger.debug(
+        `[Translation Chunk] ⏭️ Skipping too short text: "${text}" (${text.length} chars, min: ${minLength})`,
+      );
+      return;
+    }
+
+    // 3. 구두점/특수문자만 있는 텍스트 스킵 (할루시네이션 주요 패턴)
+    const punctuationOnlyPattern = /^[\s。、．，.!?！？…\-_~～・]+$/;
+    if (punctuationOnlyPattern.test(text)) {
+      this.logger.debug(
+        `[Translation Chunk] ⏭️ Skipping punctuation-only text: "${text}"`,
+      );
+      return;
+    }
+
+    // 4. 무의미한 반복 패턴 스킵 (예: "ああああ", "......")
+    const repetitionPattern = /^(.)\1{2,}$/;
+    if (repetitionPattern.test(text)) {
+      this.logger.debug(
+        `[Translation Chunk] ⏭️ Skipping repetitive text: "${text}"`,
+      );
+      return;
+    }
+
     // 세션 시작 시간 계산
     let sessionStartMs: number;
     if (session.startedAt) {
@@ -510,50 +594,29 @@ export class TranscriptionService {
       );
     }
 
-    // KO-JA 구문 단위 번역 처리
-    // 소스 언어가 한국어 또는 일본어이고, 텍스트가 충분히 긴 경우
-    const isKoJaSource =
-      sourceLanguage.startsWith('ko') || sourceLanguage.startsWith('ja');
-    const chunks = isKoJaSource
-      ? this.phraseChunkingService.chunkByPhrases(dto.transcript, sourceLanguage)
-      : [];
+    // KO-JA 구문 단위 번역 - 일시적으로 비활성화
+    // 문제점:
+    // 1. 일본어 조사 기준 분할이 부자연스러움 (문맥 손실)
+    // 2. 프론트엔드에서 구문 결합 시 originalText가 제대로 업데이트되지 않음
+    // 3. 타겟 언어가 KO/JA인지 확인하지 않고 분할 시도
+    // TODO: 위 문제들 해결 후 재활성화
+    // const isKoJaSource =
+    //   sourceLanguage.startsWith('ko') || sourceLanguage.startsWith('ja');
+    // const chunks = isKoJaSource
+    //   ? this.phraseChunkingService.chunkByPhrases(dto.transcript, sourceLanguage)
+    //   : [];
 
-    if (chunks.length >= 2) {
-      // 구문 단위 번역: 각 구문에 대해 별도 번역 트리거
-      this.logger.log(
-        `[Translation Chunk] KO-JA phrase chunking: ${chunks.length} phrases from "${dto.transcript.substring(0, 30)}..."`,
-      );
-
-      for (const chunk of chunks) {
-        await this.translationService.processTranslation({
-          sessionId,
-          speakerUserId: participant.userId,
-          speakerAttendeeId: dto.attendeeId,
-          speakerName: participant.user?.name || '참가자',
-          originalText: chunk.text,
-          sourceLanguage,
-          resultId: `${dto.resultId}_phrase_${chunk.index}`,
-          timestamp: dto.startTimeMs - sessionStartMs,
-          // 구문 단위 번역 메타데이터
-          isPhraseChunk: true,
-          phraseIndex: chunk.index,
-          isLastPhrase: chunk.isLast,
-          parentResultId: dto.resultId,
-        });
-      }
-    } else {
-      // 일반 번역 요청 (기존 로직)
-      await this.translationService.processTranslation({
-        sessionId,
-        speakerUserId: participant.userId,
-        speakerAttendeeId: dto.attendeeId,
-        speakerName: participant.user?.name || '참가자',
-        originalText: dto.transcript,
-        sourceLanguage,
-        resultId: dto.resultId,
-        timestamp: dto.startTimeMs - sessionStartMs,
-      });
-    }
+    // 일반 번역 요청 (전체 문장 단위)
+    await this.translationService.processTranslation({
+      sessionId,
+      speakerUserId: participant.userId,
+      speakerAttendeeId: dto.attendeeId,
+      speakerName: participant.user?.name || '참가자',
+      originalText: dto.transcript,
+      sourceLanguage,
+      resultId: dto.resultId,
+      timestamp: dto.startTimeMs - sessionStartMs,
+    });
   }
 
   /**

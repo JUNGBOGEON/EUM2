@@ -36,12 +36,13 @@ export class EncryptionService implements OnModuleInit {
 
   onModuleInit() {
     const keyString = this.configService.get<string>('ENCRYPTION_KEY');
-    this.isEnabled = this.configService.get<boolean>('ENCRYPTION_ENABLED', true);
+    this.isEnabled = this.configService.get<boolean>(
+      'ENCRYPTION_ENABLED',
+      true,
+    );
 
     if (!keyString) {
-      this.logger.warn(
-        'ENCRYPTION_KEY not set. Encryption will be disabled.',
-      );
+      this.logger.warn('ENCRYPTION_KEY not set. Encryption will be disabled.');
       this.isEnabled = false;
       return;
     }
@@ -109,7 +110,9 @@ export class EncryptionService implements OnModuleInit {
       const decipher = createDecipheriv(this.ALGORITHM, key, iv);
       decipher.setAuthTag(authTag);
 
-      return decipher.update(ciphertext) + decipher.final('utf8');
+      return (
+        decipher.update(ciphertext, undefined, 'utf8') + decipher.final('utf8')
+      );
     } catch (error) {
       this.logger.error(`Decryption failed: ${error.message}`);
       // 복호화 실패 시 원본 반환 (데이터 손실 방지)

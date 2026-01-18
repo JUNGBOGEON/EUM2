@@ -29,7 +29,8 @@ export class VoiceDubbingTTSService {
     private readonly configService: ConfigService,
   ) {
     const httpUrl =
-      this.configService.get<string>('AI_SERVER_URL') || 'http://localhost:8000';
+      this.configService.get<string>('AI_SERVER_URL') ||
+      'http://localhost:8000';
     this.aiServerUrl = httpUrl;
     // Convert http to ws for WebSocket URL
     this.aiServerWsUrl = httpUrl.replace(/^http/, 'ws');
@@ -82,7 +83,9 @@ export class VoiceDubbingTTSService {
 
       return true;
     } catch (error) {
-      this.logger.warn(`[VoiceDubbing TTS] AI Server health check error: ${error.message}`);
+      this.logger.warn(
+        `[VoiceDubbing TTS] AI Server health check error: ${error.message}`,
+      );
       return false;
     }
   }
@@ -115,7 +118,9 @@ export class VoiceDubbingTTSService {
         return null;
       }
 
-      this.logger.debug(`[VoiceDubbing TTS] Using embedding S3 key: ${embeddingS3Key}`);
+      this.logger.debug(
+        `[VoiceDubbing TTS] Using embedding S3 key: ${embeddingS3Key}`,
+      );
 
       // 1. AI Server WebSocket으로 TTS 생성 (S3 key 전달)
       const audioBuffer = await this.generateTTSViaWebSocket(
@@ -142,7 +147,7 @@ export class VoiceDubbingTTSService {
       const audioUrl = await this.s3StorageService.getPresignedUrl(s3Key, 3600);
 
       // 4. 오디오 길이 계산 (24kHz Float32 samples)
-      const durationMs = Math.round((audioBuffer.length / 4) / 24000 * 1000);
+      const durationMs = Math.round((audioBuffer.length / 4 / 24000) * 1000);
 
       this.logger.log(
         `[VoiceDubbing TTS] Generated: ${durationMs}ms, S3=${s3Key}`,
@@ -190,12 +195,18 @@ export class VoiceDubbingTTSService {
       }, 30000);
 
       ws.on('open', () => {
-        this.logger.debug('[VoiceDubbing TTS] WebSocket connected, sending TTS request...');
+        this.logger.debug(
+          '[VoiceDubbing TTS] WebSocket connected, sending TTS request...',
+        );
         // AI Server는 연결 후 바로 요청을 기다림 - 즉시 전송
         // S3 key를 함께 전달하여 AI Server가 S3에서 embedding을 로드할 수 있게 함
         const langCode = this.mapLanguageCode(language);
-        this.logger.debug(`[VoiceDubbing TTS] Sending TTS request: lang=${langCode}, s3_key=${embeddingS3Key}, text=${text.substring(0, 30)}...`);
-        ws.send(JSON.stringify({ text, language: langCode, s3_key: embeddingS3Key }));
+        this.logger.debug(
+          `[VoiceDubbing TTS] Sending TTS request: lang=${langCode}, s3_key=${embeddingS3Key}, text=${text.substring(0, 30)}...`,
+        );
+        ws.send(
+          JSON.stringify({ text, language: langCode, s3_key: embeddingS3Key }),
+        );
         messageSent = true;
       });
 
@@ -227,7 +238,9 @@ export class VoiceDubbingTTSService {
         if (messageStr) {
           try {
             const message = JSON.parse(messageStr);
-            this.logger.debug(`[VoiceDubbing TTS] Received JSON: ${JSON.stringify(message)}`);
+            this.logger.debug(
+              `[VoiceDubbing TTS] Received JSON: ${JSON.stringify(message)}`,
+            );
 
             if (message.status === 'complete') {
               clearTimeout(timeout);
@@ -253,7 +266,9 @@ export class VoiceDubbingTTSService {
       });
 
       ws.on('error', (error) => {
-        this.logger.error(`[VoiceDubbing TTS] WebSocket error: ${error.message}`);
+        this.logger.error(
+          `[VoiceDubbing TTS] WebSocket error: ${error.message}`,
+        );
         if (!resolved) {
           clearTimeout(timeout);
           resolved = true;
@@ -262,7 +277,9 @@ export class VoiceDubbingTTSService {
       });
 
       ws.on('close', (code, reason) => {
-        this.logger.debug(`[VoiceDubbing TTS] WebSocket closed: code=${code}, reason=${reason || 'none'}`);
+        this.logger.debug(
+          `[VoiceDubbing TTS] WebSocket closed: code=${code}, reason=${reason?.toString() || 'none'}`,
+        );
         if (!resolved) {
           clearTimeout(timeout);
           resolved = true;
@@ -287,10 +304,10 @@ export class VoiceDubbingTTSService {
       'en-US': 'en',
       'ja-JP': 'ja',
       'zh-CN': 'zh',
-      'ko': 'ko',
-      'en': 'en',
-      'ja': 'ja',
-      'zh': 'zh',
+      ko: 'ko',
+      en: 'en',
+      ja: 'ja',
+      zh: 'zh',
       'zh-cn': 'zh',
     };
     return mapping[awsLangCode] || awsLangCode.split('-')[0].toLowerCase();
@@ -299,7 +316,10 @@ export class VoiceDubbingTTSService {
   /**
    * Float32 PCM 데이터를 WAV 파일로 변환
    */
-  private convertFloat32ToWav(float32Buffer: Buffer, sampleRate: number): Buffer {
+  private convertFloat32ToWav(
+    float32Buffer: Buffer,
+    sampleRate: number,
+  ): Buffer {
     const numSamples = float32Buffer.length / 4; // Float32 = 4 bytes per sample
     const numChannels = 1;
     const bitsPerSample = 16;
@@ -312,23 +332,36 @@ export class VoiceDubbingTTSService {
     let offset = 0;
 
     // RIFF header
-    wavBuffer.write('RIFF', offset); offset += 4;
-    wavBuffer.writeUInt32LE(fileSize, offset); offset += 4;
-    wavBuffer.write('WAVE', offset); offset += 4;
+    wavBuffer.write('RIFF', offset);
+    offset += 4;
+    wavBuffer.writeUInt32LE(fileSize, offset);
+    offset += 4;
+    wavBuffer.write('WAVE', offset);
+    offset += 4;
 
     // fmt chunk
-    wavBuffer.write('fmt ', offset); offset += 4;
-    wavBuffer.writeUInt32LE(16, offset); offset += 4; // Subchunk1Size
-    wavBuffer.writeUInt16LE(1, offset); offset += 2; // AudioFormat (PCM)
-    wavBuffer.writeUInt16LE(numChannels, offset); offset += 2;
-    wavBuffer.writeUInt32LE(sampleRate, offset); offset += 4;
-    wavBuffer.writeUInt32LE(byteRate, offset); offset += 4;
-    wavBuffer.writeUInt16LE(blockAlign, offset); offset += 2;
-    wavBuffer.writeUInt16LE(bitsPerSample, offset); offset += 2;
+    wavBuffer.write('fmt ', offset);
+    offset += 4;
+    wavBuffer.writeUInt32LE(16, offset);
+    offset += 4; // Subchunk1Size
+    wavBuffer.writeUInt16LE(1, offset);
+    offset += 2; // AudioFormat (PCM)
+    wavBuffer.writeUInt16LE(numChannels, offset);
+    offset += 2;
+    wavBuffer.writeUInt32LE(sampleRate, offset);
+    offset += 4;
+    wavBuffer.writeUInt32LE(byteRate, offset);
+    offset += 4;
+    wavBuffer.writeUInt16LE(blockAlign, offset);
+    offset += 2;
+    wavBuffer.writeUInt16LE(bitsPerSample, offset);
+    offset += 2;
 
     // data chunk
-    wavBuffer.write('data', offset); offset += 4;
-    wavBuffer.writeUInt32LE(dataSize, offset); offset += 4;
+    wavBuffer.write('data', offset);
+    offset += 4;
+    wavBuffer.writeUInt32LE(dataSize, offset);
+    offset += 4;
 
     // Convert Float32 to Int16
     for (let i = 0; i < numSamples; i++) {

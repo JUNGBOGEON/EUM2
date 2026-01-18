@@ -13,6 +13,8 @@ export interface SessionUpdatePayload {
     hostId: string;
     startedAt: Date;
     participantCount?: number;
+    maxParticipants?: number;
+    category?: string;
     host?: {
       id: string;
       name: string;
@@ -26,10 +28,10 @@ export interface SessionUpdatePayload {
  */
 export interface InvitationNotificationPayload {
   type:
-    | 'invitation_received'
-    | 'invitation_cancelled'
-    | 'invitation_accepted'
-    | 'invitation_rejected';
+  | 'invitation_received'
+  | 'invitation_cancelled'
+  | 'invitation_accepted'
+  | 'invitation_rejected';
   invitation?: {
     id: string;
     workspace: {
@@ -212,23 +214,37 @@ export class GatewayBroadcastService {
   /**
    * Send translated transcript to specific user
    */
-  sendTranslatedTranscript(
+  async sendTranslatedTranscript(
     userId: string,
     payload: TranslatedTranscriptPayload,
   ) {
     const roomName = `user:${userId}`;
-    const clientCount = this.getRoomClientCount(roomName);
+    const maxRetries = 3;
+    const retryDelayMs = 300;
 
-    this.logger.log(
-      `[Translated Transcript] Room: ${roomName}, Clients: ${clientCount}, ${payload.sourceLanguage} → ${payload.targetLanguage}`,
-    );
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const clientCount = this.getRoomClientCount(roomName);
 
-    if (clientCount === 0) {
-      this.logger.warn(
-        `[Translated Transcript] No clients in room ${roomName}!`,
-      );
+      if (clientCount > 0) {
+        this.logger.log(
+          `[Translated Transcript] Room: ${roomName}, Clients: ${clientCount}, ${payload.sourceLanguage} → ${payload.targetLanguage}`,
+        );
+        this.server.to(roomName).emit('translatedTranscript', payload);
+        return;
+      }
+
+      if (attempt < maxRetries) {
+        this.logger.debug(
+          `[Translated Transcript] No clients in room ${roomName}, retry ${attempt}/${maxRetries} in ${retryDelayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
     }
 
+    // All retries exhausted
+    this.logger.warn(
+      `[Translated Transcript] No clients in room ${roomName} after ${maxRetries} retries, sending anyway`,
+    );
     this.server.to(roomName).emit('translatedTranscript', payload);
   }
 
@@ -253,23 +269,39 @@ export class GatewayBroadcastService {
   /**
    * Send TTS ready notification to specific user
    */
-  sendTTSReady(userId: string, payload: TTSReadyPayload) {
+  async sendTTSReady(userId: string, payload: TTSReadyPayload) {
     if (!this.server) {
       this.logger.error('[TTS Ready] Server not initialized');
       return;
     }
 
     const roomName = `user:${userId}`;
-    const clientCount = this.getRoomClientCount(roomName);
+    const maxRetries = 3;
+    const retryDelayMs = 300;
 
-    this.logger.log(
-      `[TTS Ready] Room: ${roomName}, Clients: ${clientCount}, Voice: ${payload.voiceId}, Lang: ${payload.targetLanguage}`,
-    );
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const clientCount = this.getRoomClientCount(roomName);
 
-    if (clientCount === 0) {
-      this.logger.warn(`[TTS Ready] No clients in room ${roomName}!`);
+      if (clientCount > 0) {
+        this.logger.log(
+          `[TTS Ready] Room: ${roomName}, Clients: ${clientCount}, Voice: ${payload.voiceId}, Lang: ${payload.targetLanguage}`,
+        );
+        this.server.to(roomName).emit('ttsReady', payload);
+        return;
+      }
+
+      if (attempt < maxRetries) {
+        this.logger.debug(
+          `[TTS Ready] No clients in room ${roomName}, retry ${attempt}/${maxRetries} in ${retryDelayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
     }
 
+    // All retries exhausted
+    this.logger.warn(
+      `[TTS Ready] No clients in room ${roomName} after ${maxRetries} retries, sending anyway`,
+    );
     this.server.to(roomName).emit('ttsReady', payload);
   }
 

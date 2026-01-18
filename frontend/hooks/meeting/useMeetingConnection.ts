@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMeetingManager } from 'amazon-chime-sdk-component-library-react';
-import { MeetingSessionConfiguration, AudioVideoObserver, VideoPriorityBasedPolicy, ConsoleLogger, LogLevel } from 'amazon-chime-sdk-js';
+import { MeetingSessionConfiguration, AudioVideoObserver, VideoPriorityBasedPolicy, ConsoleLogger, LogLevel, VideoTileState } from 'amazon-chime-sdk-js';
 import type { MeetingInfo } from '@/app/workspaces/[id]/meeting/[meetingId]/types';
 import { setCurrentUserCache, clearCurrentUserCache } from '@/lib/meeting/current-user-cache';
 
@@ -150,11 +150,11 @@ export function useMeetingConnection({
 
       // Debug Observer - Register BEFORE start
       // Store in ref for cleanup
-      const observerObject = {
+      const observerObject: Partial<AudioVideoObserver> = {
         audioVideoDidStart: () => {
           console.log('[MeetingConnection] AudioVideo started');
         },
-        videoTileDidAdd: (tileState: any) => {
+        videoTileDidUpdate: (tileState: VideoTileState) => {
           console.log('[MeetingConnection] Video tile added:', {
             tileId: tileState.tileId,
             isLocal: tileState.localTile,
@@ -162,11 +162,11 @@ export function useMeetingConnection({
             boundAttendeeId: tileState.boundAttendeeId
           });
         },
-        videoTileDidRemove: (tileState: any) => {
-          console.log('[MeetingConnection] Video tile removed:', tileState.tileId);
+        videoTileWasRemoved: (tileId: number) => {
+          console.log('[MeetingConnection] Video tile removed:', tileId);
         }
       };
-      observerRef.current = observerObject as any;
+      observerRef.current = observerObject as AudioVideoObserver;
       meetingManager.audioVideo?.addObserver(observerRef.current!);
       await meetingManager.start();
 

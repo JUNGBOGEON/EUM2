@@ -64,3 +64,5 @@ export type {
   InvitationStatus,
   InvitationNotificationType,
 } from './invitation';
+
+export type { WorkspaceEvent } from './event';

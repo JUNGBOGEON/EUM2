@@ -10,6 +10,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 // TTS 큐 최대 크기 (메모리 무한 증가 방지)
 const MAX_TTS_QUEUE_SIZE = 10;
 
+// TTS 볼륨 설정
+const MAX_TTS_VOLUME = 100;
+const DEFAULT_TTS_VOLUME = 80;
+
 export interface UseTTSOptions {
   meetingId: string | undefined;
   userId: string | null | undefined;
@@ -48,13 +52,13 @@ export function useTTS({
   meetingId,
   userId,
 }: UseTTSOptions): UseTTSReturn {
-  const { on, isConnected } = useSocket();
+  const { on, isConnected, joinRoom, leaveRoom } = useSocket();
 
   // TTS 상태
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isTogglingTTS, setIsTogglingTTS] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolumeState] = useState(80);
+  const [volume, setVolumeState] = useState(DEFAULT_TTS_VOLUME);
 
   // 큐 상태
   const [queue, setQueue] = useState<TTSQueueItem[]>([]);
@@ -72,7 +76,7 @@ export function useTTS({
   useEffect(() => {
     if (typeof window !== 'undefined' && !audioRef.current) {
       audioRef.current = new Audio();
-      audioRef.current.volume = volume / 100;
+      audioRef.current.volume = Math.min(1, volume / 100);
     }
 
     return () => {
@@ -86,7 +90,7 @@ export function useTTS({
   // 볼륨 변경 시 오디오에 반영
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
+      audioRef.current.volume = Math.min(1, volume / 100);
     }
   }, [volume]);
 
@@ -184,6 +188,20 @@ export function useTTS({
       playAudio(nextItem);
     }
   }, [ttsEnabled, isPlaying, queue, playAudio]);
+
+  // user:{userId} 룸 참가 (TTS 이벤트 수신을 위해)
+  useEffect(() => {
+    if (!isConnected || !userId) return;
+
+    const userRoom = `user:${userId}`;
+    console.log('[TTS] Joining user room:', userRoom);
+    joinRoom(userRoom);
+
+    return () => {
+      console.log('[TTS] Leaving user room:', userRoom);
+      leaveRoom(userRoom);
+    };
+  }, [isConnected, userId, joinRoom, leaveRoom]);
 
   // TTS Ready WebSocket 리스너
   useEffect(() => {
@@ -297,7 +315,7 @@ export function useTTS({
   const volumeSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const setVolume = useCallback((newVolume: number) => {
-    const clampedVolume = Math.max(0, Math.min(100, newVolume));
+    const clampedVolume = Math.max(0, Math.min(MAX_TTS_VOLUME, newVolume));
     setVolumeState(clampedVolume);
 
     // Debounced server save (500ms)

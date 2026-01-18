@@ -39,7 +39,8 @@ function WhiteboardToolbarComponent({
         setSmoothness,
         canUndo,
         canRedo,
-        setPendingImage
+        setPendingImage,
+        setStampMenuPosition
     } = useWhiteboardStore();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,7 +149,7 @@ function WhiteboardToolbarComponent({
                 onSettingsOpenChange(!isSettingsOpen);
             } else {
                 setTool(t);
-                onSettingsOpenChange(true);
+                onSettingsOpenChange(false); // Only open on second click (toggle)
             }
         } else {
             setTool(t);
@@ -184,7 +185,7 @@ function WhiteboardToolbarComponent({
                 </button>
 
                 {/* Toolbar & Settings Panel */}
-                <div className="flex flex-col items-center gap-4 p-4 pt-0 bg-transparent">
+                <div className="flex flex-col items-center gap-2 p-0 bg-transparent">
                     {/* Tool Settings Popup */}
                     {isSettingsOpen && (
                         <div className="bg-white/90 backdrop-blur-2xl rounded-[2rem] shadow-2xl p-6 border border-white/50 flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 mb-4 w-80 ring-1 ring-black/[0.03]">
@@ -337,6 +338,8 @@ function WhiteboardToolbarComponent({
 
                         <div className="w-px h-8 bg-black/[0.05] mx-1" />
 
+
+
                         {/* Select (Cursor) */}
                         <button
                             onClick={() => handleToolClick('select')}
@@ -449,6 +452,20 @@ function WhiteboardToolbarComponent({
                             </button>
                         </div>
 
+                        {/* Text Tool */}
+                        <button
+                            onClick={() => handleToolClick('text')}
+                            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${tool === 'text'
+                                ? 'bg-black text-white shadow-xl scale-110'
+                                : 'hover:bg-stone-50 text-stone-500 hover:text-stone-900 hover:scale-110'
+                                }`}
+                            title="Text"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 6h14M12 6v13m-3 0h6" />
+                            </svg>
+                        </button>
+
                         {/* Hidden Input */}
                         <input
                             type="file"
@@ -475,6 +492,43 @@ function WhiteboardToolbarComponent({
                                     d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
                                 />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 8l-6 6" />
+                            </svg>
+                        </button>
+
+                        {/* Post-it */}
+                        <button
+                            onClick={() => handleToolClick('postit')}
+                            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${tool === 'postit'
+                                ? 'bg-yellow-400 text-yellow-900 shadow-xl scale-110'
+                                : 'hover:bg-yellow-50 text-stone-500 hover:text-yellow-600 hover:scale-110'
+                                }`}
+                            title="Post-it"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                />
+                            </svg>
+                        </button>
+
+                        {/* Stamp */}
+                        <button
+                            onClick={(e) => {
+                                handleToolClick('stamp');
+                                // Open menu at center or near button? Center is safest for visibility.
+                                setStampMenuPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                            }}
+                            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${tool === 'stamp'
+                                ? 'bg-pink-500 text-white shadow-xl scale-110'
+                                : 'hover:bg-pink-50 text-stone-500 hover:text-pink-600 hover:scale-110'
+                                }`}
+                            title="Stamp"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </button>
 

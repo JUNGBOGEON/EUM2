@@ -10,6 +10,7 @@ import {
 } from './sentence-detector.service';
 import { TTSPreferenceService } from './tts-preference.service';
 import { PollyCacheService } from './polly-cache.service';
+import { VoiceDubbingTTSService } from './voice-dubbing-tts.service';
 
 /**
  * 번역 요청 DTO
@@ -59,6 +60,7 @@ export class TranslationService {
     private sentenceDetectorService: SentenceDetectorService,
     private ttsPreferenceService: TTSPreferenceService,
     private pollyCacheService: PollyCacheService,
+    private voiceDubbingTTSService: VoiceDubbingTTSService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
   ) {}
@@ -370,7 +372,7 @@ export class TranslationService {
           this.logger.debug(
             `[Translation] Sending translated transcript to user: ${userId}`,
           );
-          this.workspaceGateway.sendTranslatedTranscript(userId, payload);
+          await this.workspaceGateway.sendTranslatedTranscript(userId, payload);
         }
 
         this.logger.log(
@@ -385,6 +387,7 @@ export class TranslationService {
           targetLanguage,
           resultId,
           speakerName,
+          speakerUserId, // 발화자 userId 추가 (음성 더빙 확인용)
           timestamp,
         ).catch((err) => {
           this.logger.error(`[TTS] TTS processing failed: ${err.message}`, err.stack);
@@ -435,6 +438,12 @@ export class TranslationService {
 
   /**
    * TTS 활성화된 사용자들에게 TTS 오디오 생성 및 전송
+   *
+   * 발화자가 음성 더빙을 활성화한 경우:
+   * - AI Server (XTTS v2)를 사용하여 발화자 목소리로 TTS 생성
+   *
+   * 발화자가 음성 더빙을 비활성화한 경우:
+   * - AWS Polly를 사용하여 TTS 생성
    */
   private async processTTSForUsers(
     sessionId: string,
@@ -443,6 +452,7 @@ export class TranslationService {
     targetLanguage: string,
     resultId: string,
     speakerName: string,
+    speakerUserId: string,
     timestamp: number,
   ): Promise<void> {
     // TTS 활성화된 사용자만 필터링
@@ -460,7 +470,63 @@ export class TranslationService {
       `[TTS] Processing TTS for ${ttsEnabledUsers.length} user(s), lang=${targetLanguage}`,
     );
 
-    // 각 사용자별로 음성 설정에 따라 TTS 생성
+    // 발화자의 음성 더빙 활성화 여부 확인
+    const voiceDubbingEnabled = await this.voiceDubbingTTSService.isVoiceDubbingEnabled(
+      speakerUserId,
+    );
+
+    // 일본어는 voice dubbing 품질이 낮아 Polly 사용
+    const isJapanese = targetLanguage === 'ja-JP' || targetLanguage === 'ja';
+    const useVoiceDubbing = voiceDubbingEnabled && !isJapanese;
+
+    this.logger.log(
+      `[TTS] Speaker ${speakerUserId} voice dubbing: ${voiceDubbingEnabled ? 'ENABLED' : 'DISABLED'}${isJapanese ? ' (skipped for Japanese)' : ''}`,
+    );
+
+    // 음성 더빙 사용 시: 한 번만 생성하고 모든 청취자에게 전송 (동일 언어)
+    if (useVoiceDubbing) {
+      try {
+        const voiceDubbingResult = await this.voiceDubbingTTSService.synthesizeWithVoiceDubbing(
+          translatedText,
+          targetLanguage,
+          speakerUserId,
+          sessionId,
+        );
+
+        if (voiceDubbingResult) {
+          // 모든 TTS 활성화 사용자에게 동일한 오디오 전송
+          for (const userId of ttsEnabledUsers) {
+            const payload: TTSReadyPayload = {
+              type: 'tts_ready',
+              resultId,
+              audioUrl: voiceDubbingResult.audioUrl,
+              durationMs: voiceDubbingResult.durationMs,
+              voiceId: 'voice-dubbing',
+              targetLanguage,
+              speakerName,
+              translatedText,
+              timestamp,
+            };
+
+            await this.workspaceGateway.sendTTSReady(userId, payload);
+
+            this.logger.debug(
+              `[TTS] Sent voice-dubbing TTS to user ${userId}: duration=${voiceDubbingResult.durationMs}ms`,
+            );
+          }
+          return; // 음성 더빙 성공 시 여기서 종료
+        }
+
+        // 음성 더빙 실패 시 Polly로 폴백
+        this.logger.warn('[TTS] Voice dubbing failed, falling back to Polly');
+      } catch (error) {
+        this.logger.warn(
+          `[TTS] Voice dubbing error, falling back to Polly: ${error.message}`,
+        );
+      }
+    }
+
+    // Polly 사용: 각 사용자별로 음성 설정에 따라 TTS 생성
     for (const userId of ttsEnabledUsers) {
       try {
         // 사용자의 음성 설정 가져오기
@@ -491,10 +557,10 @@ export class TranslationService {
           timestamp,
         };
 
-        this.workspaceGateway.sendTTSReady(userId, payload);
+        await this.workspaceGateway.sendTTSReady(userId, payload);
 
         this.logger.debug(
-          `[TTS] Sent TTS ready to user ${userId}: voice=${voiceId}, duration=${ttsResult.durationMs}ms`,
+          `[TTS] Sent Polly TTS to user ${userId}: voice=${voiceId}, duration=${ttsResult.durationMs}ms`,
         );
       } catch (error) {
         // 개별 사용자 TTS 실패는 무시

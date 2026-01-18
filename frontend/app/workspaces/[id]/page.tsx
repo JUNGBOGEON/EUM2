@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import {
   WorkspaceSidebar,
@@ -11,6 +12,7 @@ import {
   MembersSection,
   SettingsSection,
   CalendarSection,
+  ChatSection,
   WorkspaceNotifications,
 } from './_components';
 import { useWorkspaceDetail } from './_hooks/use-workspace-detail';
@@ -35,6 +37,9 @@ export default function WorkspaceDetailPage() {
     events,
     eventTypes,
     isOwner,
+
+    userPermissions,
+    roles, // Destructure roles
 
     // Navigation
     activeNav,
@@ -76,8 +81,12 @@ export default function WorkspaceDetailPage() {
     deleteEventType,
 
     // Workspace Actions
+    // Workspace Actions
     updateWorkspace,
     deleteWorkspace,
+
+    // Role Actions
+    assignRole,
 
     // Action states
     isStartingMeeting,
@@ -132,7 +141,7 @@ export default function WorkspaceDetailPage() {
 
   return (
     <SidebarProvider defaultOpen>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="min-h-screen flex w-full bg-[#050505] text-white selection:bg-white/20 selection:text-white">
         {/* Sidebar */}
         <WorkspaceSidebar
           workspace={workspace}
@@ -144,21 +153,36 @@ export default function WorkspaceDetailPage() {
         />
 
         {/* Main Content Area */}
-        <SidebarInset className="flex-1">
-          <div className="flex flex-col min-h-screen">
-            {/* Header */}
-            <header className="h-14 border-b border-border flex items-center justify-between px-6">
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">
-                  {activeNav === 'meeting' && t('meeting.title')}
-                  {activeNav === 'calendar' && t('calendar.title')}
-                  {activeNav === 'files' && t('files.title')}
-                  {activeNav === 'history' && t('history.title')}
-                  {activeNav === 'members' && t('members.title')}
-                  {activeNav === 'settings' && t('menu.settings')}
-                </h1>
+        <SidebarInset className="flex-1 bg-transparent">
+          <div className="flex flex-col min-h-screen relative">
+            {/* Ambient Background - Clean & Sophisticated */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 bg-[#050505]" />
+              {/* Subtle Dot Pattern */}
+              <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:32px_32px] opacity-[0.03]" />
+              {/* Very subtle top gradient for depth */}
+              <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/[0.02] to-transparent" />
+            </div>
+
+            {/* Header - Vercel Style: Clean, Minimal, Sharp */}
+            <header className="h-14 px-8 flex items-center justify-between sticky top-0 z-20 bg-black border-b border-neutral-800">
+              <div className="flex items-center gap-6">
+                {/* Breadcrumb-style navigation */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-neutral-500">{workspace.name}</span>
+                  <span className="text-neutral-700">/</span>
+                  <span className="text-white font-medium">
+                    {activeNav === 'meeting' && '회의'}
+                    {activeNav === 'chat' && '채팅'}
+                    {activeNav === 'calendar' && '캘린더'}
+                    {activeNav === 'files' && '파일'}
+                    {activeNav === 'history' && '기록'}
+                    {activeNav === 'members' && '멤버'}
+                    {activeNav === 'settings' && '설정'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center">
                 <WorkspaceNotifications
                   invitations={myInvitations}
                   isLoading={isLoadingInvitations}
@@ -168,9 +192,18 @@ export default function WorkspaceDetailPage() {
               </div>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 overflow-auto p-6">
-              <div className="max-w-4xl mx-auto">
+            {/* Main Content Scroll Area */}
+            <main className={cn(
+              "flex-1 flex flex-col relative z-0",
+              activeNav === 'chat' ? "overflow-hidden p-0" : "overflow-auto p-8"
+            )}>
+              <div className={cn(
+                "mx-auto transition-all duration-500 ease-out",
+                // Animation entry
+                "animate-in fade-in slide-in-from-bottom-4 duration-500",
+                activeNav === 'chat' ? "h-full w-full" :
+                  ['calendar', 'history', 'files', 'meeting'].includes(activeNav) ? "w-full max-w-[85%] 2xl:max-w-[75%]" : "w-full max-w-5xl"
+              )}>
                 {/* Meeting Section */}
                 {activeNav === 'meeting' && (
                   <MeetingSection
@@ -179,6 +212,16 @@ export default function WorkspaceDetailPage() {
                     onJoinSession={joinSession}
                     isStarting={isStartingMeeting}
                     isJoining={isJoiningSession}
+                    canJoinCalls={userPermissions?.joinCalls !== false}
+                  />
+                )}
+
+                {/* Chat Section */}
+                {activeNav === 'chat' && (
+                  <ChatSection
+                    workspaceId={workspaceId}
+                    currentUser={user}
+                    canSendMessages={userPermissions?.sendMessages !== false}
                   />
                 )}
 
@@ -195,6 +238,7 @@ export default function WorkspaceDetailPage() {
                     onCreateEventType={createEventType}
                     onUpdateEventType={updateEventType}
                     onDeleteEventType={deleteEventType}
+                    canEditCalendar={isOwner || userPermissions?.editCalendar !== false}
                   />
                 )}
 
@@ -228,11 +272,14 @@ export default function WorkspaceDetailPage() {
                     members={members}
                     currentUser={user}
                     isOwner={isOwner}
+                    canManagePermissions={isOwner || (!!userPermissions?.managePermissions)}
                     pendingInvitations={pendingInvitations}
                     onInviteMember={inviteMember}
                     onKickMember={kickMember}
                     onCancelInvitation={cancelInvitation}
                     onSearchUsers={searchUsers}
+                    roles={roles} // Pass roles
+                    onUpdateMemberRole={assignRole} // Use real function
                   />
                 )}
 
@@ -241,6 +288,7 @@ export default function WorkspaceDetailPage() {
                   <SettingsSection
                     workspace={workspace}
                     isOwner={isOwner}
+                    permissions={userPermissions ?? undefined} // Pass permissions (handle structure mismatch if any, types seem compatible)
                     onUpdateWorkspace={updateWorkspace}
                     onDeleteWorkspace={deleteWorkspace}
                   />

@@ -97,12 +97,20 @@ export function useWhiteboardSync(
             if (data.changes?.data?.erasures || data.data?.erasures) {
                 console.log('[WhiteboardSync] Received Erasures for', data.id, data.changes || data);
             }
+            // Clear remote drag graphics (eraser uses update_item for erasures)
+            if (renderManager && data.senderId) {
+                renderManager.clearRemoteDrags(data.senderId);
+            }
             // Support both wrapped 'changes' (interaction) and direct updates (drawing/eraser)
             updateItem(data.id, data.changes || data);
         });
 
         socket.on('delete_item', (data: any) => {
             if (data.senderId === localId) return;
+            // Clear remote drag graphics (eraser uses delete_item for full deletion)
+            if (renderManager && data.senderId) {
+                renderManager.clearRemoteDrags(data.senderId);
+            }
             deleteItem(data.id);
         });
 
@@ -112,11 +120,13 @@ export function useWhiteboardSync(
         });
 
         socket.on('cursor', (data: any) => {
-            // Data includes socketId probably, but we use data.senderId if sent
-            // Remote cursor logic might rely on specific ID format
-            // data should be { x, y, tool, name, avatar, senderId }
+            // Data includes socketId from backend and senderId from client
+            // data should be { x, y, tool, name, avatar, senderId, socketId }
             if (data.senderId === localId) return;
-            renderManager.updateRemoteCursor(data.senderId, data.x, data.y, data);
+            renderManager.updateRemoteCursor(data.senderId, data.x, data.y, {
+                ...data,
+                socketId: data.socketId, // Pass socketId for cleanup mapping
+            });
         });
 
         socket.on('draw_batch', (data: any) => {
@@ -127,6 +137,14 @@ export function useWhiteboardSync(
         socket.on('refetch', (data: any) => {
             if (data.senderId === localId) return;
             onRefetch?.();
+        });
+
+        socket.on('stroke_end', (data: any) => {
+            if (data.senderId === localId) return;
+            // Clear remote drag graphics when stroke ends without creating item
+            if (renderManager && data.senderId) {
+                renderManager.clearRemoteDrags(data.senderId);
+            }
         });
 
         socket.on('user_left', (data: { socketId: string }) => {
@@ -187,6 +205,9 @@ export function useWhiteboardSync(
                 break;
             case 'refetch':
                 socketRef.current.emit('refetch', payload);
+                break;
+            case 'stroke_end':
+                socketRef.current.emit('stroke_end', payload);
                 break;
             default:
                 console.warn('[WhiteboardSync] Unknown event type:', type);

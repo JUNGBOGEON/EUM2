@@ -52,6 +52,8 @@ export class ChimeService {
     workspaceId: string,
     hostId: string,
     title?: string,
+    category: string = 'General',
+    maxParticipants: number = 50,
   ): Promise<{
     session: MeetingSession;
     attendee: {
@@ -68,17 +70,7 @@ export class ChimeService {
       throw new NotFoundException('워크스페이스를 찾을 수 없습니다.');
     }
 
-    // 진행 중인 세션이 있는지 확인
-    const activeSession = await this.sessionRepository.findOne({
-      where: { workspaceId, status: SessionStatus.ACTIVE },
-    });
-
-    if (activeSession) {
-      // 이미 진행 중인 세션이 있으면 해당 세션에 참가
-      return this.joinSession(activeSession.id, hostId);
-    }
-
-    // 새 세션 생성
+    // 새 세션 생성 항상 수행 (기존 activeSession 체크 제거)
     const externalMeetingId = uuidv4();
 
     // AWS Chime Meeting 생성 (SDK 서비스 사용)
@@ -90,6 +82,8 @@ export class ChimeService {
     session.title = title || `${workspace.name} 회의`;
     session.workspaceId = workspaceId;
     session.hostId = hostId;
+    session.category = category;
+    session.maxParticipants = maxParticipants;
     session.externalMeetingId = externalMeetingId;
     session.chimeMeetingId = chimeMeeting.meetingId;
     session.mediaPlacement = chimeMeeting.mediaPlacement;
@@ -143,6 +137,8 @@ export class ChimeService {
         hostId: session.hostId,
         startedAt: session.startedAt,
         participantCount: 1,
+        maxParticipants: session.maxParticipants,
+        category: session.category,
         host,
       },
     });
@@ -483,10 +479,11 @@ export class ChimeService {
   /**
    * 워크스페이스의 활성 세션 조회
    */
-  async getActiveSession(workspaceId: string): Promise<MeetingSession | null> {
-    return this.sessionRepository.findOne({
+  async getActiveSessions(workspaceId: string): Promise<MeetingSession[]> {
+    return this.sessionRepository.find({
       where: { workspaceId, status: SessionStatus.ACTIVE },
       relations: ['host', 'participants', 'participants.user'],
+      order: { startedAt: 'DESC' },
     });
   }
 

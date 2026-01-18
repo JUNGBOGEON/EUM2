@@ -10,6 +10,10 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { MeetingSession } from './meeting-session.entity';
+import {
+  encryptedTextTransformer,
+  encryptedJsonTransformer,
+} from '../../common/crypto';
 
 /**
  * Transcription Entity
@@ -57,15 +61,15 @@ export class Transcription {
   @Column({ nullable: true })
   externalUserId?: string;
 
-  // ===== 텍스트 내용 =====
-  @Column({ type: 'text' })
+  // ===== 텍스트 내용 (암호화됨) =====
+  @Column({ type: 'text', transformer: encryptedTextTransformer })
   originalText: string;
 
   @Column({ default: 'ko-KR' })
   languageCode: string;
 
-  // 번역된 텍스트 (JSON)
-  @Column({ type: 'jsonb', nullable: true })
+  // 번역된 텍스트 (암호화된 JSON)
+  @Column({ type: 'text', nullable: true, transformer: encryptedJsonTransformer })
   translations?: Record<string, string>;
 
   // ===== 시간 정보 =====
@@ -108,7 +112,8 @@ export class Transcription {
   @Column({ default: false })
   isActionItem: boolean;
 
-  @Column({ type: 'text', nullable: true })
+  // 액션 아이템 내용 (암호화됨)
+  @Column({ type: 'text', nullable: true, transformer: encryptedTextTransformer })
   actionItemContent?: string;
 
   // ===== 시스템 필드 =====

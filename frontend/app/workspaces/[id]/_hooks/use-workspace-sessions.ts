@@ -18,7 +18,7 @@ interface UseWorkspaceSessionsReturn {
   isJoiningSession: boolean;
   fetchSessions: () => Promise<void>;
   fetchActiveSessions: () => Promise<void>;
-  startMeeting: (title?: string) => Promise<void>;
+  startMeeting: (title?: string, category?: string, maxParticipants?: number) => Promise<void>;
   joinSession: (sessionId: string) => Promise<void>;
   viewSession: (session: MeetingSession) => void;
   setSessions: React.Dispatch<React.SetStateAction<MeetingSession[]>>;
@@ -78,14 +78,19 @@ export function useWorkspaceSessions({ workspaceId }: UseWorkspaceSessionsProps)
     }
   }, [workspaceId]);
 
-  const startMeeting = useCallback(async (title?: string) => {
+  const startMeeting = useCallback(async (title?: string, category?: string, maxParticipants?: number) => {
     setIsStartingMeeting(true);
     try {
       const response = await fetch(`${API_URL}/api/meetings/sessions/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ workspaceId, title: title || '새 회의' }),
+        body: JSON.stringify({
+          workspaceId,
+          title: title || '새 회의',
+          category,
+          maxParticipants
+        }),
       });
 
       if (!response.ok) {

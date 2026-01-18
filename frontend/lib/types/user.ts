@@ -25,5 +25,6 @@ export interface UserInfo {
 
 /**
  * 워크스페이스 소유자 정보
+ * Type alias for workspace owner - extends UserInfo without additional properties
  */
-export interface WorkspaceOwner extends UserInfo {}
+export type WorkspaceOwner = UserInfo;

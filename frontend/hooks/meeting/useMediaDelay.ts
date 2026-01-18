@@ -58,6 +58,13 @@ export function useMediaDelay({
   const audioContextRef = useRef<AudioContext | null>(null);
   const delayNodeRef = useRef<DelayNode | null>(null);
 
+  // Video delay refs (moved to top level for rules-of-hooks compliance)
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const frameBufferRef = useRef<VideoFrame[]>([]);
+  const captureIntervalRef = useRef<number | null>(null);
+  const playbackIntervalRef = useRef<number | null>(null);
+  const isCapturingRef = useRef(false);
+
   // 딜레이 값 변경 시 클램핑
   const setDelayMs = useCallback((ms: number) => {
     const clampedMs = Math.max(0, Math.min(MAX_DELAY_MS, ms));
@@ -99,17 +106,11 @@ export function useMediaDelay({
 
   // 비디오 딜레이를 위한 캔버스 기반 버퍼 생성
   const createDelayedVideoRef = useCallback(() => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const frameBuffer = useRef<VideoFrame[]>([]);
-    const captureIntervalRef = useRef<number | null>(null);
-    const playbackIntervalRef = useRef<number | null>(null);
-    const isCapturingRef = useRef(false);
-
     const startCapture = (videoElement: HTMLVideoElement) => {
       if (isCapturingRef.current) return;
       isCapturingRef.current = true;
 
-      const canvas = canvasRef.current;
+      const canvas = videoCanvasRef.current;
       if (!canvas) return;
 
       const ctx = canvas.getContext('2d');
@@ -128,14 +129,14 @@ export function useMediaDelay({
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
         // 버퍼에 추가
-        frameBuffer.current.push({
+        frameBufferRef.current.push({
           imageData,
           timestamp: Date.now(),
         });
 
         // 오래된 프레임 제거 (딜레이 + 여유분)
         const cutoffTime = Date.now() - delayMs - 1000;
-        frameBuffer.current = frameBuffer.current.filter(
+        frameBufferRef.current = frameBufferRef.current.filter(
           (frame) => frame.timestamp > cutoffTime
         );
       };
@@ -152,7 +153,7 @@ export function useMediaDelay({
         const targetTime = Date.now() - (delayEnabled ? delayMs : 0);
 
         // 타겟 시간에 가장 가까운 프레임 찾기
-        const frame = frameBuffer.current.find(
+        const frame = frameBufferRef.current.find(
           (f) => f.timestamp <= targetTime
         );
 
@@ -180,11 +181,11 @@ export function useMediaDelay({
         playbackIntervalRef.current = null;
       }
 
-      frameBuffer.current = [];
+      frameBufferRef.current = [];
     };
 
     return {
-      canvasRef,
+      canvasRef: videoCanvasRef,
       startCapture,
       stopCapture,
     };

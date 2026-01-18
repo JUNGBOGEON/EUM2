@@ -56,6 +56,14 @@ export class MeetingSession {
   @Column({ nullable: true })
   title?: string;
 
+  // 카테고리
+  @Column({ nullable: true, default: 'General' })
+  category?: string;
+
+  // 최대 참가자 수
+  @Column({ type: 'int', nullable: true, default: 50 })
+  maxParticipants?: number;
+
   // ===== AWS Chime 관련 =====
   @Column({ nullable: true })
   chimeMeetingId?: string;

@@ -29,6 +29,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 import { useWhiteboardPanning } from './hooks/useWhiteboardPanning';
 import { WhiteboardContextMenu } from './WhiteboardContextMenu';
+import { TextInputOverlay } from './TextInputOverlay';
+import { StampMenu } from './StampMenu';
 
 interface WhiteboardCanvasProps {
     meetingId: string;
@@ -47,6 +49,16 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const [isToolbarSettingsOpen, setIsToolbarSettingsOpen] = useState(false);
+
+    // Text Editing State
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+    const items = useWhiteboardStore((state) => state.items); // Need items for callback
+    // Handle Text Complete
+    const handleTextComplete = useCallback(() => {
+        setEditingItemId(null);
+    }, []);
+
 
     // Zustand Selectors
     const tool = useWhiteboardStore((state) => state.tool);
@@ -259,12 +271,12 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
     }, []);
 
     // React to Store Changes: Items
-    const items = useWhiteboardStore((state) => state.items);
+    // items moved to top scope
     useEffect(() => {
         if (!renderManager) return;
-        console.log(`[WhiteboardCanvas] renderManager active. Rendering ${items.size} items.`);
-        renderManager.renderItems(items);
-    }, [items, renderManager]);
+        // console.log(`[WhiteboardCanvas] renderManager active. Rendering ${items.size} items. Editing: ${editingItemId}`);
+        renderManager.renderItems(items, editingItemId);
+    }, [items, renderManager, editingItemId]);
 
 
     // React to Store Changes: Pan/Zoom
@@ -297,7 +309,7 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
     useWhiteboardDrawing(renderManager, meetingId, broadcastEvent, broadcastCursor);
 
     // Hook: Interaction Logic (Select, Move)
-    useWhiteboardInteraction(renderManager, meetingId, broadcastEvent, setContextMenu);
+    useWhiteboardInteraction(renderManager, meetingId, broadcastEvent, setContextMenu, setEditingItemId);
 
     // Hook: Panning & Zooming
     useWhiteboardPanning(renderManager);
@@ -650,6 +662,7 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
             className="relative w-full h-full bg-white touch-none overflow-hidden select-none outline-none"
             onDrop={handleDropReal}
             onDragOver={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
             onPointerDown={() => { setIsToolbarSettingsOpen(false); setContextMenu(null); }}
         >
             {/* Grid Background */}
@@ -663,6 +676,21 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
                 }}
             />
 
+            {/* Render Text Input Overlay if Editing */}
+            {editingItemId && items.get(editingItemId) && (
+                <TextInputOverlay
+                    key={editingItemId}
+                    item={items.get(editingItemId)!}
+                    zoom={zoom}
+                    pan={pan}
+                    onChange={(id, text) => {
+                        useWhiteboardStore.getState().updateItem(id, { data: { ...items.get(id)!.data, text } });
+                        broadcastEvent('update_item', { id, data: { ...items.get(id)!.data, text } });
+                    }}
+                    onComplete={handleTextComplete}
+                />
+            )}
+
             {/* Context Menu */}
             {contextMenu && (
                 <WhiteboardContextMenu
@@ -672,6 +700,9 @@ export default function WhiteboardCanvas({ meetingId: propMeetingId, currentUser
                     onAction={handleMenuAction}
                 />
             )}
+
+            {/* Stamp Menu */}
+            <StampMenu />
 
             {/* Zoom Controls */}
             <ZoomControls

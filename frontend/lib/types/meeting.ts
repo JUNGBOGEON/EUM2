@@ -4,6 +4,7 @@
  */
 
 import type { UserInfo } from './user';
+import type { Workspace } from './workspace';
 
 /**
  * 세션 상태
@@ -40,6 +41,9 @@ export interface MeetingSession {
   id: string;
   title?: string;
   workspaceId: string;
+  workspace?: Workspace;
+  category?: string;
+  maxParticipants?: number;
   hostId: string;
   host?: UserInfo;
   status: SessionStatus;
@@ -50,6 +54,7 @@ export interface MeetingSession {
   participants?: SessionParticipant[];
   summaryStatus?: SummaryStatus;
   summaryS3Key?: string;
+  createdAt: string;
 }
 
 /**

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Calendar, Plus, Settings2, Loader2 } from 'lucide-react';
+import { Calendar, Plus, Settings2, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -17,6 +17,7 @@ import type { WorkspaceEvent, WorkspaceEventType, CreateEventDto, CreateEventTyp
 
 // Sub-components
 import { CalendarGrid, EventDialog, EventTypeDialog, TodayEvents } from './calendar';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface CalendarSectionProps {
   events: WorkspaceEvent[];
@@ -29,9 +30,8 @@ interface CalendarSectionProps {
   onCreateEventType: (data: CreateEventTypeDto) => Promise<void>;
   onUpdateEventType: (typeId: string, data: UpdateEventTypeDto) => Promise<void>;
   onDeleteEventType: (typeId: string) => Promise<void>;
+  canEditCalendar?: boolean;
 }
-
-import { useLanguage } from '@/contexts/LanguageContext';
 
 export function CalendarSection({
   events,
@@ -44,6 +44,7 @@ export function CalendarSection({
   onCreateEventType,
   onUpdateEventType,
   onDeleteEventType,
+  canEditCalendar = true,
 }: CalendarSectionProps) {
   // Calendar navigation state
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -106,6 +107,7 @@ export function CalendarSection({
 
   // Event handlers
   const handleDateClick = (date: Date) => {
+    if (!canEditCalendar) return;
     setEditingEvent(null);
     const defaultType = eventTypes.find(t => t.name === '기타') || eventTypes[0];
     setFormData({
@@ -190,32 +192,52 @@ export function CalendarSection({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-8 w-8 animate-spin text-white/50" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">{t('calendar.title')}</h2>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-xl border border-white/10">
+            <Calendar className="h-5 w-5 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              {t('calendar.title')}
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5">Mange your team schedules and events</p>
+          </div>
         </div>
+
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowEventTypesDialog(true)}>
-            <Settings2 className="h-4 w-4 mr-2" />
-            {t('calendar.manage_types')}
-          </Button>
-          <Button onClick={() => handleDateClick(new Date())}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('calendar.add_event')}
-          </Button>
+          {canEditCalendar && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEventTypesDialog(true)}
+                className="border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 hover:border-white/20"
+              >
+                <Settings2 className="h-4 w-4 mr-2" />
+                {t('calendar.manage_types')}
+              </Button>
+              <Button
+                onClick={() => handleDateClick(new Date())}
+                className="bg-white text-black hover:bg-neutral-200 border-none font-semibold shadow-lg shadow-white/10"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {t('calendar.add_event')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-250px)] min-h-[600px]">
         {/* Calendar Grid */}
         <CalendarGrid
           currentDate={currentDate}
@@ -228,10 +250,12 @@ export function CalendarSection({
         />
 
         {/* Today's Events Sidebar */}
-        <TodayEvents
-          events={todayEvents}
-          onEventClick={handleEventClick}
-        />
+        <div className="lg:col-span-1 h-full">
+          <TodayEvents
+            events={todayEvents}
+            onEventClick={handleEventClick}
+          />
+        </div>
       </div>
 
       {/* Event Dialog */}
@@ -249,19 +273,19 @@ export function CalendarSection({
 
       {/* Delete Confirmation */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-neutral-900 border-white/10 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('calendar.delete_title')}</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-neutral-400">
               {t('calendar.delete_confirm').replace('{title}', editingEvent?.title || '')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting} className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20"
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {t('common.delete')}

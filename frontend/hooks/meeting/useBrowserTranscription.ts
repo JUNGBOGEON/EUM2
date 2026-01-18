@@ -97,7 +97,7 @@ const JAPANESE_ENDINGS = ['です', 'ます', 'した', 'ました', 'だ', 'で
  */
 function analyzeSentence(text: string, languageCode: string): SentenceAnalysis {
   const trimmed = text.trim();
-  
+
   if (!trimmed || trimmed.length < 5) {
     return { isComplete: false, confidence: 0, reason: 'Too short' };
   }
@@ -176,7 +176,7 @@ function analyzeKorean(text: string): SentenceAnalysis {
 function analyzeEnglish(text: string): SentenceAnalysis {
   // 완전한 문장 구조 (주어 + 동사)
   const hasSubjectVerb = /\b(I|you|he|she|it|we|they|this|that|there)\s+(am|is|are|was|were|have|has|had|do|does|did|will|would|can|could|should|must|may|might)\b/i.test(text);
-  
+
   if (hasSubjectVerb && text.length > 30) {
     return { isComplete: true, confidence: 0.6, reason: 'Complete sentence structure' };
   }
@@ -261,7 +261,7 @@ function shouldForceSplit(
 ): { shouldSplit: boolean; reason: string } {
   const { text, startTime } = buffer;
   const duration = now - startTime;
-  
+
   // 1. 텍스트가 너무 짧으면 분할하지 않음
   if (text.length < FORCE_SPLIT_CONFIG.MIN_CHARS_FOR_SPLIT) {
     return { shouldSplit: false, reason: 'Text too short' };
@@ -269,7 +269,7 @@ function shouldForceSplit(
 
   // 2. 문장 감지
   const analysis = analyzeSentence(text, languageCode);
-  
+
   // 문장이 완료되었고 신뢰도가 높으면 즉시 분할
   if (analysis.isComplete && analysis.confidence >= FORCE_SPLIT_CONFIG.SENTENCE_CONFIDENCE_THRESHOLD) {
     return { shouldSplit: true, reason: `Sentence complete: ${analysis.reason}` };
@@ -466,7 +466,7 @@ export function useBrowserTranscription({
   // ==========================================
   // 강제 분할 관련 Refs
   // ==========================================
-  
+
   /** Partial 트랜스크립트 버퍼 (강제 분할용) */
   const partialBufferRef = useRef<PartialBuffer>({
     resultId: '',
@@ -478,10 +478,10 @@ export function useBrowserTranscription({
     forceSplitCount: 0,
     splitTextLength: 0,
   });
-  
+
   /** 강제 분할 체크 타이머 */
   const forceSplitTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   /** 강제 분할 진행 중 플래그 (중복 방지) */
   const isForceSplittingRef = useRef(false);
 
@@ -613,7 +613,7 @@ export function useBrowserTranscription({
   // ==========================================
   // 강제 분할 처리 함수
   // ==========================================
-  
+
   /**
    * 강제 분할된 텍스트를 "가상 final"로 서버에 전송합니다.
    * partial이 너무 길어지거나 문장이 완료된 것으로 판단될 때 호출됩니다.
@@ -632,7 +632,7 @@ export function useBrowserTranscription({
     }
 
     isForceSplittingRef.current = true;
-    
+
     console.log(`[ForceSplit] 🔪 Sending forced final: "${forcedResult.transcript.substring(0, 30)}..." (reason: ${reason})`);
 
     // 서버에 저장할 타임스탬프 계산
@@ -643,14 +643,11 @@ export function useBrowserTranscription({
       ? sessionStartTimeRef.current + forcedResult.endTimeMs
       : Date.now();
 
-    // UI 타임스탬프 계산 (발화 시작 시점 기준, 분할 시점이 아님!)
-    // sessionStartTimeRef: Transcribe WebSocket 연결 시간 (epoch)
-    // forcedResult.startTimeMs: WebSocket 연결 이후의 상대 시간
-    // meetingStartTime: 미팅 시작 시간 (epoch)
-    // 정확한 타임스탬프 = (세션시작 + 상대시간) - 미팅시작
-    const elapsedMs = sessionStartTimeRef.current && meetingStartTime
-      ? (sessionStartTimeRef.current + forcedResult.startTimeMs) - meetingStartTime
-      : forcedResult.startTimeMs;
+    // UI 타임스탬프 계산 - 통합 타임라인 (채팅과 동일한 기준)
+    // meetingStartTime 기준 현재 경과 시간 사용 (클라이언트-서버 시계 차이 해소)
+    const elapsedMs = meetingStartTime
+      ? Date.now() - meetingStartTime
+      : 0;
 
     // UI에 먼저 표시 (로컬 트랜스크립트로)
     const forcedItem: TranscriptItem = {
@@ -708,7 +705,7 @@ export function useBrowserTranscription({
       if (response.ok) {
         const data = await response.json();
         console.log(`[ForceSplit] ✅ Forced final saved successfully`);
-        
+
         // 서버 타임스탬프로 보정
         if (data.serverTimestamp !== undefined && onTimestampCorrection) {
           onTimestampCorrection(forcedResult.resultId, data.serverTimestamp);
@@ -744,7 +741,7 @@ export function useBrowserTranscription({
    */
   const checkAndForceSplit = useCallback(() => {
     const buffer = partialBufferRef.current;
-    
+
     // 버퍼가 비어있으면 스킵
     if (!buffer.resultId || !buffer.text) {
       return;
@@ -771,7 +768,7 @@ export function useBrowserTranscription({
       // splitTextLength 업데이트: 현재까지 분할된 텍스트 길이 누적
       const currentResultId = buffer.resultId;
       const newSplitTextLength = buffer.splitTextLength + buffer.text.length;
-      
+
       partialBufferRef.current = {
         resultId: currentResultId,
         text: '',
@@ -792,13 +789,13 @@ export function useBrowserTranscription({
     if (forceSplitTimerRef.current) {
       clearInterval(forceSplitTimerRef.current);
     }
-    
+
     forceSplitTimerRef.current = setInterval(() => {
       if (isMountedRef.current) {
         checkAndForceSplit();
       }
     }, FORCE_SPLIT_CONFIG.CHECK_INTERVAL_MS);
-    
+
     console.log('[ForceSplit] ⏱️ Timer started');
   }, [checkAndForceSplit]);
 
@@ -816,13 +813,13 @@ export function useBrowserTranscription({
   // 트랜스크립션 결과 처리
   const handleTranscriptResult = useCallback((result: TranscriptResult) => {
     const now = Date.now();
-    
+
     // ==========================================
     // 강제 분할을 위한 Partial 버퍼 관리
     // ==========================================
     if (result.isPartial) {
       const buffer = partialBufferRef.current;
-      
+
       // 새로운 resultId면 버퍼 초기화
       if (buffer.resultId !== result.resultId) {
         partialBufferRef.current = {
@@ -840,7 +837,7 @@ export function useBrowserTranscription({
         // 같은 resultId - 이미 분할된 부분을 제외한 새 텍스트만 추출
         // AWS Transcribe는 전체 텍스트를 계속 보내므로, 이미 처리된 부분 제외
         const newText = result.transcript.substring(buffer.splitTextLength);
-        
+
         // 새 텍스트가 없거나 너무 짧으면 UI 업데이트만 하고 분할 체크 스킵
         if (newText.trim().length < 3) {
           // UI에는 표시하되 분할 체크는 하지 않음
@@ -857,7 +854,7 @@ export function useBrowserTranscription({
             lastUpdateTime: now,
             endTimeMs: result.endTimeMs,
           };
-          
+
           // 즉시 분할 체크 (새 텍스트에 대해서만)
           const { shouldSplit, reason } = shouldForceSplit(partialBufferRef.current, selectedLanguage, now);
           if (shouldSplit) {
@@ -979,13 +976,11 @@ export function useBrowserTranscription({
       return;
     }
 
-    // 타임스탬프 계산 (sendForcedFinal과 동일한 방식 사용하여 일관성 보장)
-    // 강제 분할 후 Partial은 버퍼의 startTimeMs 사용 (이전 분할의 endTimeMs)
-    // 그렇지 않으면 AWS의 startTimeMs 사용
-    const timestampBaseMs = hasForceSplit ? buffer.startTimeMs : result.startTimeMs;
-    const elapsedMs = sessionStartTimeRef.current && meetingStartTime
-      ? (sessionStartTimeRef.current + timestampBaseMs) - meetingStartTime
-      : timestampBaseMs;
+    // 타임스탬프 계산 - 통합 타임라인 (채팅과 동일한 기준)
+    // meetingStartTime 기준 현재 경과 시간 사용 (클라이언트-서버 시계 차이 해소)
+    const elapsedMs = meetingStartTime
+      ? Date.now() - meetingStartTime
+      : 0;
 
     const newItem: TranscriptItem = {
       id: displayId,
@@ -1169,7 +1164,7 @@ export function useBrowserTranscription({
           sessionStartTimeRef.current = Date.now();
           lastSuccessfulConnectionRef.current = Date.now();
           reconnectAttemptsRef.current = 0; // 연결 성공 시 즉시 리셋
-          
+
           // 강제 분할 타이머 시작
           startForceSplitTimer();
 
@@ -1307,7 +1302,7 @@ export function useBrowserTranscription({
 
     // 강제 분할 타이머 정리
     stopForceSplitTimer();
-    
+
     // Partial 버퍼 초기화
     partialBufferRef.current = {
       resultId: '',

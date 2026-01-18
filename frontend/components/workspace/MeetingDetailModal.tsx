@@ -75,7 +75,7 @@ export function MeetingDetailModal({
     error: summaryError,
     regenerate,
     isRegenerating,
-  } = useMeetingSummary(isOpen ? sessionId : null);
+  } = useMeetingSummary(isOpen ? sessionId : null, session?.workspaceId);
 
   // ESC 키로 모달 닫기
   const handleKeyDown = useCallback(

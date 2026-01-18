@@ -26,14 +26,16 @@ import {
   useTTS,
   useMediaDelay,
   useOriginalAudioVolume,
+  useMeetingChat,
   DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
+import { useVoiceEnrollment } from '@/hooks/useVoiceEnrollment';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
   MeetingHeader,
   MeetingControls,
   VideoGrid,
-  TranscriptPanel,
+  CommunicationPanel,
   DeviceSettingsDialog,
   FloatingSubtitle,
   EndMeetingDialog,
@@ -60,6 +62,45 @@ function MeetingRoomContent() {
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
+  const [muteOriginalOnTranslation, setMuteOriginalOnTranslation] = useState(true); // 번역 시 원본 음성 음소거 (기본: ON)
+
+  // Voice dubbing state (내 목소리 TTS)
+  const [hasVoiceEmbedding, setHasVoiceEmbedding] = useState(false);
+  const [voiceDubbingEnabled, setVoiceDubbingEnabled] = useState(false);
+  const [isTogglingVoiceDubbing, setIsTogglingVoiceDubbing] = useState(false);
+  const { getVoiceStatus, toggleVoiceDubbing } = useVoiceEnrollment();
+
+  // Fetch voice status on mount
+  useEffect(() => {
+    const fetchVoiceStatus = async () => {
+      try {
+        const status = await getVoiceStatus();
+        setHasVoiceEmbedding(status.hasVoiceEmbedding);
+        setVoiceDubbingEnabled(status.voiceDubbingEnabled);
+      } catch (err) {
+        console.warn('[MeetingPage] Failed to fetch voice status:', err);
+      }
+    };
+    fetchVoiceStatus();
+  }, [getVoiceStatus]);
+
+  // Handle voice dubbing toggle
+  const handleToggleVoiceDubbing = useCallback(async (enabled: boolean) => {
+    setIsTogglingVoiceDubbing(true);
+    try {
+      const result = await toggleVoiceDubbing(enabled);
+      setVoiceDubbingEnabled(result.voiceDubbingEnabled);
+    } catch (err) {
+      console.error('[MeetingPage] Failed to toggle voice dubbing:', err);
+    } finally {
+      setIsTogglingVoiceDubbing(false);
+    }
+  }, [toggleVoiceDubbing]);
+
+  // Handle mute original audio toggle
+  const handleToggleMuteOriginal = useCallback(() => {
+    setMuteOriginalOnTranslation(prev => !prev);
+  }, []);
 
   // Debug logging for Whiteboard entry point
   useEffect(() => {
@@ -97,10 +138,27 @@ function MeetingRoomContent() {
       initializeAudioOnly();
     }
   }, [meeting, audioInitialized, initializeAudioOnly]);
-  // Meeting start time (timestamp)
-  const meetingStartTime = meeting?.startedAt
-    ? new Date(meeting.startedAt).getTime()
-    : null;
+  // Meeting start time (timestamp) - ensure UTC parsing
+  const meetingStartTime = (() => {
+    if (!meeting?.startedAt) return null;
+    let dateStr = typeof meeting.startedAt === 'string' ? meeting.startedAt : '';
+    if (dateStr) {
+      if (!dateStr.includes('T')) dateStr = dateStr.replace(' ', 'T');
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) dateStr += 'Z';
+    } else {
+      dateStr = new Date(meeting.startedAt).toISOString();
+    }
+    return new Date(dateStr).getTime();
+  })();
+
+  useEffect(() => {
+    console.log('[MeetingPage] meetingStartTime debug:', {
+      hasMeeting: !!meeting,
+      startedAt: meeting?.startedAt,
+      meetingStartTime,
+      now: Date.now()
+    });
+  }, [meeting, meetingStartTime]);
 
   // 세션 종료 시 핸들러 (호스트가 회의를 종료했을 때 다른 참가자들 자동 퇴장)
   const handleSessionEnded = useCallback(async (reason: string) => {
@@ -137,6 +195,23 @@ function MeetingRoomContent() {
     currentAttendeeId,
     onSessionEnded: handleSessionEnded,
   });
+
+  // Meeting Chat hook
+  const { messages: chatMessages, sendMessage } = useMeetingChat({
+    meetingId,
+    currentUser: currentUser || undefined,
+    meetingStartTime,
+  });
+
+  // Debug currentUser in Page
+  useEffect(() => {
+    console.log('[MeetingPage] User/Chat Debug:', {
+      userId,
+      hasCurrentUser: !!currentUser,
+      currentUserName: currentUser?.name,
+      chatMessagesLength: chatMessages.length
+    });
+  }, [userId, currentUser, chatMessages]);
 
   // Chime SDK hooks (음소거 상태 먼저 가져오기)
   const { muted, toggleMute } = useToggleLocalMute();
@@ -186,16 +261,7 @@ function MeetingRoomContent() {
     userId,
   });
 
-  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
-  const {
-    originalVolume,
-    setOriginalVolume,
-    isFading: isOriginalVolumeFading,
-  } = useOriginalAudioVolume({
-    translationEnabled,
-  });
-
-  // TTS hook (번역된 자막 음성 재생)
+  // TTS hook (번역된 자막 음성 재생) - Original Audio Volume보다 먼저 호출
   const {
     ttsEnabled,
     isTogglingTTS,
@@ -209,6 +275,16 @@ function MeetingRoomContent() {
   } = useTTS({
     meetingId,
     userId,
+  });
+
+  // Original Audio Volume hook (번역 시 원본 음성 볼륨 조절)
+  const {
+    targetVolume: originalVolume,
+    setTargetVolume: setOriginalVolume,
+    isFading: isOriginalVolumeFading,
+  } = useOriginalAudioVolume({
+    translationEnabled,
+    muteOriginalOnTranslation,
   });
 
   // Voice Focus hook (노이즈 억제 - 기본 활성화)
@@ -356,9 +432,10 @@ function MeetingRoomContent() {
             </>
           )}
         </div>
-        {/* Transcript Panel - Always visible on right */}
-        <TranscriptPanel
+        {/* Unified Communication Panel - Always visible on right */}
+        <CommunicationPanel
           transcripts={syncedTranscripts}
+          messages={chatMessages}
           isTranscribing={isTranscribing}
           isLoadingHistory={isLoadingHistory}
           selectedLanguage={selectedLanguage}
@@ -368,6 +445,8 @@ function MeetingRoomContent() {
           getParticipantByAttendeeId={getParticipantByAttendeeId}
           translationEnabled={translationEnabled}
           getTranslation={getTranslation}
+          onSendMessage={(content) => sendMessage(content, selectedLanguage)}
+          meetingStartTime={meetingStartTime}
         />
       </main>
       {/* Controls */}
@@ -406,6 +485,10 @@ function MeetingRoomContent() {
         originalVolume={originalVolume}
         isOriginalVolumeFading={isOriginalVolumeFading}
         onSetOriginalVolume={setOriginalVolume}
+        muteOriginalOnTranslation={muteOriginalOnTranslation}
+        onToggleMuteOriginal={handleToggleMuteOriginal}
+        hasVoiceEmbedding={hasVoiceEmbedding}
+        voiceDubbingEnabled={voiceDubbingEnabled}
         onOpenTTSSettings={() => setShowTTSSettings(true)}
         onOpenSettings={() => setShowDeviceSettings(true)}
         onLeave={handleLeave}
@@ -438,6 +521,10 @@ function MeetingRoomContent() {
         onOpenChange={setShowTTSSettings}
         selectedVoices={selectedVoices}
         onSelectVoice={selectVoice}
+        hasVoiceEmbedding={hasVoiceEmbedding}
+        voiceDubbingEnabled={voiceDubbingEnabled}
+        isTogglingVoiceDubbing={isTogglingVoiceDubbing}
+        onToggleVoiceDubbing={handleToggleVoiceDubbing}
       />
     </div>
   );

@@ -6,15 +6,48 @@
             "archives": "회의록 보관함",
             "notifications": "알림",
             "settings": "설정",
+            "chat": "채팅",
             "logout": "로그아웃"
         },
         "workspaces": {
+            "title": "워크스페이스",
             "welcome": "반가워요, {name}님!",
             "greeting": "오늘도 좋은 하루 되세요",
             "create_new": "새 워크스페이스 만들기",
             "no_workspaces": "아직 워크스페이스가 없습니다",
             "create_first": "첫 워크스페이스 만들기",
             "empty_guide": "첫 번째 워크스페이스를 만들어 팀과 협업을 시작하세요"
+        },
+        "archives": {
+            "title": "회의록 보관함",
+            "count": "{count}개의 기록",
+            "search_placeholder": "회의 제목 또는 워크스페이스 검색...",
+            "no_records": "기록이 없습니다.",
+            "no_title": "제목 없음",
+            "summary_completed": "AI 요약이 완료되었습니다. 클릭하여 확인하세요.",
+            "meeting_ended": "종료된 회의입니다.",
+            "untitled_meeting": "제목 없는 회의",
+            "duration": "{min}분",
+            "no_duration": "시간 정보 없음",
+            "participants": "참여자 {count}명",
+            "view_detail": "회의록 상세 보기",
+            "meeting_date": "이 회의는 {date}에 진행되었습니다.",
+            "view_detail_desc": "상세한 회의록과 AI 요약을 확인하려면 상단의 '회의록 상세 보기' 버튼을 클릭하세요.",
+            "meeting_overview": "회의 개요",
+            "workspace": "워크스페이스",
+            "host": "호스트",
+            "status": "상태",
+            "status_ended": "종료됨",
+            "ai_summary": "AI 요약",
+            "summary_done": "완료",
+            "summary_pending": "생성 중",
+            "summary_none": "미생성",
+            "select_to_view": "회의록을 선택하여 상세 내용을 확인하세요",
+            "error": "회의록을 불러오는데 실패했습니다"
+        },
+        "settings": {
+            "language": "언어",
+            "description": "환경 설정을 관리합니다"
         },
         "common": {
             "confirm": "확인",
@@ -24,7 +57,9 @@
             "edit": "수정",
             "leave": "나가기",
             "list": "목록",
-            "others": "기타"
+            "others": "기타",
+            "retry": "다시 시도",
+            "unknown": "알 수 없음"
         },
         "sidebar": {
             "connected": "연결됨",
@@ -44,7 +79,9 @@
             "starting": "시작 중...",
             "duration_format": "{hours}시간 {minutes}분 진행 중",
             "duration_format_min": "{minutes}분 진행 중",
-            "live": "LIVE"
+            "live": "LIVE",
+            "restricted": "회의 참가가 제한되었습니다",
+            "restricted_desc": "관리자에게 문의하여 통화 권한을 요청하세요."
         },
         "members": {
             "title": "멤버",
@@ -68,6 +105,36 @@
             "search_empty": "검색 결과가 없습니다",
             "search_short": "2글자 이상 입력하세요"
         },
+        "roles": {
+            "title": "역할 관리",
+            "add": "역할 추가",
+            "edit": "역할 편집",
+            "delete": "역할 삭제",
+            "delete_confirm": "\"{name}\" 역할을 삭제하시겠습니까?",
+            "delete_warning": "이 역할이 부여된 멤버는 기본 역할로 변경됩니다.",
+            "name": "역할 이름",
+            "name_placeholder": "역할 이름을 입력하세요",
+            "set_default": "새 멤버 기본 역할로 설정",
+            "system_role": "시스템",
+            "default_role": "기본",
+            "permissions": "권한",
+            "send_messages": "채팅 권한",
+            "send_messages_desc": "워크스페이스 채팅에서 메시지 전송",
+            "join_calls": "통화 입장 권한",
+            "join_calls_desc": "미팅룸 입장 및 참여",
+            "edit_calendar": "캘린더 편집 권한",
+            "edit_calendar_desc": "일정 생성, 수정, 삭제",
+            "upload_files": "저장소 업로드 권한",
+            "upload_files_desc": "파일 업로드 및 관리",
+            "manage_permissions": "권한 관리 권한",
+            "manage_permissions_desc": "멤버 역할 변경 및 역할 관리",
+            "save": "저장",
+            "saving": "저장 중...",
+            "change_role": "역할 변경",
+            "admin": "관리자",
+            "member": "멤버",
+            "guest": "게스트"
+        },
         "calendar": {
             "title": "일정",
             "today": "오늘",
@@ -75,6 +142,13 @@
             "manage_types": "유형 관리",
             "today_title": "오늘의 일정",
             "no_events_today": "오늘 일정이 없습니다",
+            "error": "캘린더를 불러오는데 실패했습니다",
+            "schedule": "일정",
+            "no_events": "일정이 없습니다",
+            "all_day": "종일",
+            "scheduled": "예정",
+            "no_title": "제목 없음",
+            "created_by": "작성자",
             "delete_title": "일정 삭제",
             "delete_confirm": "\"{title}\" 일정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
             "event": {
@@ -170,6 +244,20 @@
             "upload": "업로드",
             "view_list": "리스트 보기",
             "view_grid": "그리드 보기"
+        },
+        "chat": {
+            "title": "채팅",
+            "channels": "채널",
+            "create_channel": "채널 만들기",
+            "channel_name": "채널 이름",
+            "placeholder": "메시지를 입력하세요...",
+            "send": "전송",
+            "no_messages": "아직 메시지가 없습니다. 대화를 시작해보세요!",
+            "new_channel_placeholder": "예: 공지사항, 잡담",
+            "create": "생성",
+            "cancel": "취소",
+            "menu_label": "채팅",
+            "restricted": "채팅이 제한되었습니다"
         }
     },
     "en": {
@@ -179,15 +267,48 @@
             "archives": "Archives",
             "notifications": "Notifications",
             "settings": "Settings",
+            "chat": "Chat",
             "logout": "Logout"
         },
         "workspaces": {
+            "title": "Workspaces",
             "welcome": "Welcome back, {name}!",
             "greeting": "Have a great day today",
             "create_new": "Create New Workspace",
             "no_workspaces": "No workspaces yet",
             "create_first": "Create First Workspace",
             "empty_guide": "Create your first workspace to start collaborating with your team"
+        },
+        "archives": {
+            "title": "Archives",
+            "count": "{count} records",
+            "search_placeholder": "Search by meeting title or workspace...",
+            "no_records": "No records found.",
+            "no_title": "No Title",
+            "summary_completed": "AI summary is ready. Click to view.",
+            "meeting_ended": "Meeting has ended.",
+            "untitled_meeting": "Untitled Meeting",
+            "duration": "{min} min",
+            "no_duration": "No duration info",
+            "participants": "{count} participants",
+            "view_detail": "View Meeting Details",
+            "meeting_date": "This meeting was held on {date}.",
+            "view_detail_desc": "Click the 'View Meeting Details' button above to see the full transcript and AI summary.",
+            "meeting_overview": "Meeting Overview",
+            "workspace": "Workspace",
+            "host": "Host",
+            "status": "Status",
+            "status_ended": "Ended",
+            "ai_summary": "AI Summary",
+            "summary_done": "Completed",
+            "summary_pending": "Generating",
+            "summary_none": "Not generated",
+            "select_to_view": "Select a meeting to view details",
+            "error": "Failed to load archives"
+        },
+        "settings": {
+            "language": "Language",
+            "description": "Manage your preferences"
         },
         "common": {
             "confirm": "Confirm",
@@ -197,7 +318,9 @@
             "edit": "Edit",
             "leave": "Leave",
             "list": "Back",
-            "others": "Others"
+            "others": "Others",
+            "retry": "Retry",
+            "unknown": "Unknown"
         },
         "sidebar": {
             "connected": "Connected",
@@ -217,7 +340,9 @@
             "starting": "Starting...",
             "duration_format": "{hours}h {minutes}m running",
             "duration_format_min": "{minutes}m running",
-            "live": "LIVE"
+            "live": "LIVE",
+            "restricted": "Meeting access is restricted",
+            "restricted_desc": "Contact your administrator to request call permissions."
         },
         "members": {
             "title": "Members",
@@ -248,6 +373,13 @@
             "manage_types": "Manage Types",
             "today_title": "Today's Schedule",
             "no_events_today": "No events today",
+            "error": "Failed to load calendar",
+            "schedule": "Schedule",
+            "no_events": "No events",
+            "all_day": "All Day",
+            "scheduled": "Scheduled",
+            "no_title": "No Title",
+            "created_by": "Created by",
             "delete_title": "Delete Event",
             "delete_confirm": "Are you sure you want to delete \"{title}\"? This action cannot be undone.",
             "event": {
@@ -343,6 +475,20 @@
             "upload": "Upload",
             "view_list": "List View",
             "view_grid": "Grid View"
+        },
+        "chat": {
+            "title": "Chat",
+            "channels": "Channels",
+            "create_channel": "Create Channel",
+            "channel_name": "Channel Name",
+            "placeholder": "Type a message...",
+            "send": "Send",
+            "no_messages": "No messages yet. Start the conversation!",
+            "new_channel_placeholder": "e.g. Announcements, Random",
+            "create": "Create",
+            "cancel": "Cancel",
+            "menu_label": "Chat",
+            "restricted": "Chat is restricted"
         }
     },
     "zh-CN": {
@@ -355,12 +501,44 @@
             "logout": "登出"
         },
         "workspaces": {
+            "title": "工作区",
             "welcome": "欢迎回来，{name}！",
             "greeting": "祝你今天过得愉快",
             "create_new": "创建新工作区",
             "no_workspaces": "暂无工作区",
             "create_first": "创建第一个工作区",
             "empty_guide": "创建您的第一个工作区以开始与团队协作"
+        },
+        "archives": {
+            "title": "归档",
+            "count": "{count}条记录",
+            "search_placeholder": "按会议标题或工作区搜索...",
+            "no_records": "没有记录。",
+            "no_title": "无标题",
+            "summary_completed": "AI摘要已完成，点击查看。",
+            "meeting_ended": "会议已结束。",
+            "untitled_meeting": "无标题会议",
+            "duration": "{min}分钟",
+            "no_duration": "无时长信息",
+            "participants": "{count}位参与者",
+            "view_detail": "查看会议详情",
+            "meeting_date": "本次会议于{date}举行。",
+            "view_detail_desc": "点击上方的'查看会议详情'按钮查看完整记录和AI摘要。",
+            "meeting_overview": "会议概览",
+            "workspace": "工作区",
+            "host": "主持人",
+            "status": "状态",
+            "status_ended": "已结束",
+            "ai_summary": "AI摘要",
+            "summary_done": "已完成",
+            "summary_pending": "生成中",
+            "summary_none": "未生成",
+            "select_to_view": "选择会议查看详情",
+            "error": "加载归档失败"
+        },
+        "settings": {
+            "language": "语言",
+            "description": "管理您的偏好设置"
         },
         "common": {
             "confirm": "确认",
@@ -370,7 +548,9 @@
             "edit": "编辑",
             "leave": "离开",
             "list": "列表",
-            "others": "其他"
+            "others": "其他",
+            "retry": "重试",
+            "unknown": "未知"
         },
         "sidebar": {
             "connected": "已连接",
@@ -421,6 +601,13 @@
             "manage_types": "管理类型",
             "today_title": "今日日程",
             "no_events_today": "今天没有日程",
+            "error": "加载日历失败",
+            "schedule": "日程",
+            "no_events": "没有日程",
+            "all_day": "全天",
+            "scheduled": "已安排",
+            "no_title": "无标题",
+            "created_by": "创建者",
             "delete_title": "删除日程",
             "delete_confirm": "您确定要删除“{title}”吗？此操作无法撤销。",
             "event": {
@@ -528,12 +715,44 @@
             "logout": "ログアウト"
         },
         "workspaces": {
+            "title": "ワークスペース",
             "welcome": "お帰りなさい、{name}さん！",
             "greeting": "今日も良い一日を",
             "create_new": "新しいワークスペースを作成",
             "no_workspaces": "まだワークスペースがありません",
             "create_first": "最初のワークスペースを作成",
             "empty_guide": "最初のワークスペースを作成してチームとのコラボレーションを始めましょう"
+        },
+        "archives": {
+            "title": "アーカイブ",
+            "count": "{count}件の記録",
+            "search_placeholder": "会議タイトルまたはワークスペースで検索...",
+            "no_records": "記録がありません。",
+            "no_title": "タイトルなし",
+            "summary_completed": "AI要約が完了しました。クリックして確認。",
+            "meeting_ended": "終了した会議です。",
+            "untitled_meeting": "無題の会議",
+            "duration": "{min}分",
+            "no_duration": "時間情報なし",
+            "participants": "参加者 {count}名",
+            "view_detail": "会議詳細を見る",
+            "meeting_date": "この会議は{date}に行われました。",
+            "view_detail_desc": "上部の「会議詳細を見る」ボタンをクリックして、完全な記録とAI要約を確認してください。",
+            "meeting_overview": "会議概要",
+            "workspace": "ワークスペース",
+            "host": "ホスト",
+            "status": "状態",
+            "status_ended": "終了",
+            "ai_summary": "AI要約",
+            "summary_done": "完了",
+            "summary_pending": "生成中",
+            "summary_none": "未生成",
+            "select_to_view": "会議を選択して詳細を確認",
+            "error": "アーカイブの読み込みに失敗しました"
+        },
+        "settings": {
+            "language": "言語",
+            "description": "設定を管理します"
         },
         "common": {
             "confirm": "確認",
@@ -543,7 +762,9 @@
             "edit": "編集",
             "leave": "退出",
             "list": "一覧",
-            "others": "その他"
+            "others": "その他",
+            "retry": "再試行",
+            "unknown": "不明"
         },
         "sidebar": {
             "connected": "接続済み",
@@ -594,6 +815,13 @@
             "manage_types": "タイプ管理",
             "today_title": "今日の予定",
             "no_events_today": "今日の予定はありません",
+            "error": "カレンダーの読み込みに失敗しました",
+            "schedule": "予定",
+            "no_events": "予定がありません",
+            "all_day": "終日",
+            "scheduled": "予定",
+            "no_title": "タイトルなし",
+            "created_by": "作成者",
             "delete_title": "予定削除",
             "delete_confirm": "\"{title}\" の予定を削除しますか？この操作は元に戻せません。",
             "event": {

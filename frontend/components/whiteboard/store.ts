@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image';
+export type WhiteboardTool = 'select' | 'pan' | 'pen' | 'eraser' | 'shape' | 'magic-pen' | 'image' | 'text' | 'postit' | 'stamp';
 
 export interface PendingImage {
     url: string;
@@ -12,8 +12,9 @@ export interface PendingImage {
 
 export interface WhiteboardItem {
     id: string;
-    type: 'path' | 'image' | 'text' | 'shape';
+    type: 'path' | 'image' | 'text' | 'shape' | 'postit' | 'stamp';
     data: any;
+    parentId?: string; // For objects inside a Post-it
     transform: {
         x: number;
         y: number;
@@ -41,6 +42,12 @@ interface WhiteboardState {
     setPenSize: (size: number) => void;
     setEraserSize: (size: number) => void;
 
+    currentStamp: string;
+    setCurrentStamp: (stamp: string) => void;
+
+    stampMenuPosition: { x: number, y: number } | null;
+    setStampMenuPosition: (pos: { x: number, y: number } | null) => void;
+
     setSmoothness: (smoothness: number) => void;
 
     // Session Context
@@ -56,6 +63,10 @@ interface WhiteboardState {
     // Image Placement
     pendingImage: PendingImage | null;
     setPendingImage: (image: PendingImage | null) => void;
+
+    // UI Interactive State
+    isDrawing: boolean;
+    setIsDrawing: (isDrawing: boolean) => void;
 
     // Data
     items: Map<string, WhiteboardItem>;
@@ -92,6 +103,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     magicPenColor: '#000000',
     penSize: 2,
     eraserSize: 20,
+    currentStamp: 'thumbs-up',
+    setCurrentStamp: (stamp) => set({ currentStamp: stamp }),
+    stampMenuPosition: null,
+    setStampMenuPosition: (pos) => set({ stampMenuPosition: pos }),
     smoothness: 7,
     setTool: (tool) => set((state) => {
         let newColor = state.color;
@@ -121,7 +136,7 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
     }),
     setPenSize: (size) => set({ penSize: size }),
     setEraserSize: (size) => set({ eraserSize: size }),
-    setSmoothness: (smoothness) => set({ smoothness }),
+    setSmoothness: (smoothness: number) => set({ smoothness }),
 
     meetingId: null,
     setMeetingId: (id) => set({ meetingId: id }),
@@ -133,6 +148,10 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
 
     pendingImage: null,
     setPendingImage: (image) => set({ pendingImage: image }),
+
+    // UI State
+    isDrawing: false,
+    setIsDrawing: (isDrawing) => set({ isDrawing }),
 
     items: new Map(),
     addItem: (item) => {
@@ -164,7 +183,15 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
             const newItems = new Map(state.items);
             const item = newItems.get(id);
             if (item) {
-                newItems.set(id, { ...item, ...updates });
+                // Deep merge for 'data' property to handle erasures correctly
+                const mergedItem = { ...item, ...updates };
+                if (updates.data && item.data) {
+                    mergedItem.data = { ...item.data, ...updates.data };
+                }
+                if (updates.transform && item.transform) {
+                    mergedItem.transform = { ...item.transform, ...updates.transform };
+                }
+                newItems.set(id, mergedItem);
             }
             return { items: newItems };
         }),
@@ -172,6 +199,19 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => ({
         get().pushHistory();
         set((state) => {
             const newItems = new Map(state.items);
+            const itemToDelete = newItems.get(id);
+
+            // If deleting a Post-it, also delete all child items
+            if (itemToDelete?.type === 'postit') {
+                const childIds: string[] = [];
+                newItems.forEach((item, itemId) => {
+                    if (item.parentId === id) {
+                        childIds.push(itemId);
+                    }
+                });
+                childIds.forEach(childId => newItems.delete(childId));
+            }
+
             newItems.delete(id);
             return { items: newItems };
         });

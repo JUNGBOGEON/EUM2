@@ -111,32 +111,32 @@ export function EventTypeDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px]">
+      <DialogContent className="sm:max-w-[450px] bg-neutral-900 border-white/10 text-white">
         <DialogHeader>
           <DialogTitle>{t('calendar.manage_types_dialog.title')}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-neutral-400">
             {t('calendar.manage_types_dialog.desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Add New Type */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-white/10 bg-white/[0.02]">
             <Popover>
               <PopoverTrigger asChild>
                 <button
-                  className="w-8 h-8 rounded-full border border-border flex-shrink-0"
+                  className="w-8 h-8 rounded-full border border-white/10 flex-shrink-0 ring-2 ring-transparent hover:ring-white/20 transition-all"
                   style={{ backgroundColor: newTypeColor }}
                 />
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-2" align="start">
+              <PopoverContent className="w-auto p-2 bg-neutral-900 border-white/10 text-white" align="start">
                 <div className="grid grid-cols-5 gap-1">
                   {PRESET_COLORS.map((color) => (
                     <button
                       key={color}
                       className={cn(
-                        'w-6 h-6 rounded-full border-2',
-                        newTypeColor === color ? 'border-primary' : 'border-transparent'
+                        'w-6 h-6 rounded-full border-2 transition-transform hover:scale-110',
+                        newTypeColor === color ? 'border-white' : 'border-transparent'
                       )}
                       style={{ backgroundColor: color }}
                       onClick={() => setNewTypeColor(color)}
@@ -149,42 +149,43 @@ export function EventTypeDialog({
               placeholder={t('calendar.manage_types_dialog.new_type_placeholder')}
               value={newTypeName}
               onChange={(e) => setNewTypeName(e.target.value)}
-              className="flex-1"
+              className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 h-8"
             />
             <Button
               size="sm"
               onClick={handleCreateEventType}
               disabled={isTypeSubmitting || !newTypeName.trim()}
+              className="h-8 w-8 p-0 bg-white text-black hover:bg-neutral-200"
             >
               {isTypeSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             </Button>
           </div>
 
           {/* Existing Types List */}
-          <ScrollArea className="h-[300px]">
+          <ScrollArea className="h-[300px] pr-2">
             <div className="space-y-2">
               {eventTypes.map((type) => (
                 <div
                   key={type.id}
-                  className="flex items-center gap-2 p-2 rounded-lg border border-border"
+                  className="flex items-center gap-2 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 transition-colors group"
                 >
                   {editingTypeId === type.id ? (
                     <>
                       <Popover>
                         <PopoverTrigger asChild>
                           <button
-                            className="w-8 h-8 rounded-full border border-border flex-shrink-0"
+                            className="w-8 h-8 rounded-full border border-white/10 flex-shrink-0 ring-2 ring-transparent hover:ring-white/20 transition-all"
                             style={{ backgroundColor: editingTypeColor }}
                           />
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-2" align="start">
+                        <PopoverContent className="w-auto p-2 bg-neutral-900 border-white/10 text-white" align="start">
                           <div className="grid grid-cols-5 gap-1">
                             {PRESET_COLORS.map((color) => (
                               <button
                                 key={color}
                                 className={cn(
-                                  'w-6 h-6 rounded-full border-2',
-                                  editingTypeColor === color ? 'border-primary' : 'border-transparent'
+                                  'w-6 h-6 rounded-full border-2 transition-transform hover:scale-110',
+                                  editingTypeColor === color ? 'border-white' : 'border-transparent'
                                 )}
                                 style={{ backgroundColor: color }}
                                 onClick={() => setEditingTypeColor(color)}
@@ -196,13 +197,14 @@ export function EventTypeDialog({
                       <Input
                         value={editingTypeName}
                         onChange={(e) => setEditingTypeName(e.target.value)}
-                        className="flex-1"
+                        className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 h-8"
                       />
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="ghost" // kept as ghost but styled via className
                         onClick={() => handleSaveEditType(type.id)}
                         disabled={isTypeSubmitting}
+                        className="h-8 px-2 text-green-400 hover:text-green-300 hover:bg-green-500/10"
                       >
                         {t('calendar.manage_types_dialog.save')}
                       </Button>
@@ -210,6 +212,7 @@ export function EventTypeDialog({
                         size="sm"
                         variant="ghost"
                         onClick={() => setEditingTypeId(null)}
+                        className="h-8 w-8 p-0 text-neutral-400 hover:text-white hover:bg-white/10"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -217,17 +220,18 @@ export function EventTypeDialog({
                   ) : (
                     <>
                       <div
-                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        className="w-4 h-4 rounded-full flex-shrink-0 ring-1 ring-white/10"
                         style={{ backgroundColor: type.color }}
                       />
-                      <span className="flex-1 text-sm">{type.name}</span>
+                      <span className="flex-1 text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{type.name}</span>
                       {type.isDefault && (
-                        <Badge variant="secondary" className="text-xs">{t('calendar.manage_types_dialog.default_badge')}</Badge>
+                        <Badge variant="secondary" className="text-[10px] bg-white/5 text-neutral-400 border border-white/10">{t('calendar.manage_types_dialog.default_badge')}</Badge>
                       )}
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => handleStartEditType(type)}
+                        className="h-8 px-2 text-neutral-500 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all ml-auto"
                       >
                         {t('calendar.manage_types_dialog.edit')}
                       </Button>
@@ -237,7 +241,7 @@ export function EventTypeDialog({
                           variant="ghost"
                           onClick={() => handleDeleteEventType(type.id)}
                           disabled={isDeletingType}
-                          className="text-destructive hover:text-destructive"
+                          className="h-8 w-8 p-0 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           {isDeletingType ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

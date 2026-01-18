@@ -31,6 +31,23 @@ export function useDelayedAudio({
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const [isAudioDelayActive, setIsAudioDelayActive] = useState(false);
 
+  // 노드 정리 (moved before setupDelayedAudio to be available as dependency)
+  const cleanupNodes = useCallback(() => {
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    if (delayNodeRef.current) {
+      delayNodeRef.current.disconnect();
+      delayNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(console.error);
+      audioContextRef.current = null;
+    }
+    setIsAudioDelayActive(false);
+  }, []);
+
   // 오디오 컨텍스트 및 딜레이 노드 설정
   const setupDelayedAudio = useCallback(async () => {
     if (!audioVideo) {
@@ -52,8 +69,8 @@ export function useDelayedAudio({
       delayNodeRef.current = delayNode;
 
       // Chime SDK의 오디오 출력 요소 가져오기
-      // @ts-ignore - 내부 API 접근
-      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement;
+      // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
+      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement as HTMLAudioElement | undefined;
 
       if (audioElement && audioElement.srcObject) {
         const stream = audioElement.srcObject as MediaStream;
@@ -65,6 +82,8 @@ export function useDelayedAudio({
         delayNode.connect(ctx.destination);
 
         // 원본 오디오 음소거 (딜레이된 오디오만 재생)
+        // DOM element muting is intentional and necessary for delayed audio playback
+        // eslint-disable-next-line react-hooks/immutability
         audioElement.muted = true;
 
         setIsAudioDelayActive(true);
@@ -75,24 +94,7 @@ export function useDelayedAudio({
     } catch (error) {
       console.error('[DelayedAudio] Setup failed:', error);
     }
-  }, [audioVideo, delayEnabled, delayMs]);
-
-  // 노드 정리
-  const cleanupNodes = useCallback(() => {
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
-    }
-    if (delayNodeRef.current) {
-      delayNodeRef.current.disconnect();
-      delayNodeRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(console.error);
-      audioContextRef.current = null;
-    }
-    setIsAudioDelayActive(false);
-  }, []);
+  }, [audioVideo, delayEnabled, delayMs, cleanupNodes]);
 
   // 딜레이 정리
   const cleanupDelayedAudio = useCallback(() => {
@@ -100,9 +102,11 @@ export function useDelayedAudio({
 
     // 원본 오디오 복원
     if (audioVideo) {
-      // @ts-ignore
-      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement;
+      // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
+      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement as HTMLAudioElement | undefined;
       if (audioElement) {
+        // DOM element unmuting is intentional and necessary for audio restoration
+        // eslint-disable-next-line react-hooks/immutability
         audioElement.muted = false;
       }
     }

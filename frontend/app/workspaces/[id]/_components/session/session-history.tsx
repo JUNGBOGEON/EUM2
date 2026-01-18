@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { MeetingSession } from '../../_lib/types';
 import { SessionCard } from './session-card';
 import { SessionDetailModal } from './session-detail-modal';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SessionHistoryProps {
   sessions: MeetingSession[];
@@ -16,9 +17,6 @@ interface SessionHistoryProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
 }
-
-// ... imports
-import { useLanguage } from '@/contexts/LanguageContext';
 
 export function SessionHistory({
   sessions,
@@ -33,19 +31,17 @@ export function SessionHistory({
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">{t('history.title')}</h2>
+        <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+          <h2 className="text-sm font-medium text-neutral-400">{t('history.title')}</h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-border">
-              <Skeleton className="h-12 w-12 rounded-xl" />
+            <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-transparent">
+              <Skeleton className="h-10 w-10 rounded-lg bg-white/5" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-[200px]" />
-                <Skeleton className="h-3 w-[150px]" />
+                <Skeleton className="h-4 w-[200px] bg-white/5" />
+                <Skeleton className="h-3 w-[150px] bg-white/5" />
               </div>
-              <Skeleton className="h-8 w-20" />
             </div>
           ))}
         </div>
@@ -56,19 +52,15 @@ export function SessionHistory({
   if (sessions.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">{t('history.title')}</h2>
+        <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+          <h2 className="text-sm font-medium text-neutral-400">{t('history.title')}</h2>
         </div>
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
-            <Play className="h-10 w-10 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4 text-neutral-500">
+            <Clock className="h-6 w-6" />
           </div>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-neutral-500 font-medium">
             {t('history.empty')}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t('history.empty_desc')}
           </p>
         </div>
       </div>
@@ -77,16 +69,13 @@ export function SessionHistory({
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">{t('history.title')}</h2>
-            <Badge variant="secondary">{sessions.length}개</Badge>
-          </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-4">
+          <h2 className="text-sm font-medium text-neutral-400">{t('history.title')}</h2>
+          <span className="text-xs text-neutral-500">{sessions.length} recorded</span>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           {sessions.map((session) => (
             <SessionCard
               key={session.id}
@@ -98,7 +87,11 @@ export function SessionHistory({
 
         {/* Load More */}
         {hasMore && (
-          <Button variant="ghost" className="w-full" onClick={onLoadMore}>
+          <Button
+            variant="ghost"
+            className="w-full mt-4 text-neutral-400 hover:text-white hover:bg-white/5 border border-white/5"
+            onClick={onLoadMore}
+          >
             {t('history.load_more')}
           </Button>
         )}

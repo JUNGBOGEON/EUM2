@@ -3,17 +3,21 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
-import { MeetingSession, SummaryStatus } from './entities/meeting-session.entity';
+import { MeetingSession, SummaryStatus, SessionStatus } from './entities/meeting-session.entity';
 import { SessionParticipant } from './entities/session-participant.entity';
 import { Transcription } from './entities/transcription.entity';
+import { WorkspaceEvent } from '../workspaces/entities/workspace-event.entity';
 import {
   SaveTranscriptionDto,
   SaveTranscriptionBatchDto,
 } from './dto/save-transcription.dto';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { ChimeService } from './services/chime.service';
 import { TranscriptionService } from './services/transcription.service';
 import { SummaryService } from './services/summary.service';
@@ -39,13 +43,67 @@ export class MeetingsService {
     private participantRepository: Repository<SessionParticipant>,
     @InjectRepository(Transcription)
     private transcriptionRepository: Repository<Transcription>,
+    @InjectRepository(WorkspaceEvent)
+    private eventRepository: Repository<WorkspaceEvent>,
     private chimeService: ChimeService,
     private transcriptionService: TranscriptionService,
     private summaryService: SummaryService,
     private translationService: TranslationService,
     private pollyService: PollyService,
     private ttsPreferenceService: TTSPreferenceService,
-  ) {}
+    @Inject(forwardRef(() => WorkspacesService))
+    private workspacesService: WorkspacesService,
+  ) { }
+
+  // ==========================================
+  // 글로벌 캘린더 (내 모든 미팅)
+  // ==========================================
+
+  /**
+   * 내 캘린더 조회 (참여 중인 모든 워크스페이스의 일정/이벤트)
+   */
+  async getMyCalendar(userId: string) {
+    // 1. 내가 속한 워크스페이스 목록 조회
+    const workspaces = await this.workspacesService.findAllByUser(userId);
+    const workspaceIds = workspaces.map((w) => w.id);
+
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    // 2. 해당 워크스페이스들의 모든 이벤트 조회 (최신순)
+    const events = await this.eventRepository.find({
+      where: { workspaceId: In(workspaceIds) },
+      order: { startTime: 'DESC' },
+      relations: ['workspace', 'createdBy', 'eventType'],
+    });
+
+    return events;
+  }
+
+  /**
+   * 내 미팅 아카이브 조회 (종료된 미팅, 최신순)
+   * - 요약이 생성된 미팅 위주로 필터링 가능하지만, 일단 모든 종료된 미팅 반환
+   */
+  async getMyArchives(userId: string) {
+    const workspaces = await this.workspacesService.findAllByUser(userId);
+    const workspaceIds = workspaces.map((w) => w.id);
+
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    const sessions = await this.sessionRepository.find({
+      where: {
+        workspaceId: In(workspaceIds),
+        status: SessionStatus.ENDED, // 종료된 미팅만
+      },
+      order: { endedAt: 'DESC' }, // 종료 시간 역순
+      relations: ['host', 'workspace'],
+    });
+
+    return sessions;
+  }
 
   // ==========================================
   // 세션 관리 (ChimeService 위임)
@@ -56,8 +114,20 @@ export class MeetingsService {
    * - 진행 중인 세션이 있으면 해당 세션에 참가
    * - 없으면 새 세션 생성
    */
-  async startSession(workspaceId: string, hostId: string, title?: string) {
-    return this.chimeService.startSession(workspaceId, hostId, title);
+  async startSession(
+    workspaceId: string,
+    hostId: string,
+    title?: string,
+    category?: string,
+    maxParticipants?: number,
+  ) {
+    return this.chimeService.startSession(
+      workspaceId,
+      hostId,
+      title,
+      category,
+      maxParticipants,
+    );
   }
 
   /**
@@ -135,7 +205,7 @@ export class MeetingsService {
    * 워크스페이스의 활성 세션 조회
    */
   async getActiveSession(workspaceId: string) {
-    return this.chimeService.getActiveSession(workspaceId);
+    return this.chimeService.getActiveSessions(workspaceId);
   }
 
   /**

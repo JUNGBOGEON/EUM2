@@ -118,7 +118,28 @@ export function useVoiceFocus(): UseVoiceFocusReturn {
       }
 
       // Voice Focus 장치 생성
-      const deviceToTransform = originalDeviceRef.current || 'default';
+      // 'default' 문자열 대신 실제 기기 ID를 사용
+      let deviceToTransform: string | undefined = originalDeviceRef.current || undefined;
+
+      // 'default' 문자열이거나 없는 경우, 실제 오디오 장치 목록에서 첫 번째 장치 사용
+      if (!deviceToTransform || deviceToTransform === 'default') {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputDevice = devices.find(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+          deviceToTransform = audioInputDevice?.deviceId;
+          console.log('[VoiceFocus] Found actual device ID:', deviceToTransform);
+        } catch (e) {
+          console.warn('[VoiceFocus] Failed to enumerate devices:', e);
+          deviceToTransform = undefined;
+        }
+      }
+
+      if (!deviceToTransform) {
+        console.warn('[VoiceFocus] No audio device found, skipping Voice Focus');
+        setIsVoiceFocusLoading(false);
+        return;
+      }
+
       console.log('[VoiceFocus] Creating transform device for:', deviceToTransform);
 
       const voiceFocusDevice = await transformer.createTransformDevice(deviceToTransform);
@@ -155,9 +176,26 @@ export function useVoiceFocus(): UseVoiceFocusReturn {
 
     try {
       // 원본 장치로 복원
-      const originalDevice = originalDeviceRef.current || 'default';
-      console.log('[VoiceFocus] Restoring original device:', originalDevice);
-      await meetingManager.startAudioInputDevice(originalDevice);
+      let originalDevice: string | undefined = originalDeviceRef.current || undefined;
+
+      // 'default' 문자열이거나 없는 경우, 실제 오디오 장치 목록에서 첫 번째 장치 사용
+      if (!originalDevice || originalDevice === 'default') {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputDevice = devices.find(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+          originalDevice = audioInputDevice?.deviceId;
+          console.log('[VoiceFocus] Found actual device ID for restore:', originalDevice);
+        } catch (e) {
+          console.warn('[VoiceFocus] Failed to enumerate devices:', e);
+          originalDevice = undefined;
+        }
+      }
+
+      console.log('[VoiceFocus] Restoring original device:', originalDevice || '(system default)');
+
+      if (originalDevice) {
+        await meetingManager.startAudioInputDevice(originalDevice);
+      }
       setIsVoiceFocusEnabled(false);
       console.log('[VoiceFocus] ✅ Disabled successfully!');
     } catch (error) {

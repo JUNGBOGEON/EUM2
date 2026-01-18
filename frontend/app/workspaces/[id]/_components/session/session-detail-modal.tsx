@@ -85,51 +85,51 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
   return (
     <>
       <Dialog open={!!session} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="!max-w-5xl w-[95vw] h-[85vh] p-0 flex flex-col">
+        <DialogContent className="!max-w-5xl w-[95vw] h-[85vh] p-0 flex flex-col bg-neutral-900 border-white/10 text-white">
           {/* Header */}
-          <div className="p-6 border-b border-border flex-shrink-0">
+          <div className="p-6 border-b border-white/10 flex-shrink-0">
             <DialogHeader className="space-y-1">
-              <DialogTitle className="text-xl">
+              <DialogTitle className="text-xl text-white">
                 {session.title || t('meeting.enter_title')}
               </DialogTitle>
-              <DialogDescription className="flex items-center gap-2 text-sm">
+              <DialogDescription className="flex items-center gap-2 text-sm text-neutral-400">
                 <Calendar className="h-4 w-4" />
                 {formatFullDate(session.startedAt, getLocale(language))}
               </DialogDescription>
             </DialogHeader>
 
             {/* Meeting Stats - Horizontal */}
-            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border">
+            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/10">
               <div className="flex items-center gap-2">
-                <Timer className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
+                <Timer className="h-4 w-4 text-neutral-500" />
+                <span className="text-sm font-medium text-neutral-300">
                   {formatDuration(session.startedAt, session.endedAt)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
+                <Users className="h-4 w-4 text-neutral-500" />
+                <span className="text-sm font-medium text-neutral-300">
                   {sessionDetail?.participants?.length || session.participantCount || 1}{t('sidebar.members')}
                 </span>
               </div>
               {summaryData?.status === 'completed' && (
-                <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-none">
+                <Badge variant="secondary" className="bg-green-500/10 text-green-400 border border-green-500/20">
                   {t('summary.completed')}
                 </Badge>
               )}
               {(summaryData?.status === 'pending' || summaryData?.status === 'processing') && (
-                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 border border-blue-500/20">
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                   {t('summary.creating')}
                 </Badge>
               )}
               {summaryData?.status === 'failed' && (
-                <Badge variant="secondary" className="bg-red-500/10 text-red-600 border-none">
+                <Badge variant="secondary" className="bg-red-500/10 text-red-400 border border-red-500/20">
                   {t('summary.failed')}
                 </Badge>
               )}
               {transcripts.length > 0 && (
-                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-none">
+                <Badge variant="secondary" className="bg-white/10 text-white border border-white/10">
                   {t('history.title')} {transcripts.length}
                 </Badge>
               )}
@@ -140,13 +140,23 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
           <div className="flex-1 min-h-0 overflow-hidden">
             <Tabs defaultValue="summary" className="h-full flex flex-col">
               <div className="px-6 pt-4 flex-shrink-0">
-                <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="summary">{t('meeting.title')}</TabsTrigger>
-                  <TabsTrigger value="transcript">{t('summary.full_content')}</TabsTrigger>
+                <TabsList className="w-full grid grid-cols-2 bg-white/5 border border-white/10">
+                  <TabsTrigger
+                    value="summary"
+                    className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-400"
+                  >
+                    {t('meeting.title')}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="transcript"
+                    className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-400"
+                  >
+                    {t('summary.full_content')}
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
-              <TabsContent value="summary" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden">
+              <TabsContent value="summary" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden focus-visible:outline-none focus-visible:ring-0">
                 <ScrollArea className="h-full">
                   <SummarySection
                     summaryData={summaryData}
@@ -158,7 +168,7 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="transcript" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden">
+              <TabsContent value="transcript" className="flex-1 min-h-0 mt-0 px-6 pb-6 overflow-hidden focus-visible:outline-none focus-visible:ring-0">
                 <ScrollArea className="h-full">
                   <TranscriptSection
                     transcripts={transcripts}
@@ -171,14 +181,17 @@ export function SessionDetailModal({ session, onClose }: SessionDetailModalProps
           </div>
 
           {/* Footer Actions */}
-          <div className="p-6 border-t border-border bg-muted/30 flex-shrink-0">
+          <div className="p-6 border-t border-white/10 bg-white/[0.02] flex-shrink-0">
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1">
+              <Button
+                variant="outline"
+                className="flex-1 bg-white/5 border-white/10 text-white hover:bg-white/10"
+              >
                 <Download className="h-4 w-4 mr-2" />
                 {t('summary.download')}
               </Button>
               <Button
-                className="flex-1"
+                className="flex-1 bg-white text-black hover:bg-neutral-200"
                 onClick={() => setIsFullViewOpen(true)}
                 disabled={!summaryData?.structuredSummary}
               >

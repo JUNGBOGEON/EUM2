@@ -5,7 +5,8 @@ import { useWhiteboardStore, WhiteboardItem } from '../store';
 import { RenderManager } from '../RenderManager';
 
 interface DragState {
-    type: 'move' | 'handle' | 'box';
+    type: 'move' | 'handle' | 'box' | 'stamp';
+    startTime?: number;
     initialPoint: { x: number; y: number };
     initialItemTransforms: Map<string, WhiteboardItem['transform']>;
     handle?: string;
@@ -29,21 +30,25 @@ export function useWhiteboardInteraction(
     renderManager: RenderManager | null,
     meetingId: string,
     broadcastEvent?: (type: string, data: any) => void,
-    onContextMenu?: (state: { x: number, y: number } | null) => void
+    onContextMenu?: (state: { x: number, y: number } | null) => void,
+    setEditingItem?: (id: string | null) => void
 ) {
     const {
         tool, zoom, pan, selectedIds, items,
         selectItem, clearSelection, updateItem, pushHistory,
-        pendingImage, setPendingImage, setTool, addItem, setSelectedIds
+        pendingImage, setPendingImage, setTool, addItem, setSelectedIds,
+        currentStamp, setStampMenuPosition
     } = useWhiteboardStore();
 
     // Stable state ref
-    const stateRef = useRef({ tool, zoom, pan, selectedIds, items, pendingImage });
+    const stateRef = useRef({ tool, zoom, pan, selectedIds, items, pendingImage, currentStamp });
     useEffect(() => {
-        stateRef.current = { tool, zoom, pan, selectedIds, items, pendingImage };
-    }, [tool, zoom, pan, selectedIds, items, pendingImage]);
+        stateRef.current = { tool, zoom, pan, selectedIds, items, pendingImage, currentStamp };
+    }, [tool, zoom, pan, selectedIds, items, pendingImage, currentStamp]);
 
     const isDragging = useRef<DragState | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const lastPointerPos = useRef<{ x: number, y: number } | null>(null);
 
     const getLocalPoint = useCallback((e: PointerEvent | MouseEvent) => {
         if (!renderManager) return { x: 0, y: 0 };
@@ -340,25 +345,123 @@ export function useWhiteboardInteraction(
     }, [renderManager, getSelectionBounds]);
 
 
+    const findPostitAtPoint = useCallback((point: { x: number, y: number }) => {
+        if (!renderManager) return null;
+        const hitArea = { x: point.x - 1, y: point.y - 1, width: 2, height: 2 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+        return hits.find(item => {
+            if (item.type !== 'postit') return false;
+            const t = item.transform || { x: 0, y: 0 };
+            const w = item.data?.width || 200;
+            const h = item.data?.height || 200;
+            return point.x >= t.x && point.x <= t.x + w &&
+                point.y >= t.y && point.y <= t.y + h;
+        });
+    }, [renderManager]);
+
     const onPointerDown = useCallback((e: PointerEvent) => {
         if (!renderManager) return;
         const point = getLocalPoint(e);
         const canvas = renderManager.app.canvas;
-        const { tool: currentTool, selectedIds: currentSelectedIds, items: currentItems, pendingImage: currentPendingImage } = stateRef.current;
+        const { tool: currentTool, selectedIds: currentSelectedIds, items: currentItems, pendingImage: currentPendingImage, currentStamp } = stateRef.current;
+
+        // STAMP TOOL LOGIC
+        if (currentTool === 'stamp') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.button === 2) {
+                // Right Click -> Open Menu
+                setStampMenuPosition({ x: e.clientX, y: e.clientY });
+                return;
+            }
+
+            // Left Click -> Grow Stamp (Click and Hold)
+            const startTime = Date.now();
+            isDragging.current = {
+                type: 'stamp',
+                initialPoint: point,
+                initialItemTransforms: new Map(), // Required by type
+                startTime
+            };
+
+            const animate = () => {
+                if (isDragging.current?.type !== 'stamp') return;
+                const elapsed = Date.now() - startTime;
+
+                // 4-Step Logic: 0-1s (Step 1), 1-2s (Step 2), 2-3s (Step 3), 3s+ (Step 4)
+                const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
+
+                // Base sizes: 120, 160, 200, 240 (step * 40 + 80)
+                const baseSize = 80 + (step * 40);
+
+                // Shaking Effect (increasing with step)
+                const shakeIntensity = step * 2;
+                const shakeX = (Math.random() - 0.5) * shakeIntensity;
+                const shakeY = (Math.random() - 0.5) * shakeIntensity;
+
+                const currentPoint = isDragging.current.initialPoint;
+
+                if (renderManager) {
+                    renderManager.renderGhost(
+                        'stamp',
+                        currentPoint.x + shakeX,
+                        currentPoint.y + shakeY,
+                        baseSize,
+                        baseSize,
+                        { stampType: currentStamp || 'thumbs-up' }
+                    );
+                }
+                animationFrameRef.current = requestAnimationFrame(animate);
+            };
+            animationFrameRef.current = requestAnimationFrame(animate);
+            canvas.setPointerCapture(e.pointerId);
+            return;
+        }
 
         // Image Placement
         if (currentTool === 'image' && currentPendingImage) {
-            // ... (keep logic)
+            e.preventDefault();
+            e.stopPropagation();
+
             const placeImage = (url: string) => {
+                let targetW = currentPendingImage.width;
+                let targetH = currentPendingImage.height;
+                let tx = point.x - targetW / 2;
+                let ty = point.y - targetH / 2;
+                let parentId: string | undefined = undefined;
+
+                const postit = findPostitAtPoint(point);
+                if (postit) {
+                    parentId = postit.id;
+                    // Auto-scale to fit inside Post-it with padding
+                    const pW = postit.data?.width || 200;
+                    const pH = postit.data?.height || 200;
+                    const maxW = pW - 40;
+                    const maxH = pH - 40;
+
+                    if (targetW > maxW || targetH > maxH) {
+                        const ratio = Math.min(maxW / targetW, maxH / targetH);
+                        targetW *= ratio;
+                        targetH *= ratio;
+                    }
+
+                    // Convert to Local Coordinates (Top-Left relative to Post-it Top-Left)
+                    tx = (point.x - postit.transform.x) - targetW / 2;
+                    ty = (point.y - postit.transform.y) - targetH / 2;
+                }
+
                 const newItem = {
                     id: uuidv4(),
                     type: 'image' as const,
-                    data: { url, width: currentPendingImage.width, height: currentPendingImage.height },
-                    transform: { x: point.x - currentPendingImage.width / 2, y: point.y - currentPendingImage.height / 2, scaleX: 1, scaleY: 1, rotation: 0 },
+                    data: { url, width: targetW, height: targetH },
+                    transform: { x: tx, y: ty, scaleX: 1, scaleY: 1, rotation: 0 },
                     zIndex: Date.now(),
                     isDeleted: false,
                     meetingId: meetingId,
-                    userId: 'user'
+                    userId: 'user',
+                    parentId
                 };
                 addItem(newItem);
                 if (broadcastEvent) broadcastEvent('add_item', newItem);
@@ -381,6 +484,91 @@ export function useWhiteboardInteraction(
             }
             return;
         }
+
+
+
+        // TEXT TOOL LOGIC - Only creates NEW text, doesn't edit existing
+        if (currentTool === 'text') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Always create New Text (editing is done via Select tool double-click)
+            let tx = point.x;
+            let ty = point.y;
+            let parentId: string | undefined = undefined;
+
+            const postit = findPostitAtPoint(point);
+            if (postit) {
+                parentId = postit.id;
+                tx = point.x - postit.transform.x;
+                ty = point.y - postit.transform.y;
+                console.log('[Text] Placing text inside Post-it:', parentId, tx, ty);
+            }
+
+            const id = uuidv4();
+            const newItem: WhiteboardItem = {
+                id,
+                type: 'text',
+                data: {
+                    text: '',
+                    fontSize: 24,
+                    fontFamily: 'Arial',
+                    color: useWhiteboardStore.getState().color // Use current selected color
+                },
+                transform: {
+                    x: tx,
+                    y: ty,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                },
+                zIndex: Date.now(),
+                meetingId: meetingId,
+                parentId
+            };
+
+            addItem(newItem);
+            if (broadcastEvent) broadcastEvent('add_item', newItem);
+            if (setEditingItem) setEditingItem(id);
+            return;
+        }
+
+        // POST-IT TOOL LOGIC - Creates new Post-it
+        if (currentTool === 'postit') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const id = uuidv4();
+            const postitWidth = 200;
+            const postitHeight = 200;
+
+            const newItem: WhiteboardItem = {
+                id,
+                type: 'postit',
+                data: {
+                    width: postitWidth,
+                    height: postitHeight,
+                    color: 0xFFEB3B // Yellow default
+                },
+                transform: {
+                    x: point.x - postitWidth / 2, // Center on click
+                    y: point.y - postitHeight / 2,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                },
+                zIndex: Date.now(),
+                meetingId: meetingId
+            };
+
+            addItem(newItem);
+            if (broadcastEvent) broadcastEvent('add_item', newItem);
+            selectItem(id); // Select the new Post-it
+            setTool('select'); // Switch to select tool
+            if (renderManager) renderManager.renderGhost(null, 0, 0, 0, 0); // Clear ghost
+            return;
+        }
+
 
         if (currentTool !== 'select') return;
 
@@ -549,6 +737,7 @@ export function useWhiteboardInteraction(
 
     const onPointerMove = useCallback((e: PointerEvent) => {
         const point = getLocalPoint(e);
+        lastPointerPos.current = point;
 
         if (!isDragging.current) {
             // ... (Ghost rendering)
@@ -556,9 +745,19 @@ export function useWhiteboardInteraction(
             const tool = CurrentState.tool;
             const selectedIds = CurrentState.selectedIds;
             const pendingImage = CurrentState.pendingImage;
+            const currentStamp = CurrentState.currentStamp;
 
             if (tool === 'image' && pendingImage && renderManager) {
-                renderManager.renderGhost(pendingImage.url, point.x, point.y, pendingImage.width, pendingImage.height, 0.5);
+                renderManager.renderGhost('image', point.x, point.y, pendingImage.width, pendingImage.height, { url: pendingImage.url });
+                renderManager.app.canvas.style.cursor = 'crosshair';
+                return;
+            } else if (tool === 'postit' && renderManager) {
+                // Show Post-it Ghost
+                renderManager.renderGhost('postit', point.x, point.y, 200, 200);
+                renderManager.app.canvas.style.cursor = 'crosshair';
+                return;
+            } else if (tool === 'stamp' && renderManager) {
+                renderManager.renderGhost('stamp', point.x, point.y, 100, 100, { stampType: currentStamp || 'thumbs-up' });
                 renderManager.app.canvas.style.cursor = 'crosshair';
                 return;
             } else {
@@ -626,6 +825,11 @@ export function useWhiteboardInteraction(
         const { type, initialPoint, initialItemTransforms, groupBounds, handle, groupCenter, initialAngle, isOBB, rotationOffset, initialLocalCenters, initialSelectedIds } = isDragging.current as DragState;
         let dx = point.x - initialPoint.x;
         let dy = point.y - initialPoint.y;
+
+        if (type === 'stamp') {
+            isDragging.current!.initialPoint = point;
+            return;
+        }
 
         if (type === 'move') {
             initialItemTransforms.forEach((initialTransform: any, id: string) => {
@@ -895,10 +1099,67 @@ export function useWhiteboardInteraction(
     }, [getLocalPoint, updateItem, renderManager, isPointInSelection, getGroupHandleAtPoint, setSelectedIds]);
 
     const onPointerUp = useCallback((e: PointerEvent) => {
+        // Right click release -> Close Menu
+        if (e.button === 2) {
+            setStampMenuPosition(null);
+            return;
+        }
+
         renderManager?.setSelectionOverride(null);
         renderManager?.renderSelection(useWhiteboardStore.getState().selectedIds, useWhiteboardStore.getState().items);
 
         if (isDragging.current) {
+            // STAMP FINALIZATION
+            if (isDragging.current.type === 'stamp') {
+                const { initialPoint, startTime } = isDragging.current;
+                const point = isDragging.current.initialPoint || initialPoint; // Use updated point
+
+                const elapsed = Date.now() - (startTime || 0);
+                // 4-Step Logic: 0-1s (Step 1), 1-2s (Step 2), 2-3s (Step 3), 3s+ (Step 4)
+                const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
+                const size = 80 + (step * 40);
+
+                const { currentStamp } = stateRef.current;
+                const half = size / 2;
+
+                const newItem: WhiteboardItem = {
+                    id: uuidv4(),
+                    type: 'stamp' as any,
+                    data: {
+                        stampType: currentStamp || 'thumbs-up',
+                        width: size,
+                        height: size
+                    },
+                    transform: {
+                        x: point.x - half,
+                        y: point.y - half,
+                        rotation: 0,
+                        scaleX: 1,
+                        scaleY: 1
+                    },
+                    zIndex: Date.now(),
+                    meetingId: meetingId,
+                    userId: 'user'
+                };
+
+                addItem(newItem);
+                if (broadcastEvent) broadcastEvent('add_item', newItem);
+
+                if (renderManager) {
+                    renderManager.playStampEffect(point.x, point.y);
+                    renderManager.renderGhost(null, 0, 0, 0, 0); // Clear ghost
+                }
+
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                    animationFrameRef.current = null;
+                }
+
+                isDragging.current = null;
+                renderManager?.app.canvas.releasePointerCapture(e.pointerId);
+                return;
+            }
+
             if ((isDragging.current.type === 'move' || isDragging.current.type === 'handle') && broadcastEvent) {
                 const affectedIds = Array.from(isDragging.current.initialItemTransforms.keys());
                 const currentItems = useWhiteboardStore.getState().items;
@@ -921,6 +1182,50 @@ export function useWhiteboardInteraction(
             renderManager?.app.canvas.releasePointerCapture(e.pointerId);
         }
     }, [renderManager, broadcastEvent]);
+
+    // Double-click to edit text items
+    const onDoubleClick = useCallback((e: MouseEvent) => {
+        if (!renderManager) return;
+        const { tool: currentTool } = stateRef.current;
+
+        // Only works with select tool
+        if (currentTool !== 'select') return;
+
+        const point = getLocalPoint(e as any);
+
+        // Find text item at click position
+        const hitArea = { x: point.x - 5, y: point.y - 5, width: 10, height: 10 };
+        const hits: any[] = [];
+        renderManager.quadTree.retrieve(hits, hitArea);
+
+        const clickedText = hits.find(item => {
+            if (item.type !== 'text') return false;
+            const lb = renderManager.getLocalBounds(item);
+            const sx = item.transform.scaleX || 1;
+            const sy = item.transform.scaleY || 1;
+            const rot = item.transform.rotation || 0;
+            const cx = lb.x + lb.width / 2;
+            const cy = lb.y + lb.height / 2;
+            const wcX = item.transform.x + cx;
+            const wcY = item.transform.y + cy;
+            const dx = point.x - wcX;
+            const dy = point.y - wcY;
+            const cos = Math.cos(-rot);
+            const sin = Math.sin(-rot);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            const halfW = (lb.width * sx) / 2;
+            const halfH = (lb.height * sy) / 2;
+            // No padding for strict hit test on text items
+            return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
+        });
+
+        if (clickedText && setEditingItem) {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditingItem(clickedText.id);
+        }
+    }, [renderManager, getLocalPoint, setEditingItem]);
 
     const handleContextMenu = useCallback((e: MouseEvent) => {
         e.preventDefault();
@@ -972,11 +1277,24 @@ export function useWhiteboardInteraction(
 
     useEffect(() => {
         if (!renderManager) return;
+
+        // Use currentStamp directly from props/store to ensure sync
+        // Using Effect dependency here is critical for "hover" update without moving mouse
+        if (tool === 'stamp' && lastPointerPos.current) {
+            const p = lastPointerPos.current;
+            console.log(`[Interaction] Updating ghost stamp: ${currentStamp} at ${p.x},${p.y}`);
+            renderManager.renderGhost('stamp', p.x, p.y, 100, 100, { stampType: currentStamp || 'thumbs-up' });
+        }
+    }, [currentStamp, tool, renderManager]);
+
+    useEffect(() => {
+        if (!renderManager) return;
         const canvas = renderManager.app.canvas;
 
         canvas.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
+        canvas.addEventListener('dblclick', onDoubleClick);
         // Add context menu listener
         canvas.addEventListener('contextmenu', handleContextMenu);
 
@@ -984,7 +1302,8 @@ export function useWhiteboardInteraction(
             canvas.removeEventListener('pointerdown', onPointerDown);
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
+            canvas.removeEventListener('dblclick', onDoubleClick);
             canvas.removeEventListener('contextmenu', handleContextMenu);
         };
-    }, [renderManager, onPointerDown, onPointerMove, onPointerUp, handleContextMenu]);
+    }, [renderManager, onPointerDown, onPointerMove, onPointerUp, onDoubleClick, handleContextMenu]);
 }

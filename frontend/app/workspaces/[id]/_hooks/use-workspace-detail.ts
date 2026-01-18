@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
 import { API_URL, type NavItemId } from '../_lib/constants';
 import type { MeetingSession } from '../_lib/types';
+import type { MemberPermissions } from '@/lib/types/workspace';
 
 // Sub-hooks
 import { useWorkspaceData } from './use-workspace-data';
@@ -12,6 +13,7 @@ import { useWorkspaceSessions } from './use-workspace-sessions';
 import { useWorkspaceFiles } from './use-workspace-files';
 import { useWorkspaceMembers } from './use-workspace-members';
 import { useWorkspaceEvents } from './use-workspace-events';
+import { useWorkspaceRoles } from './use-workspace-roles';
 
 interface UseWorkspaceDetailProps {
   workspaceId: string;
@@ -20,6 +22,21 @@ interface UseWorkspaceDetailProps {
 export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
   // Navigation state
   const [activeNav, setActiveNav] = useState<NavItemId>('meeting');
+
+  // Initialize activeNav from localStorage
+  useEffect(() => {
+    const savedNav = localStorage.getItem(`workspace_nav_${workspaceId}`);
+    if (savedNav) {
+      setActiveNav(savedNav as NavItemId);
+    }
+  }, [workspaceId]);
+
+  // Persist activeNav changes
+  useEffect(() => {
+    if (activeNav) {
+      localStorage.setItem(`workspace_nav_${workspaceId}`, activeNav);
+    }
+  }, [activeNav, workspaceId]);
 
   // WebSocket state
   const [isConnected, setIsConnected] = useState(false);
@@ -34,13 +51,20 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     onWorkspaceUpdate: workspaceData.fetchWorkspace,
   });
   const eventsData = useWorkspaceEvents({ workspaceId });
+  const rolesData = useWorkspaceRoles({ workspaceId, onRoleChange: workspaceData.fetchWorkspace });
+
+  // User permissions state
+
 
   // Update members when workspace data changes
   useEffect(() => {
     if (workspaceData.workspace?.members) {
       membersData.setMembers(workspaceData.workspace.members);
     }
-  }, [workspaceData.workspace?.members, membersData.setMembers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceData.workspace?.members]);
+
+
 
   // Socket.IO connection
   useEffect(() => {
@@ -140,9 +164,10 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [workspaceId, sessionsData.fetchSessions, sessionsData.fetchActiveSessions, eventsData.fetchEvents, setActiveNav]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
-  // Initial data fetch
+  // Initial data fetch - only run once when workspaceId changes
   useEffect(() => {
     workspaceData.fetchWorkspace();
     workspaceData.fetchUser();
@@ -152,16 +177,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     membersData.fetchPendingInvitations();
     eventsData.fetchEvents();
     eventsData.fetchEventTypes();
-  }, [
-    workspaceData.fetchWorkspace,
-    workspaceData.fetchUser,
-    sessionsData.fetchSessions,
-    sessionsData.fetchActiveSessions,
-    filesData.fetchFiles,
-    membersData.fetchPendingInvitations,
-    eventsData.fetchEvents,
-    eventsData.fetchEventTypes,
-  ]);
+    rolesData.fetchRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   return {
     // Data
@@ -175,6 +193,8 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     events: eventsData.events,
     eventTypes: eventsData.eventTypes,
     isOwner: workspaceData.isOwner,
+    userPermissions: workspaceData.permissions,
+    roles: rolesData.roles,
 
     // Navigation
     activeNav,
@@ -218,6 +238,9 @@ export function useWorkspaceDetail({ workspaceId }: UseWorkspaceDetailProps) {
     // Workspace Actions
     updateWorkspace: workspaceData.updateWorkspace,
     deleteWorkspace: workspaceData.deleteWorkspace,
+
+    // Role Actions
+    assignRole: rolesData.assignRole,
 
     // Action states
     isStartingMeeting: sessionsData.isStartingMeeting,

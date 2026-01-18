@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MeetingChatModule } from './chat/meeting-chat.module';
 import { MeetingsService } from './meetings.service';
 import { MeetingsController } from './meetings.controller';
 import { MeetingSession } from './entities/meeting-session.entity';
 import { SessionParticipant } from './entities/session-participant.entity';
 import { Transcription } from './entities/transcription.entity';
 import { Workspace } from '../workspaces/entities/workspace.entity';
+import { WorkspaceEvent } from '../workspaces/entities/workspace-event.entity';
+import { User } from '../users/entities/user.entity';
 import { RedisModule } from '../redis/redis.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AiModule } from '../ai/ai.module';
@@ -26,6 +29,7 @@ import { TranscribeUrlService } from './services/transcribe-url.service';
 import { PollyService } from './services/polly.service';
 import { PollyCacheService } from './services/polly-cache.service';
 import { TTSPreferenceService } from './services/tts-preference.service';
+import { VoiceDubbingTTSService } from './services/voice-dubbing-tts.service';
 
 @Module({
   imports: [
@@ -34,11 +38,14 @@ import { TTSPreferenceService } from './services/tts-preference.service';
       SessionParticipant,
       Transcription,
       Workspace,
+      WorkspaceEvent,
+      User,
     ]),
     RedisModule,
     WorkspacesModule,
     AiModule,
     StorageModule,
+    MeetingChatModule,
   ],
   controllers: [MeetingsController],
   providers: [
@@ -59,6 +66,7 @@ import { TTSPreferenceService } from './services/tts-preference.service';
     PollyService,
     PollyCacheService,
     TTSPreferenceService,
+    VoiceDubbingTTSService,
   ],
   exports: [
     MeetingsService,
@@ -69,4 +77,4 @@ import { TTSPreferenceService } from './services/tts-preference.service';
     TranscribeUrlService,
   ],
 })
-export class MeetingsModule {}
+export class MeetingsModule { }

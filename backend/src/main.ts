@@ -18,6 +18,17 @@ class SocketIoAdapter extends IoAdapter {
         credentials: true,
       },
       transports: ['websocket', 'polling'],
+      // [AFTER] 개선된 Socket.IO 설정
+      pingTimeout: 120000, // 120초 (기본 20초 → 증가) - PONG 응답 대기 시간
+      pingInterval: 60000, // 60초 (기본 25초 → 증가) - 서버 PING 전송 간격
+      connectTimeout: 45000, // 연결 타임아웃 45초
+      upgradeTimeout: 30000, // 업그레이드 타임아웃 30초
+      maxHttpBufferSize: 1e6, // 1MB 버퍼
+      allowEIO3: true, // Engine.IO v3 호환성
+      connectionStateRecovery: {
+        maxDisconnectionDuration: 2 * 60 * 1000, // 2분 내 재연결 시 상태 복원
+        skipMiddlewares: true,
+      },
     });
     return server;
   }

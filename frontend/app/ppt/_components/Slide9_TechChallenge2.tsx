@@ -156,7 +156,7 @@ export default function Slide9_TechChallenge2() {
                     <motion.div variants={itemVariants} className="flex flex-col items-center">
                         <span className="text-xl md:text-2xl text-blue-400 font-['IncheonEducation'] mb-2">Technical Challenge #02</span>
                         <h2 className="text-5xl md:text-7xl font-['IncheonEducation'] text-white leading-tight">
-                            "종이에 쓰는 듯한 필기감"
+                            {'"종이에 쓰는 듯한 필기감"'}
                         </h2>
                         <p className="mt-4 text-xl md:text-2xl text-neutral-400 font-['Presentation'] font-light max-w-4xl break-keep">
                             화상회의 중 <span className="text-rose-400 font-bold">손이 떨리거나 글씨가 끊기면</span> 몰입이 깨집니다.<br className="hidden md:block" />

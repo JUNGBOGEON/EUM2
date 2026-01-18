@@ -3,9 +3,11 @@
 import { motion, Variants } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
+// Words for typewriter effect (outside component to avoid dependency issues)
+const TYPEWRITER_WORDS = ["안녕하세요", "HELLO", "こんにちは", "你好"];
+
 // Typewriter Effect Component
 const TypewriterBackground = () => {
-    const words = ["안녕하세요", "HELLO", "こんにちは", "你好"];
     const [currentWordIndex, setCurrentWordIndex] = useState(0);
     const [currentText, setCurrentText] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
@@ -16,7 +18,7 @@ const TypewriterBackground = () => {
         const delayGap = 2000;
 
         const handleTyping = () => {
-            const fullWord = words[currentWordIndex];
+            const fullWord = TYPEWRITER_WORDS[currentWordIndex];
 
             if (isDeleting) {
                 setCurrentText(fullWord.substring(0, currentText.length - 1));
@@ -28,13 +30,13 @@ const TypewriterBackground = () => {
                 setTimeout(() => setIsDeleting(true), delayGap);
             } else if (isDeleting && currentText === "") {
                 setIsDeleting(false);
-                setCurrentWordIndex((prev) => (prev + 1) % words.length);
+                setCurrentWordIndex((prev) => (prev + 1) % TYPEWRITER_WORDS.length);
             }
         };
 
         const timer = setTimeout(handleTyping, isDeleting ? deleteSpeed : typeSpeed);
         return () => clearTimeout(timer);
-    }, [currentText, isDeleting, currentWordIndex, words]);
+    }, [currentText, isDeleting, currentWordIndex]);
 
     return (
         <div className="text-[15vw] font-bold text-neutral-800/20 font-['IncheonEducation'] whitespace-nowrap">

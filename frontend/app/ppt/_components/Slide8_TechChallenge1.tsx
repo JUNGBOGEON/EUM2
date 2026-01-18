@@ -38,7 +38,7 @@ export default function Slide8_TechChallenge1() {
                     <motion.div variants={itemVariants} className="flex flex-col items-center">
                         <span className="text-xl md:text-2xl text-rose-400 font-['IncheonEducation'] mb-2">Technical Challenge #01</span>
                         <h2 className="text-5xl md:text-7xl font-['IncheonEducation'] text-white leading-tight">
-                            "사람이 몰리면, <br className="md:hidden" />연결이 끊겼습니다"
+                            {'"사람이 몰리면, '}<br className="md:hidden" />{' 연결이 끊겼습니다"'}
                         </h2>
                         <p className="mt-4 text-xl md:text-2xl text-neutral-400 font-['Presentation'] font-light max-w-4xl">
                             화상회의 중 <span className="text-white font-bold">20명 이상</span>이 동시에 접속했을 때,<br className="hidden md:block" />

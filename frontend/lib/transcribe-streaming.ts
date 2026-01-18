@@ -153,6 +153,15 @@ export function decodeEventStreamMessage(data: ArrayBuffer): EventStreamMessage 
 // Transcribe Streaming 클라이언트
 // ==========================================
 
+// AWS Transcribe Item from response
+interface AWSTranscribeItem {
+  Content?: string;
+  StartTime?: number;
+  EndTime?: number;
+  Type?: string;
+  Confidence?: number;
+}
+
 export interface TranscriptResult {
   resultId: string;
   isPartial: boolean;
@@ -404,7 +413,7 @@ registerProcessor('pcm-processor', PCMProcessor);
       workletNode.connect(this.audioContext.destination);
 
       // Store worklet node as processor (type mismatch but functional equivalent for cleanup)
-      // @ts-ignore
+      // @ts-expect-error - AudioWorkletNode assigned to ScriptProcessorNode for cleanup compatibility
       this.processor = workletNode;
 
       // 연결 상태 모니터링
@@ -539,11 +548,11 @@ registerProcessor('pcm-processor', PCMProcessor);
                 transcript: alternative.Transcript || '',
                 startTimeMs: Math.round((result.StartTime || 0) * 1000),
                 endTimeMs: Math.round((result.EndTime || 0) * 1000),
-                items: alternative.Items?.map((item: any) => ({
-                  content: item.Content,
-                  startTime: item.StartTime,
-                  endTime: item.EndTime,
-                  type: item.Type,
+                items: alternative.Items?.map((item: AWSTranscribeItem) => ({
+                  content: item.Content || '',
+                  startTime: item.StartTime || 0,
+                  endTime: item.EndTime || 0,
+                  type: item.Type || '',
                   confidence: item.Confidence,
                 })),
               };

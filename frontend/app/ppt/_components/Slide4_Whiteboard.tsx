@@ -1,7 +1,6 @@
 'use client';
 
 import { motion, Variants } from 'framer-motion';
-import { useEffect, useState } from 'react';
 
 // Simulated Cursors
 const Cursor = ({ color, label, delay }: { color: string, label: string, delay: number }) => (

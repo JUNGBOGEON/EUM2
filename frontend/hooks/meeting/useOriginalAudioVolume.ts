@@ -47,7 +47,7 @@ export function useOriginalAudioVolume({
   // 오디오 요소 가져오기
   const getAudioElement = useCallback((): HTMLAudioElement | null => {
     if (!audioVideo) return null;
-    // @ts-ignore - 내부 API 접근
+    // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
     return audioVideo.audioVideo?.audioMixController?.audioElement || null;
   }, [audioVideo]);
 

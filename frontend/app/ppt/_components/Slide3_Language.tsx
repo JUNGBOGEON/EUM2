@@ -1,27 +1,26 @@
 'use client';
 
 import { motion, Variants } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-// Multilingual words for ambient background
-const WORDS = [
-    "Hello", "Bonjour", "안녕하세요", "你好", "Hola", "Guten Tag",
-    "Ciao", "Olá", "Привет", "مرحبا", "नमस्ते", "Sawasdee"
+// Pre-calculated floating items data (deterministic for SSR)
+const FLOATING_ITEMS = [
+    { id: 0, text: "Hello", x: 45, y: 62, duration: 28, delay: 3 },
+    { id: 1, text: "Bonjour", x: 12, y: 35, duration: 22, delay: 7 },
+    { id: 2, text: "안녕하세요", x: 78, y: 88, duration: 31, delay: 1 },
+    { id: 3, text: "你好", x: 34, y: 15, duration: 19, delay: 9 },
+    { id: 4, text: "Hola", x: 67, y: 52, duration: 25, delay: 4 },
+    { id: 5, text: "Guten Tag", x: 23, y: 78, duration: 33, delay: 2 },
+    { id: 6, text: "Ciao", x: 89, y: 25, duration: 18, delay: 8 },
+    { id: 7, text: "Olá", x: 56, y: 95, duration: 27, delay: 5 },
+    { id: 8, text: "Привет", x: 8, y: 42, duration: 30, delay: 0 },
+    { id: 9, text: "مرحبا", x: 71, y: 68, duration: 24, delay: 6 },
+    { id: 10, text: "नमस्ते", x: 42, y: 8, duration: 35, delay: 3 },
+    { id: 11, text: "Sawasdee", x: 95, y: 55, duration: 21, delay: 9 },
 ];
 
 function FloatingBackground() {
-    const [items, setItems] = useState<{ id: number; text: string; x: number; y: number; duration: number }[]>([]);
-
-    useEffect(() => {
-        const newItems = WORDS.map((text, i) => ({
-            id: i,
-            text,
-            x: Math.random() * 100,
-            y: Math.random() * 100,
-            duration: 15 + Math.random() * 20
-        }));
-        setItems(newItems);
-    }, []);
+    const [items] = useState(FLOATING_ITEMS);
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-10">
@@ -38,7 +37,7 @@ function FloatingBackground() {
                         duration: item.duration,
                         repeat: Infinity,
                         ease: "linear",
-                        delay: Math.random() * 10
+                        delay: item.delay
                     }}
                 >
                     {item.text}

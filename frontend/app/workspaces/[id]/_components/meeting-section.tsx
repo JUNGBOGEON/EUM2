@@ -221,7 +221,7 @@ export function MeetingSection({
                         }}
                         className="w-full h-12 px-5 text-left text-base text-neutral-500 hover:bg-neutral-900 transition-colors"
                       >
-                        "{customCategory}" 새 카테고리로 생성
+                        &ldquo;{customCategory}&rdquo; 새 카테고리로 생성
                       </button>
                     )}
                   </div>

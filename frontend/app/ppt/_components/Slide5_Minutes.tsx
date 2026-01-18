@@ -1,7 +1,9 @@
 'use client';
 
 import { motion, Variants } from 'framer-motion';
-import { useEffect, useState } from 'react';
+
+// Pre-calculated random delays for AudioWave
+const AUDIO_WAVE_DELAYS = [0.12, 0.35, 0.08, 0.42, 0.25, 0.18, 0.38, 0.05, 0.32, 0.22];
 
 // Simulated Audio Visualizer (Minimalist)
 const AudioWave = () => (
@@ -19,7 +21,7 @@ const AudioWave = () => (
                     repeat: Infinity,
                     ease: "easeInOut",
                     delay: i * 0.1,
-                    repeatDelay: Math.random() * 0.5
+                    repeatDelay: AUDIO_WAVE_DELAYS[i]
                 }}
             />
         ))}
@@ -42,14 +44,14 @@ const MinutesDemo = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0 }}
                 >
-                    "이번 프로젝트의 핵심 목표는..."
+                    {'"이번 프로젝트의 핵심 목표는..."'}
                 </motion.div>
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 1.5 }}
                 >
-                    "사용자 경험을 최우선으로..."
+                    {'"사용자 경험을 최우선으로..."'}
                 </motion.div>
 
                 {/* Visual Transformation Arrow */}

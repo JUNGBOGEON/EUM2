@@ -393,7 +393,7 @@ export function useWhiteboardInteraction(
                 // 4-Step Logic: 0-1s (Step 1), 1-2s (Step 2), 2-3s (Step 3), 3s+ (Step 4)
                 const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
 
-                // Base sizes: 80, 120, 160, 200 (or similar progression)
+                // Base sizes: 120, 160, 200, 240 (step * 40 + 80)
                 const baseSize = 80 + (step * 40);
 
                 // Shaking Effect (increasing with step)
@@ -1115,7 +1115,7 @@ export function useWhiteboardInteraction(
                 const point = isDragging.current.initialPoint || initialPoint; // Use updated point
 
                 const elapsed = Date.now() - (startTime || 0);
-                // 4-Step Logic Match
+                // 4-Step Logic: 0-1s (Step 1), 1-2s (Step 2), 2-3s (Step 3), 3s+ (Step 4)
                 const step = Math.min(4, Math.floor(elapsed / 1000) + 1);
                 const size = 80 + (step * 40);
 

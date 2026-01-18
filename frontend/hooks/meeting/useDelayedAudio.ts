@@ -29,7 +29,28 @@ export function useDelayedAudio({
   const audioContextRef = useRef<AudioContext | null>(null);
   const delayNodeRef = useRef<DelayNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const [isAudioDelayActive, setIsAudioDelayActive] = useState(false);
+
+  // 오디오 요소 가져오기 (DOM 쿼리 방식 - AWS Chime SDK 공식 권장 워크어라운드)
+  // 참고: https://github.com/aws/amazon-chime-sdk-component-library-react/issues/622
+  const getAudioElement = useCallback((): HTMLAudioElement | null => {
+    // 캐시된 요소가 있고 DOM에 여전히 연결되어 있으면 반환
+    if (audioElementRef.current && audioElementRef.current.isConnected) {
+      return audioElementRef.current;
+    }
+
+    // audioVideo가 준비되지 않았으면 null 반환
+    if (!audioVideo) return null;
+
+    // DOM에서 Chime이 렌더링한 audio 요소 찾기
+    const audioElement = document.querySelector('audio') as HTMLAudioElement | null;
+    if (audioElement) {
+      audioElementRef.current = audioElement;
+      console.log('[DelayedAudio] Found Chime audio element via DOM query');
+    }
+    return audioElement;
+  }, [audioVideo]);
 
   // 노드 정리 (moved before setupDelayedAudio to be available as dependency)
   const cleanupNodes = useCallback(() => {
@@ -68,9 +89,8 @@ export function useDelayedAudio({
       delayNode.delayTime.value = delayEnabled ? delayMs / 1000 : 0;
       delayNodeRef.current = delayNode;
 
-      // Chime SDK의 오디오 출력 요소 가져오기
-      // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
-      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement as HTMLAudioElement | undefined;
+      // Chime SDK의 오디오 출력 요소 가져오기 (DOM 쿼리 방식)
+      const audioElement = getAudioElement();
 
       if (audioElement && audioElement.srcObject) {
         const stream = audioElement.srcObject as MediaStream;
@@ -94,23 +114,19 @@ export function useDelayedAudio({
     } catch (error) {
       console.error('[DelayedAudio] Setup failed:', error);
     }
-  }, [audioVideo, delayEnabled, delayMs, cleanupNodes]);
+  }, [audioVideo, delayEnabled, delayMs, cleanupNodes, getAudioElement]);
 
   // 딜레이 정리
   const cleanupDelayedAudio = useCallback(() => {
     cleanupNodes();
 
-    // 원본 오디오 복원
-    if (audioVideo) {
-      // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
-      const audioElement = audioVideo.audioVideo?.audioMixController?.audioElement as HTMLAudioElement | undefined;
-      if (audioElement) {
-        // DOM element unmuting is intentional and necessary for audio restoration
-        // eslint-disable-next-line react-hooks/immutability
-        audioElement.muted = false;
-      }
+    // 원본 오디오 복원 (DOM 쿼리 방식)
+    const audioElement = getAudioElement();
+    if (audioElement) {
+      // DOM element unmuting is intentional and necessary for audio restoration
+      audioElement.muted = false;
     }
-  }, [audioVideo, cleanupNodes]);
+  }, [cleanupNodes, getAudioElement]);
 
   // 딜레이 값 변경 시 DelayNode 업데이트
   useEffect(() => {

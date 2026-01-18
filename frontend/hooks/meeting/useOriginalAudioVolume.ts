@@ -43,12 +43,26 @@ export function useOriginalAudioVolume({
   const fadeIntervalRef = useRef<number | null>(null);
   const isFirstRenderRef = useRef(true);
   const prevTranslationEnabledRef = useRef(false);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
-  // 오디오 요소 가져오기
+  // 오디오 요소 가져오기 (DOM 쿼리 방식 - AWS Chime SDK 공식 권장 워크어라운드)
+  // 참고: https://github.com/aws/amazon-chime-sdk-component-library-react/issues/622
   const getAudioElement = useCallback((): HTMLAudioElement | null => {
+    // 캐시된 요소가 있고 DOM에 여전히 연결되어 있으면 반환
+    if (audioElementRef.current && audioElementRef.current.isConnected) {
+      return audioElementRef.current;
+    }
+
+    // audioVideo가 준비되지 않았으면 null 반환
     if (!audioVideo) return null;
-    // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
-    return audioVideo.audioVideo?.audioMixController?.audioElement || null;
+
+    // DOM에서 Chime이 렌더링한 audio 요소 찾기
+    const audioElement = document.querySelector('audio') as HTMLAudioElement | null;
+    if (audioElement) {
+      audioElementRef.current = audioElement;
+      console.log('[OriginalAudio] Found Chime audio element via DOM query');
+    }
+    return audioElement;
   }, [audioVideo]);
 
   // 볼륨 적용 (실제 오디오 요소에)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Brain,
@@ -9,6 +9,7 @@ import {
   MessageSquare,
   ListChecks,
   FileEdit,
+  Loader2,
 } from 'lucide-react';
 
 interface SummaryLoadingAnimationProps {
@@ -21,67 +22,90 @@ const STAGES = [
     label: '자막 분석 중',
     description: '회의 내용을 분석하고 있습니다',
     icon: MessageSquare,
-    duration: 3000,
+    progressRange: [0, 25],
   },
   {
     id: 'extract',
     label: '핵심 내용 추출 중',
     description: '중요한 논의 사항을 추출하고 있습니다',
     icon: ListChecks,
-    duration: 4000,
+    progressRange: [25, 50],
   },
   {
     id: 'generate',
     label: 'AI 요약 생성 중',
     description: '요약 문서를 작성하고 있습니다',
     icon: Brain,
-    duration: 5000,
+    progressRange: [50, 80],
   },
   {
     id: 'format',
-    label: '문서 정리 중',
-    description: '보기 좋게 포맷팅하고 있습니다',
+    label: '마무리 중',
+    description: '최종 정리 및 검토하고 있습니다',
     icon: FileEdit,
-    duration: 3000,
+    progressRange: [80, 99],
   },
 ];
+
+// 예상 총 소요 시간 (발언 수에 따라 조정)
+const getEstimatedDuration = (transcriptCount: number) => {
+  // 기본 20초 + 발언 수 * 0.5초 (최대 60초)
+  return Math.min(20000 + transcriptCount * 500, 60000);
+};
 
 export function SummaryLoadingAnimation({
   transcriptCount = 0,
 }: SummaryLoadingAnimationProps) {
-  const [currentStage, setCurrentStage] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const startTimeRef = useRef(Date.now());
+  const estimatedDuration = getEstimatedDuration(transcriptCount);
+
+  // 현재 단계 계산 (진행률 기반)
+  const currentStage = STAGES.findIndex(
+    (stage) => progress >= stage.progressRange[0] && progress < stage.progressRange[1]
+  );
+  const activeStage = currentStage === -1 ? STAGES.length - 1 : currentStage;
 
   useEffect(() => {
-    // 단계별 진행
-    const stageInterval = setInterval(() => {
-      setCurrentStage((prev) => {
-        if (prev < STAGES.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, 4000);
+    // 컴포넌트 마운트 시 초기화
+    startTimeRef.current = Date.now();
+    setProgress(0);
+    setElapsedTime(0);
 
-    // 프로그레스 바 애니메이션
+    // 진행률 업데이트 (시간 기반 + 약간의 변동)
     const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTimeRef.current;
+      setElapsedTime(elapsed);
+
+      // 예상 시간 대비 진행률 계산 (최대 98%)
+      // 처음에는 빠르게, 후반에는 느리게 (easeOut 효과)
+      const rawProgress = elapsed / estimatedDuration;
+      const easedProgress = 1 - Math.pow(1 - Math.min(rawProgress, 1), 2);
+      const targetProgress = Math.min(easedProgress * 98, 98);
+
+      // 약간의 랜덤 변동 추가 (자연스러움)
+      const variation = (Math.random() - 0.5) * 0.5;
+
       setProgress((prev) => {
-        if (prev < 95) {
-          // 95%에서 멈춤 (완료 시 100%)
-          return prev + Math.random() * 2;
-        }
-        return prev;
+        const newProgress = Math.max(prev, targetProgress + variation);
+        return Math.min(newProgress, 98); // 98%에서 대기 (완료 시 100%로 변경됨)
       });
-    }, 200);
+    }, 300);
 
     return () => {
-      clearInterval(stageInterval);
       clearInterval(progressInterval);
     };
-  }, []);
+  }, [estimatedDuration]);
 
-  const currentStageData = STAGES[currentStage];
+  const currentStageData = STAGES[activeStage];
   const StageIcon = currentStageData.icon;
+
+  // 경과 시간 포맷팅
+  const formatElapsed = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    return `${seconds}초`;
+  };
 
   return (
     <div className="py-8 px-4">
@@ -126,7 +150,10 @@ export function SummaryLoadingAnimation({
       <div className="max-w-xs mx-auto mb-6">
         <div className="flex justify-between text-xs text-neutral-500 mb-2">
           <span>진행률</span>
-          <span>{Math.round(progress)}%</span>
+          <span className="flex items-center gap-2">
+            <span className="text-neutral-600">{formatElapsed(elapsedTime)}</span>
+            <span className="text-indigo-400 font-medium">{Math.round(progress)}%</span>
+          </span>
         </div>
         <div className="h-2 bg-white/5 rounded-full overflow-hidden">
           <div
@@ -140,8 +167,8 @@ export function SummaryLoadingAnimation({
       <div className="flex justify-center gap-2">
         {STAGES.map((stage, idx) => {
           const Icon = stage.icon;
-          const isCompleted = idx < currentStage;
-          const isCurrent = idx === currentStage;
+          const isCompleted = idx < activeStage;
+          const isCurrent = idx === activeStage;
 
           return (
             <div
@@ -157,6 +184,8 @@ export function SummaryLoadingAnimation({
             >
               {isCompleted ? (
                 <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : isCurrent ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Icon className="w-3.5 h-3.5" />
               )}

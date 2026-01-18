@@ -66,7 +66,7 @@ function UserAvatar({
   return (
     <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-neutral-950">
       {profileImage ? (
-        <div className="w-24 h-24 md:w-36 md:h-36 overflow-hidden border border-neutral-800 mb-4 aspect-square">
+        <div className="w-24 h-24 md:w-36 md:h-36 overflow-hidden rounded-full border-2 border-neutral-700 mb-4 aspect-square shadow-lg">
           <Image
             src={profileImage}
             alt={name}
@@ -76,13 +76,13 @@ function UserAvatar({
           />
         </div>
       ) : (
-        <div className="w-24 h-24 md:w-36 md:h-36 bg-neutral-900 flex items-center justify-center border border-neutral-800 mb-4 aspect-square">
+        <div className="w-24 h-24 md:w-36 md:h-36 bg-neutral-900 flex items-center justify-center rounded-full border-2 border-neutral-700 mb-4 aspect-square shadow-lg">
           <span className="text-4xl md:text-6xl font-medium text-neutral-400">
             {initial}
           </span>
         </div>
       )}
-      <div className="flex items-center gap-2 text-neutral-600 text-sm">
+      <div className="flex items-center gap-2 text-neutral-500 text-sm">
         <VideoOff className="w-4 h-4" />
         <span>카메라 꺼짐</span>
       </div>

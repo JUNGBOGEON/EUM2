@@ -12,6 +12,8 @@ export enum WhiteboardItemType {
   IMAGE = 'image',
   TEXT = 'text',
   SHAPE = 'shape',
+  STAMP = 'stamp',
+  POSTIT = 'postit',
 }
 
 @Entity()

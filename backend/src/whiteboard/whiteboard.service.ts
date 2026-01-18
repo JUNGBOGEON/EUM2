@@ -26,7 +26,9 @@ export class WhiteboardService {
       console.warn('!!! [WhiteboardService] WARNING: Saving item with invalid meetingId:', createWhiteboardItemDto.meetingId);
     }
 
-    const item = this.whiteboardItemRepository.create(createWhiteboardItemDto) as WhiteboardItem;
+    // Remove non-entity fields from the DTO
+    const { senderId, ...cleanDto } = createWhiteboardItemDto as any;
+    const item = this.whiteboardItemRepository.create(cleanDto as Partial<WhiteboardItem>);
 
     // If ID is provided in DTO, ensure it's used
     if (createWhiteboardItemDto.id) {
@@ -117,14 +119,23 @@ export class WhiteboardService {
   }
 
   async update(id: string, updateWhiteboardItemDto: any) {
-    // We need meetingId to update Redis efficiently. 
-    // If it's not passed, we might need to fetch it or rely on convention.
-    // If updateWhiteboardItemDto contains meetingId, we are good.
+    // Extract actual changes from wrapper if present
+    // Client may send { id, changes: {...}, senderId, meetingId } or direct fields
+    const changes = updateWhiteboardItemDto.changes || updateWhiteboardItemDto;
     const meetingId = updateWhiteboardItemDto.meetingId;
-    if (meetingId) {
-      await this.redisService.updateWhiteboardItem(meetingId, id, updateWhiteboardItemDto);
+
+    // Remove non-entity fields from the update payload
+    const { senderId, meetingId: _, changes: __, id: ___, ...cleanChanges } = changes;
+
+    // Skip if no actual changes to persist
+    if (Object.keys(cleanChanges).length === 0) {
+      return;
     }
-    return this.whiteboardItemRepository.update(id, updateWhiteboardItemDto);
+
+    if (meetingId) {
+      await this.redisService.updateWhiteboardItem(meetingId, id, cleanChanges);
+    }
+    return this.whiteboardItemRepository.update(id, cleanChanges);
   }
 
   async remove(id: string) {

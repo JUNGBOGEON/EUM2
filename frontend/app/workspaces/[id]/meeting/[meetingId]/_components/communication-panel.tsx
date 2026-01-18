@@ -260,45 +260,22 @@ export function CommunicationPanel({
                 )}
             </div>
 
-            {/* Input Area */}
-            <div className="p-4 bg-neutral-950 border-t border-neutral-800 flex-shrink-0">
-                <div className="relative flex items-center gap-2">
-                    <input
-                        type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="메시지를 입력하세요..."
-                        autoComplete="off"
-                        className="flex-1 h-9 px-3 py-1 text-sm bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-700 focus:border-neutral-700 pr-12"
-                    />
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={handleSend}
-                        disabled={!chatInput.trim()}
-                        className="absolute right-1 w-9 h-9 text-neutral-400 hover:text-white hover:bg-neutral-800 disabled:text-neutral-700"
-                    >
-                        <Send className="w-4 h-4" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Footer: Language Selector */}
-            <div className="px-4 py-3 border-t border-neutral-800 bg-black">
-                <div className="flex items-center gap-3 justify-between">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <span className="text-xs text-neutral-600 whitespace-nowrap font-mono">언어</span>
+            {/* Combined Input & Language Area */}
+            <div className="p-3 bg-neutral-950/80 border-t border-neutral-800 flex-shrink-0 space-y-2">
+                {/* Language Selector Row */}
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1">
+                        <Languages className="w-3.5 h-3.5 text-neutral-500 flex-shrink-0" />
                         <Select
                             value={selectedLanguage}
                             onValueChange={onLanguageChange}
                             disabled={isChangingLanguage}
                         >
-                            <SelectTrigger className="h-8 bg-neutral-900 border-neutral-800 text-white text-xs w-full">
+                            <SelectTrigger className="h-7 bg-neutral-900/80 border-neutral-800 text-white text-xs rounded-md flex-1 max-w-[140px]">
                                 <SelectValue placeholder="언어 선택" />
                             </SelectTrigger>
                             <SelectContent
-                                className="bg-neutral-950 border-neutral-800 max-h-[200px]"
+                                className="bg-neutral-900/95 backdrop-blur-xl border-neutral-700 max-h-[200px] rounded-lg"
                                 position="popper"
                                 sideOffset={5}
                             >
@@ -306,7 +283,7 @@ export function CommunicationPanel({
                                     <SelectItem
                                         key={lang.code}
                                         value={lang.code}
-                                        className="text-white hover:bg-neutral-900 focus:bg-neutral-900 text-xs"
+                                        className="text-white hover:bg-white/10 focus:bg-white/10 text-xs rounded-md"
                                     >
                                         {lang.flag} {lang.name}
                                     </SelectItem>
@@ -314,12 +291,38 @@ export function CommunicationPanel({
                             </SelectContent>
                         </Select>
                     </div>
+                    <div className="flex items-center gap-1.5">
+                        {isChangingLanguage ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-neutral-500" />
+                        ) : (
+                            <div className={`w-1.5 h-1.5 rounded-full ${translationEnabled ? 'bg-green-500' : 'bg-neutral-600'}`} />
+                        )}
+                        <span className="text-[10px] text-neutral-500 font-mono">
+                            {translationEnabled ? '번역 ON' : '번역 OFF'}
+                        </span>
+                    </div>
+                </div>
 
-                    {isChangingLanguage ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-neutral-600 flex-shrink-0" />
-                    ) : (
-                        <div className={`w-2 h-2 flex-shrink-0 ${translationEnabled ? 'bg-white' : 'bg-neutral-800'}`} />
-                    )}
+                {/* Message Input Row */}
+                <div className="relative flex items-center">
+                    <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="메시지 입력..."
+                        autoComplete="off"
+                        className="flex-1 h-10 px-3 py-2 text-sm bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 pr-11 transition-all"
+                    />
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={handleSend}
+                        disabled={!chatInput.trim()}
+                        className="absolute right-1 w-8 h-8 rounded-md text-neutral-400 hover:text-white hover:bg-blue-500/20 disabled:text-neutral-700 disabled:hover:bg-transparent transition-colors"
+                    >
+                        <Send className="w-4 h-4" />
+                    </Button>
                 </div>
             </div>
         </div>

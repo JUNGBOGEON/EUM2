@@ -60,6 +60,9 @@ interface MeetingControlsProps {
   // Original Audio Volume
   originalVolume?: number;
   isOriginalVolumeFading?: boolean;
+  // Mute original audio when translation is enabled
+  muteOriginalOnTranslation?: boolean;
+  onToggleMuteOriginal?: () => void;
   // Voice dubbing (내 목소리)
   hasVoiceEmbedding?: boolean;
   voiceDubbingEnabled?: boolean;
@@ -98,8 +101,10 @@ export function MeetingControls({
   ttsQueueLength = 0,
   delayEnabled = false,
   delayMs = 1500,
-  originalVolume = 0,
+  originalVolume = 100,
   isOriginalVolumeFading = false,
+  muteOriginalOnTranslation = true,
+  onToggleMuteOriginal,
   hasVoiceEmbedding = false,
   voiceDubbingEnabled = false,
   onToggleMute,
@@ -219,7 +224,7 @@ export function MeetingControls({
           <div className="w-px h-10 bg-neutral-800 mx-1" />
 
           {/* Translation & TTS Controls */}
-          {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && (
+          {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && onToggleMuteOriginal && (
             <TranslationControls
               translationEnabled={translationEnabled}
               isTogglingTranslation={isTogglingTranslation}
@@ -235,6 +240,8 @@ export function MeetingControls({
               originalVolume={originalVolume}
               isOriginalVolumeFading={isOriginalVolumeFading}
               onSetOriginalVolume={onSetOriginalVolume}
+              muteOriginalOnTranslation={muteOriginalOnTranslation}
+              onToggleMuteOriginal={onToggleMuteOriginal}
               hasVoiceEmbedding={hasVoiceEmbedding}
               voiceDubbingEnabled={voiceDubbingEnabled}
             />

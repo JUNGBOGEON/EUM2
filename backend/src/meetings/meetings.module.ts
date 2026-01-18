@@ -30,6 +30,7 @@ import { PollyService } from './services/polly.service';
 import { PollyCacheService } from './services/polly-cache.service';
 import { TTSPreferenceService } from './services/tts-preference.service';
 import { VoiceDubbingTTSService } from './services/voice-dubbing-tts.service';
+import { PhraseChunkingService } from './services/phrase-chunking.service';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { VoiceDubbingTTSService } from './services/voice-dubbing-tts.service';
     PollyCacheService,
     TTSPreferenceService,
     VoiceDubbingTTSService,
+    PhraseChunkingService,
   ],
   exports: [
     MeetingsService,

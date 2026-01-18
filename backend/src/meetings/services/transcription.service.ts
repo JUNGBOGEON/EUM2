@@ -23,6 +23,7 @@ import { TranslationService } from './translation.service';
 import { TranscriptionBufferService } from './transcription-buffer.service';
 import { TranscriptionQueryService } from './transcription-query.service';
 import { TextChunkingService } from './text-chunking.service';
+import { PhraseChunkingService } from './phrase-chunking.service';
 import { WorkspaceGateway } from '../../workspaces/workspace.gateway';
 import { CACHE_TTL } from '../../common/constants';
 
@@ -48,6 +49,7 @@ export class TranscriptionService {
     private transcriptionBufferService: TranscriptionBufferService,
     private transcriptionQueryService: TranscriptionQueryService,
     private textChunkingService: TextChunkingService,
+    private phraseChunkingService: PhraseChunkingService,
   ) {}
 
   // ==========================================
@@ -508,17 +510,50 @@ export class TranscriptionService {
       );
     }
 
-    // 번역 요청 (이미 청킹된 텍스트이므로 재청킹 불필요)
-    await this.translationService.processTranslation({
-      sessionId,
-      speakerUserId: participant.userId,
-      speakerAttendeeId: dto.attendeeId,
-      speakerName: participant.user?.name || '참가자',
-      originalText: dto.transcript,
-      sourceLanguage,
-      resultId: dto.resultId,
-      timestamp: dto.startTimeMs - sessionStartMs,
-    });
+    // KO-JA 구문 단위 번역 처리
+    // 소스 언어가 한국어 또는 일본어이고, 텍스트가 충분히 긴 경우
+    const isKoJaSource =
+      sourceLanguage.startsWith('ko') || sourceLanguage.startsWith('ja');
+    const chunks = isKoJaSource
+      ? this.phraseChunkingService.chunkByPhrases(dto.transcript, sourceLanguage)
+      : [];
+
+    if (chunks.length >= 2) {
+      // 구문 단위 번역: 각 구문에 대해 별도 번역 트리거
+      this.logger.log(
+        `[Translation Chunk] KO-JA phrase chunking: ${chunks.length} phrases from "${dto.transcript.substring(0, 30)}..."`,
+      );
+
+      for (const chunk of chunks) {
+        await this.translationService.processTranslation({
+          sessionId,
+          speakerUserId: participant.userId,
+          speakerAttendeeId: dto.attendeeId,
+          speakerName: participant.user?.name || '참가자',
+          originalText: chunk.text,
+          sourceLanguage,
+          resultId: `${dto.resultId}_phrase_${chunk.index}`,
+          timestamp: dto.startTimeMs - sessionStartMs,
+          // 구문 단위 번역 메타데이터
+          isPhraseChunk: true,
+          phraseIndex: chunk.index,
+          isLastPhrase: chunk.isLast,
+          parentResultId: dto.resultId,
+        });
+      }
+    } else {
+      // 일반 번역 요청 (기존 로직)
+      await this.translationService.processTranslation({
+        sessionId,
+        speakerUserId: participant.userId,
+        speakerAttendeeId: dto.attendeeId,
+        speakerName: participant.user?.name || '참가자',
+        originalText: dto.transcript,
+        sourceLanguage,
+        resultId: dto.resultId,
+        timestamp: dto.startTimeMs - sessionStartMs,
+      });
+    }
   }
 
   /**

@@ -38,6 +38,7 @@ export type {
   TranslatedTranscript,
   TranslationState,
   ChimeRosterAttendee,
+  PhraseGroup,
   // TTS types
   TTSReadyPayload,
   TTSQueueItem,

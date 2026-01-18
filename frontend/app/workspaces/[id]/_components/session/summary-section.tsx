@@ -10,6 +10,48 @@ import { SummaryLoadingAnimation } from '../summary-loading-animation';
 import type { SummaryData } from './hooks/use-session-data';
 import { useLanguage } from '@/contexts/LanguageContext';
 
+/**
+ * JSON 형식의 content를 마크다운으로 변환
+ * content가 JSON 문자열인 경우 sections를 추출해서 마크다운으로 합침
+ */
+function parseContentToMarkdown(content: string | null): string {
+  if (!content) return '';
+  
+  // JSON인지 확인
+  const trimmed = content.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    // 일반 마크다운 텍스트
+    return content;
+  }
+  
+  try {
+    const parsed = JSON.parse(content);
+    
+    // sections 배열이 있는 경우
+    if (parsed.sections && Array.isArray(parsed.sections)) {
+      return parsed.sections
+        .map((section: { content?: string }) => section.content || '')
+        .join('\n\n');
+    }
+    
+    // markdown 필드가 있는 경우
+    if (parsed.markdown) {
+      return parsed.markdown;
+    }
+    
+    // content 필드가 있는 경우
+    if (parsed.content) {
+      return parsed.content;
+    }
+    
+    // 파싱했지만 알 수 없는 구조 - 원본 반환
+    return content;
+  } catch {
+    // JSON 파싱 실패 - 일반 텍스트로 간주
+    return content;
+  }
+}
+
 interface SummarySectionProps {
   summaryData: SummaryData | null;
   transcriptCount: number;
@@ -74,7 +116,7 @@ export function SummarySection({
         )}
         <div className="prose prose-sm max-w-none prose-invert prose-headings:text-neutral-200 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-indigo-400 prose-table:text-neutral-300 prose-th:text-neutral-400 prose-td:text-neutral-300 prose-th:border-white/10 prose-td:border-white/10 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-table:border-collapse">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {summaryData.content}
+            {summaryData.structuredSummary?.markdown || parseContentToMarkdown(summaryData.content)}
           </ReactMarkdown>
         </div>
       </div>

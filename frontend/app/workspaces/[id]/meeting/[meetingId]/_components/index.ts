@@ -10,3 +10,4 @@ export { TTSSettingsDialog } from './tts-settings-dialog';
 export { TranslationControls } from './translation-controls';
 export { DelaySettingsControl } from './delay-settings-control';
 export { DelayedRemoteVideo } from './delayed-remote-video';
+export { ParticipantContextMenu } from './participant-context-menu';

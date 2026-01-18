@@ -68,6 +68,14 @@ export interface TranslatedTranscriptPayload {
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
 
+  /**
+   * 구문 단위 번역 버퍼
+   * Key: `${parentResultId}:${targetLanguage}`
+   * Value: Map<phraseIndex, translatedText>
+   */
+  private phraseTranslationBuffer: Map<string, Map<number, string>> =
+    new Map();
+
   constructor(
     private participantPreferenceService: ParticipantPreferenceService,
     private translationCacheService: TranslationCacheService,
@@ -411,12 +419,15 @@ export class TranslationService {
           }),
         };
 
-        for (const userId of userIds) {
-          this.logger.debug(
-            `[Translation] Sending translated transcript to user: ${userId}`,
-          );
-          await this.workspaceGateway.sendTranslatedTranscript(userId, payload);
-        }
+        // 모든 사용자에게 병렬 전송 (속도 최적화)
+        await Promise.all(
+          userIds.map(async (userId) => {
+            this.logger.debug(
+              `[Translation] Sending translated transcript to user: ${userId}`,
+            );
+            await this.workspaceGateway.sendTranslatedTranscript(userId, payload);
+          }),
+        );
 
         this.logger.log(
           `[Translation] Sent ${targetLanguage} translation (${translationMethod}) to ${userIds.length} user(s)` +
@@ -424,8 +435,54 @@ export class TranslationService {
         );
 
         // TTS 처리 (비동기, 번역 전송과 별개로 처리)
-        // 구문 단위 번역일 경우 마지막 구문에서만 TTS 처리
-        if (!isPhraseChunk || isLastPhrase) {
+        // 구문 단위 번역일 경우: 버퍼에 저장 후 마지막 구문에서 전체 합쳐서 TTS 처리
+        if (isPhraseChunk && parentResultId !== undefined && phraseIndex !== undefined) {
+          // 구문 번역 결과를 버퍼에 저장
+          const bufferKey = `${parentResultId}:${targetLanguage}`;
+          if (!this.phraseTranslationBuffer.has(bufferKey)) {
+            this.phraseTranslationBuffer.set(bufferKey, new Map());
+          }
+          this.phraseTranslationBuffer.get(bufferKey)!.set(phraseIndex, translatedText);
+
+          this.logger.debug(
+            `[TTS] Buffered phrase ${phraseIndex} for ${bufferKey}: "${translatedText.substring(0, 20)}..."`,
+          );
+
+          // 마지막 구문에서 전체 번역을 합쳐서 TTS 처리
+          if (isLastPhrase) {
+            const phraseMap = this.phraseTranslationBuffer.get(bufferKey)!;
+            // phraseIndex 순서대로 정렬하여 합치기
+            const sortedPhrases = Array.from(phraseMap.entries())
+              .sort(([a], [b]) => a - b)
+              .map(([, text]) => text);
+            const fullTranslatedText = sortedPhrases.join('');
+
+            this.logger.log(
+              `[TTS] Combined ${sortedPhrases.length} phrases for TTS: "${fullTranslatedText.substring(0, 50)}..."`,
+            );
+
+            // 버퍼 정리
+            this.phraseTranslationBuffer.delete(bufferKey);
+
+            // 전체 번역으로 TTS 처리
+            this.processTTSForUsers(
+              sessionId,
+              userIds,
+              fullTranslatedText,
+              targetLanguage,
+              parentResultId, // 원본 resultId 사용
+              speakerName,
+              speakerUserId,
+              timestamp,
+            ).catch((err) => {
+              this.logger.error(
+                `[TTS] TTS processing failed: ${err.message}`,
+                err.stack,
+              );
+            });
+          }
+        } else if (!isPhraseChunk) {
+          // 일반 번역 (구문 단위가 아닌 경우)
           this.processTTSForUsers(
             sessionId,
             userIds,
@@ -433,7 +490,7 @@ export class TranslationService {
             targetLanguage,
             resultId,
             speakerName,
-            speakerUserId, // 발화자 userId 추가 (음성 더빙 확인용)
+            speakerUserId,
             timestamp,
           ).catch((err) => {
             this.logger.error(
@@ -547,26 +604,27 @@ export class TranslationService {
           );
 
         if (voiceDubbingResult) {
-          // 모든 TTS 활성화 사용자에게 동일한 오디오 전송
-          for (const userId of ttsEnabledUsers) {
-            const payload: TTSReadyPayload = {
-              type: 'tts_ready',
-              resultId,
-              audioUrl: voiceDubbingResult.audioUrl,
-              durationMs: voiceDubbingResult.durationMs,
-              voiceId: 'voice-dubbing',
-              targetLanguage,
-              speakerName,
-              translatedText,
-              timestamp,
-            };
+          // 모든 TTS 활성화 사용자에게 병렬 전송 (속도 최적화)
+          const payload: TTSReadyPayload = {
+            type: 'tts_ready',
+            resultId,
+            audioUrl: voiceDubbingResult.audioUrl,
+            durationMs: voiceDubbingResult.durationMs,
+            voiceId: 'voice-dubbing',
+            targetLanguage,
+            speakerName,
+            translatedText,
+            timestamp,
+          };
 
-            await this.workspaceGateway.sendTTSReady(userId, payload);
-
-            this.logger.debug(
-              `[TTS] Sent voice-dubbing TTS to user ${userId}: duration=${voiceDubbingResult.durationMs}ms`,
-            );
-          }
+          await Promise.all(
+            ttsEnabledUsers.map(async (userId) => {
+              await this.workspaceGateway.sendTTSReady(userId, payload);
+              this.logger.debug(
+                `[TTS] Sent voice-dubbing TTS to user ${userId}: duration=${voiceDubbingResult.durationMs}ms`,
+              );
+            }),
+          );
           return; // 음성 더빙 성공 시 여기서 종료
         }
 
@@ -579,48 +637,69 @@ export class TranslationService {
       }
     }
 
-    // Polly 사용: 각 사용자별로 음성 설정에 따라 TTS 생성
-    for (const userId of ttsEnabledUsers) {
-      try {
-        // 사용자의 음성 설정 가져오기
-        const voiceId = await this.ttsPreferenceService.getVoicePreference(
-          sessionId,
-          userId,
-          targetLanguage,
-        );
+    // Polly 사용: 모든 사용자 병렬 처리 (속도 최적화)
+    // 동일 텍스트/언어에 대해 TTS를 한 번만 생성하고 공유
+    const voiceGroups = new Map<string, string[]>(); // voiceId -> userIds
 
-        // TTS 생성 (캐싱 적용)
-        const ttsResult = await this.pollyCacheService.synthesizeWithCache(
-          translatedText,
-          voiceId,
-          targetLanguage,
-          sessionId,
-        );
+    // 사용자별 음성 설정 조회 및 그룹화
+    await Promise.all(
+      ttsEnabledUsers.map(async (userId) => {
+        try {
+          const voiceId = await this.ttsPreferenceService.getVoicePreference(
+            sessionId,
+            userId,
+            targetLanguage,
+          );
+          if (!voiceGroups.has(voiceId)) {
+            voiceGroups.set(voiceId, []);
+          }
+          voiceGroups.get(voiceId)!.push(userId);
+        } catch (error) {
+          this.logger.warn(
+            `[TTS] Failed to get voice preference for user ${userId}: ${error.message}`,
+          );
+        }
+      }),
+    );
 
-        // TTS Ready 이벤트 전송
-        const payload: TTSReadyPayload = {
-          type: 'tts_ready',
-          resultId,
-          audioUrl: ttsResult.audioUrl,
-          durationMs: ttsResult.durationMs,
-          voiceId: ttsResult.voiceId,
-          targetLanguage,
-          speakerName,
-          translatedText,
-          timestamp,
-        };
+    // 음성별로 TTS 생성 및 전송 (같은 음성은 한 번만 생성)
+    await Promise.all(
+      Array.from(voiceGroups.entries()).map(async ([voiceId, userIds]) => {
+        try {
+          // 실시간 TTS 생성 (S3 업로드 없이 직접 Base64 반환 - 더 빠름)
+          const ttsResult = await this.pollyCacheService.synthesizeRealtime(
+            translatedText,
+            voiceId,
+            targetLanguage,
+          );
 
-        await this.workspaceGateway.sendTTSReady(userId, payload);
+          // TTS Ready 이벤트 전송 (모든 사용자에게 병렬 전송)
+          const payload: TTSReadyPayload = {
+            type: 'tts_ready',
+            resultId,
+            audioData: ttsResult.audioData, // Base64 직접 전송 (S3 건너뜀)
+            durationMs: ttsResult.durationMs,
+            voiceId: ttsResult.voiceId,
+            targetLanguage,
+            speakerName,
+            translatedText,
+            timestamp,
+          };
 
-        this.logger.debug(
-          `[TTS] Sent Polly TTS to user ${userId}: voice=${voiceId}, duration=${ttsResult.durationMs}ms`,
-        );
-      } catch (error) {
-        // 개별 사용자 TTS 실패는 무시
-        this.logger.warn(
-          `[TTS] Failed to generate TTS for user ${userId}: ${error.message}`,
-        );
-      }
-    }
+          await Promise.all(
+            userIds.map(async (userId) => {
+              await this.workspaceGateway.sendTTSReady(userId, payload);
+              this.logger.debug(
+                `[TTS] Sent realtime TTS to user ${userId}: voice=${voiceId}, duration=${ttsResult.durationMs}ms`,
+              );
+            }),
+          );
+        } catch (error) {
+          this.logger.warn(
+            `[TTS] Failed to generate TTS for voice ${voiceId}: ${error.message}`,
+          );
+        }
+      }),
+    );
   }
 }

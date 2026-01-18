@@ -140,7 +140,14 @@ export function useTTS({
       );
 
       const audio = audioRef.current;
-      audio.src = item.audioUrl;
+      // Base64 데이터가 있으면 Data URL로 변환 (더 빠름 - S3 다운로드 필요 없음)
+      if (item.audioData) {
+        audio.src = `data:audio/mpeg;base64,${item.audioData}`;
+      } else if (item.audioUrl) {
+        audio.src = item.audioUrl;
+      } else {
+        throw new Error('No audio source available');
+      }
 
       // 재생 완료 핸들러
       const handleEnded = () => {
@@ -217,6 +224,7 @@ export function useTTS({
       const newItem: TTSQueueItem = {
         resultId: payload.resultId,
         audioUrl: payload.audioUrl,
+        audioData: payload.audioData, // Base64 오디오 (실시간 TTS)
         durationMs: payload.durationMs,
         voiceId: payload.voiceId,
         targetLanguage: payload.targetLanguage,

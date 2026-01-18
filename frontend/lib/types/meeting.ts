@@ -211,7 +211,8 @@ export interface ChimeRosterAttendee {
 export interface TTSReadyPayload {
   type: 'tts_ready';
   resultId: string;
-  audioUrl: string;      // Pre-signed S3 URL
+  audioUrl?: string;      // Pre-signed S3 URL (캐시된 TTS)
+  audioData?: string;     // Base64 인코딩된 오디오 (실시간 TTS, 더 빠름)
   durationMs: number;
   voiceId: string;
   targetLanguage: string;
@@ -225,7 +226,8 @@ export interface TTSReadyPayload {
  */
 export interface TTSQueueItem {
   resultId: string;
-  audioUrl: string;
+  audioUrl?: string;
+  audioData?: string;     // Base64 인코딩된 오디오
   durationMs: number;
   voiceId: string;
   targetLanguage: string;

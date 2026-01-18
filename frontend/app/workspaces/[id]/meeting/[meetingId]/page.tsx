@@ -27,6 +27,7 @@ import {
   useMediaDelay,
   useOriginalAudioVolume,
   useMeetingChat,
+  useParticipantVolume,
   DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
 import { useVoiceEnrollment } from '@/hooks/useVoiceEnrollment';
@@ -305,6 +306,15 @@ function MeetingRoomContent() {
     config: DEFAULT_MEDIA_DELAY_CONFIG,
   });
 
+  // Participant Volume Control hook (개인별 볼륨 조절)
+  const {
+    getParticipantVolume,
+    setParticipantVolume,
+    toggleParticipantMute,
+  } = useParticipantVolume({
+    meetingId,
+  });
+
   // Chime SDK hooks
   const { isVideoEnabled, toggleVideo } = useLocalVideo();
   // muted, toggleMute는 위에서 useBrowserTranscription 전에 선언됨
@@ -417,6 +427,9 @@ function MeetingRoomContent() {
               currentAttendeeId={currentAttendeeId}
               delayEnabled={delayEnabled}
               delayMs={delayMs}
+              getParticipantVolume={getParticipantVolume}
+              onParticipantVolumeChange={setParticipantVolume}
+              onParticipantMuteToggle={toggleParticipantMute}
             />
           )}
 

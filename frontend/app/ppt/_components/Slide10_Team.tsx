@@ -12,6 +12,7 @@ interface TeamMember {
     image?: string; // 이미지 경로 (없으면 placeholder)
     imagePosition?: string; // 이미지 위치 조정
     isLeader?: boolean; // 팀장 여부
+    colorTintOpacity?: number; // 색상 필터 강도 (기본 0.15)
 }
 
 const teamMembers: TeamMember[] = [
@@ -21,7 +22,9 @@ const teamMembers: TeamMember[] = [
         roleLabel: 'Backend',
         color: 'text-rose-400',
         glowColor: 'rgba(251, 113, 133, 0.4)',
-        image: undefined, // TODO: 이미지 추가
+        image: '/ppt/backend-1.png',
+        imagePosition: 'object-[60%_10%]',
+        colorTintOpacity: 0.05,
     },
     {
         name: '김가람',
@@ -29,7 +32,8 @@ const teamMembers: TeamMember[] = [
         roleLabel: 'Frontend',
         color: 'text-blue-400',
         glowColor: 'rgba(96, 165, 250, 0.4)',
-        image: undefined, // TODO: 이미지 추가
+        image: '/ppt/frontend-2.png',
+        imagePosition: 'object-[60%_10%]',
     },
     {
         name: '정보건',
@@ -40,6 +44,7 @@ const teamMembers: TeamMember[] = [
         image: '/ppt/leader.png',
         imagePosition: 'object-[70%_30%]', // 오른쪽, 더 아래로
         isLeader: true,
+        colorTintOpacity: 0.05,
     },
     {
         name: '성민혁',
@@ -47,7 +52,8 @@ const teamMembers: TeamMember[] = [
         roleLabel: 'Frontend',
         color: 'text-blue-400',
         glowColor: 'rgba(96, 165, 250, 0.4)',
-        image: undefined, // TODO: 이미지 추가
+        image: '/ppt/frontend-1.png',
+        imagePosition: 'object-[50%_10%]',
     },
     {
         name: '김권희',
@@ -57,6 +63,7 @@ const teamMembers: TeamMember[] = [
         glowColor: 'rgba(251, 113, 133, 0.4)',
         image: '/ppt/backend-2.png',
         imagePosition: 'object-[40%_top]', // 약간 왼쪽
+        colorTintOpacity: 0.05,
     },
 ];
 
@@ -143,8 +150,11 @@ export default function Slide10_Team() {
                                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
                                         {/* Color tint overlay */}
                                         <div
-                                            className="absolute inset-0 opacity-15 mix-blend-color"
-                                            style={{ background: member.glowColor.replace('0.4', '1') }}
+                                            className="absolute inset-0 mix-blend-color"
+                                            style={{
+                                                background: member.glowColor.replace('0.4', '1'),
+                                                opacity: member.colorTintOpacity ?? 0.15
+                                            }}
                                         />
                                     </>
                                 ) : (
@@ -240,26 +250,6 @@ export default function Slide10_Team() {
                                         />
                                     </>
                                 )}
-                            </div>
-
-                            {/* Vertical Role Text - Behind */}
-                            <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-                                <motion.span
-                                    className={`
-                                        font-['Presentation'] font-[900]
-                                        text-[4rem] md:text-[6rem] lg:text-[8rem]
-                                        ${member.color}
-                                        ${member.image ? 'opacity-[0.15]' : 'opacity-[0.08]'}
-                                        whitespace-nowrap
-                                    `}
-                                    style={{
-                                        writingMode: 'vertical-rl',
-                                        textOrientation: 'mixed',
-                                        textShadow: member.image ? 'none' : `0 0 40px ${member.glowColor}, 0 0 20px ${member.glowColor}`
-                                    }}
-                                >
-                                    {member.role}
-                                </motion.span>
                             </div>
 
                             {/* Enhanced Glow Effects */}
@@ -464,7 +454,7 @@ export default function Slide10_Team() {
                     </span>
                     <div className="h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent w-[60px] md:w-[150px]" />
                 </div>
-                <h1 className="text-4xl md:text-6xl lg:text-7xl font-[900] font-['IncheonEducation'] text-white tracking-tight drop-shadow-2xl">
+                <h1 className="text-2xl md:text-3xl lg:text-4xl font-[900] font-['IncheonEducation'] text-white tracking-tight drop-shadow-2xl">
                     TEAM 이음
                 </h1>
             </motion.div>

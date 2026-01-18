@@ -11,16 +11,16 @@ export default function SlideNavigator({ currentSlide, slides }: SlideNavigatorP
     const ITEM_HEIGHT = 80; // Distance between items
 
     return (
-        <div className="fixed left-12 top-[60%] -translate-y-1/2 h-[600px] w-[500px] overflow-hidden z-50 pointer-events-none select-none flex items-center">
+        <div className="fixed left-12 top-1/2 -translate-y-1/2 h-screen w-[500px] overflow-hidden z-50 pointer-events-none select-none flex items-center">
             {/* Mask gradients removed for full transparency as requested */}
             {/* <div className="absolute top-0 left-0 w-full h-[100px] bg-gradient-to-b from-black to-transparent z-10" /> */}
             {/* <div className="absolute bottom-0 left-0 w-full h-[100px] bg-gradient-to-t from-black to-transparent z-10" /> */}
 
             <div className="relative w-full h-full flex flex-col items-start justify-center">
                 <motion.div
-                    animate={{ y: -currentSlide * ITEM_HEIGHT }}
+                    animate={{ y: -currentSlide * ITEM_HEIGHT - ITEM_HEIGHT / 2 }}
                     transition={{ type: "spring", stiffness: 100, damping: 20 }} // Snappy yet smooth wheel physics
-                    className="absolute top-1/2 -translate-y-1/2 flex flex-col items-start"
+                    className="absolute top-1/2 flex flex-col items-start"
                 >
                     {slides.map((slide, index) => {
                         const isActive = currentSlide === index;

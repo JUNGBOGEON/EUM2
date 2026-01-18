@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
+/* Aggravo Font Family (SBAggroB) */
+@font-face {
+  font-family: 'Aggravo';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2108@1.1/SBAggroB.woff') format('woff');
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* SeoulNotice Font Family */
 @font-face {
   font-family: 'SeoulNotice';

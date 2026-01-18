@@ -9,6 +9,9 @@ import Slide4_Whiteboard from './_components/Slide4_Whiteboard';
 import Slide5_Minutes from './_components/Slide5_Minutes';
 import Slide6_Outro from './_components/Slide6_Outro';
 import Slide7_Architecture from './_components/Slide7_Architecture';
+import Slide8_TechChallenge1 from './_components/Slide8_TechChallenge1';
+import Slide9_TechChallenge2 from './_components/Slide9_TechChallenge2';
+import Slide10_Team from './_components/Slide10_Team';
 import SlideNavigator from './_components/SlideNavigator';
 
 const SLIDES = [
@@ -18,7 +21,10 @@ const SLIDES = [
     { id: 3, title: "화이트보드", subtitle: "실시간 협업" },
     { id: 4, title: "자동 회의록", subtitle: "AI 요약 및 정리" },
     { id: 5, title: "시연", subtitle: "데모 및 마무리" },
-    { id: 6, title: "아키텍처", subtitle: "시스템 구조" }
+    { id: 6, title: "아키텍처", subtitle: "시스템 구조" },
+    { id: 7, title: "안정성", subtitle: "기술적 챌린지" },
+    { id: 8, title: "손글씨", subtitle: "드로잉 최적화" },
+    { id: 9, title: "팀", subtitle: "TEAM 이음" }
 ];
 
 const MAX_SLIDES = SLIDES.length;
@@ -104,7 +110,10 @@ export default function PresentationPage() {
                                 currentSlide === 4 ? 'rgba(16, 185, 129, 0.2)' : // Slide 5 (Emerald)
                                     currentSlide === 5 ? 'rgba(255, 255, 255, 0.15)' : // Slide 6 (White/Pure)
                                         currentSlide === 6 ? 'rgba(59, 130, 246, 0.1)' : // Slide 7 (Tech Blue)
-                                            'rgba(0, 0, 0, 0)' // Others (Transparent)
+                                            currentSlide === 7 ? 'rgba(244, 63, 94, 0.2)' : // Slide 8 (Rose/Warning)
+                                                currentSlide === 8 ? 'rgba(96, 165, 250, 0.2)' : // Slide 9 (Blue/Creative)
+                                                currentSlide === 9 ? 'rgba(168, 85, 247, 0.15)' : // Slide 10 (Purple/Team)
+                                                    'rgba(0, 0, 0, 0)' // Others (Transparent)
                 }}
                 transition={{ duration: 1.5, ease: "easeInOut" }}
             />
@@ -128,6 +137,9 @@ export default function PresentationPage() {
                         {currentSlide === 4 && <Slide5_Minutes />}
                         {currentSlide === 5 && <Slide6_Outro />}
                         {currentSlide === 6 && <Slide7_Architecture />}
+                        {currentSlide === 7 && <Slide8_TechChallenge1 />}
+                        {currentSlide === 8 && <Slide9_TechChallenge2 />}
+                        {currentSlide === 9 && <Slide10_Team />}
                     </motion.div>
                 </AnimatePresence>
             </div>

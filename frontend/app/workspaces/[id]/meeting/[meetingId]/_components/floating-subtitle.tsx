@@ -17,6 +17,7 @@ interface FloatingSubtitleProps {
  * - Translated message (large)
  * - Original message (small)
  * - Smooth enter/exit animations
+ * - KO-JA 구문 단위 번역 지원: 텍스트가 점진적으로 확장됨
  */
 export function FloatingSubtitle({
   translations,
@@ -39,13 +40,20 @@ export function FloatingSubtitle({
           ? 'animate-subtitle-exit'
           : 'animate-subtitle-enter';
 
+        // 구문 그룹인 경우 parentResultId를 키로 사용
+        const subtitleKey = translation.phraseGroup?.parentResultId || translation.resultId;
+
+        // 구문 그룹이 아직 완료되지 않았는지 확인 (타이핑 표시기용)
+        const isIncomplete = translation.isPhraseGroup && !translation.phraseGroup?.isComplete;
+
         return (
           <div
-            key={translation.resultId}
+            key={subtitleKey}
             className={`flex items-center gap-4 px-5 py-4
                        bg-black/90 backdrop-blur-sm
                        border border-neutral-800
-                       max-w-2xl ${animationClass}`}
+                       max-w-2xl ${animationClass}
+                       transition-all duration-200 ease-out`}
           >
             {/* Profile Image */}
             <div className="flex-shrink-0">
@@ -76,6 +84,12 @@ export function FloatingSubtitle({
               {/* Translated Text */}
               <p className="text-white text-base font-medium leading-snug tracking-tight">
                 {translation.translatedText}
+                {/* 구문 단위 번역 중 표시기 */}
+                {isIncomplete && (
+                  <span className="inline-flex ml-1 text-neutral-500">
+                    <span className="animate-pulse">...</span>
+                  </span>
+                )}
               </p>
 
               {/* Original Text (small) */}

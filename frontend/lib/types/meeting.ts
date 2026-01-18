@@ -162,6 +162,22 @@ export interface TranslatedTranscript {
   sourceLanguage: string;
   targetLanguage: string;
   timestamp: number;
+
+  // KO-JA 구문 단위 번역 (신규)
+  isPhraseChunk?: boolean;   // 구문 단위 번역 여부
+  phraseIndex?: number;      // 구문 순서 (0, 1, 2...)
+  isLastPhrase?: boolean;    // 마지막 구문 여부
+  parentResultId?: string;   // 원본 발화 ID (그룹핑용)
+}
+
+/**
+ * 구문 그룹 (같은 parentResultId를 가진 구문들의 그룹)
+ */
+export interface PhraseGroup {
+  parentResultId: string;
+  phrases: TranslatedTranscript[];
+  isComplete: boolean;  // 마지막 구문 수신 여부
+  combinedText: string; // 결합된 번역 텍스트
 }
 
 /**

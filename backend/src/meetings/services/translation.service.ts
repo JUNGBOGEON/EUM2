@@ -27,6 +27,12 @@ export interface TranslationRequest {
   sourceLanguage: string;
   resultId: string;
   timestamp: number;
+
+  // KO-JA 구문 단위 번역 (신규)
+  isPhraseChunk?: boolean;
+  phraseIndex?: number;
+  isLastPhrase?: boolean;
+  parentResultId?: string;
 }
 
 /**
@@ -44,6 +50,12 @@ export interface TranslatedTranscriptPayload {
   targetLanguage: string;
   timestamp: number;
   translationMethod?: 'direct' | 'context-aware'; // 번역 방식
+
+  // KO-JA 구문 단위 번역 (신규)
+  isPhraseChunk?: boolean; // 구문 단위 번역 여부
+  phraseIndex?: number; // 구문 순서 (0, 1, 2...)
+  isLastPhrase?: boolean; // 마지막 구문 여부
+  parentResultId?: string; // 원본 발화 ID (그룹핑용)
 }
 
 /**
@@ -160,10 +172,16 @@ export class TranslationService {
       resultId,
       timestamp,
       speakerName,
+      // KO-JA 구문 단위 번역 (신규)
+      isPhraseChunk,
+      phraseIndex,
+      isLastPhrase,
+      parentResultId,
     } = request;
 
     this.logger.log(
-      `[Translation] Processing: speaker=${speakerName}(${speakerUserId}), sourceLanguage=${sourceLanguage}, text="${originalText.substring(0, 30)}..."`,
+      `[Translation] Processing: speaker=${speakerName}(${speakerUserId}), sourceLanguage=${sourceLanguage}, text="${originalText.substring(0, 30)}..."` +
+        (isPhraseChunk ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]` : ''),
     );
 
     try {
@@ -220,6 +238,11 @@ export class TranslationService {
         sourceLanguage,
         resultId,
         timestamp,
+        // KO-JA 구문 단위 번역 (신규)
+        isPhraseChunk,
+        phraseIndex,
+        isLastPhrase,
+        parentResultId,
       });
     } catch (error) {
       // 조용히 실패 - 전체 프로세스 실패해도 원본 자막은 정상 표시됨
@@ -303,6 +326,11 @@ export class TranslationService {
       sourceLanguage: string;
       resultId: string;
       timestamp: number;
+      // KO-JA 구문 단위 번역 (신규)
+      isPhraseChunk?: boolean;
+      phraseIndex?: number;
+      isLastPhrase?: boolean;
+      parentResultId?: string;
     },
   ): Promise<void> {
     const {
@@ -314,6 +342,10 @@ export class TranslationService {
       sourceLanguage,
       resultId,
       timestamp,
+      isPhraseChunk,
+      phraseIndex,
+      isLastPhrase,
+      parentResultId,
     } = context;
 
     // 문장 완료 여부 분석
@@ -340,7 +372,8 @@ export class TranslationService {
     for (const [targetLanguage, userIds] of languageGroups) {
       try {
         this.logger.log(
-          `[Translation] Translating to ${targetLanguage} for users: ${userIds.join(', ')}`,
+          `[Translation] Translating to ${targetLanguage} for users: ${userIds.join(', ')}` +
+            (isPhraseChunk ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]` : ''),
         );
 
         // 항상 직접 번역 사용 (문맥 인식 번역은 추출 오류로 비활성화)
@@ -369,6 +402,13 @@ export class TranslationService {
           targetLanguage,
           timestamp,
           translationMethod,
+          // KO-JA 구문 단위 번역 메타데이터 (신규)
+          ...(isPhraseChunk && {
+            isPhraseChunk,
+            phraseIndex,
+            isLastPhrase,
+            parentResultId,
+          }),
         };
 
         for (const userId of userIds) {
@@ -379,25 +419,29 @@ export class TranslationService {
         }
 
         this.logger.log(
-          `[Translation] Sent ${targetLanguage} translation (${translationMethod}) to ${userIds.length} user(s)`,
+          `[Translation] Sent ${targetLanguage} translation (${translationMethod}) to ${userIds.length} user(s)` +
+            (isPhraseChunk ? ` [Phrase ${phraseIndex}]` : ''),
         );
 
         // TTS 처리 (비동기, 번역 전송과 별개로 처리)
-        this.processTTSForUsers(
-          sessionId,
-          userIds,
-          translatedText,
-          targetLanguage,
-          resultId,
-          speakerName,
-          speakerUserId, // 발화자 userId 추가 (음성 더빙 확인용)
-          timestamp,
-        ).catch((err) => {
-          this.logger.error(
-            `[TTS] TTS processing failed: ${err.message}`,
-            err.stack,
-          );
-        });
+        // 구문 단위 번역일 경우 마지막 구문에서만 TTS 처리
+        if (!isPhraseChunk || isLastPhrase) {
+          this.processTTSForUsers(
+            sessionId,
+            userIds,
+            translatedText,
+            targetLanguage,
+            resultId,
+            speakerName,
+            speakerUserId, // 발화자 userId 추가 (음성 더빙 확인용)
+            timestamp,
+          ).catch((err) => {
+            this.logger.error(
+              `[TTS] TTS processing failed: ${err.message}`,
+              err.stack,
+            );
+          });
+        }
       } catch (error) {
         // 조용히 실패 - 개별 언어 번역 실패해도 다른 언어는 계속 처리
         this.logger.warn(
@@ -407,33 +451,36 @@ export class TranslationService {
     }
 
     // 문맥 업데이트 (모든 번역 완료 후)
-    // 첫 번째 타겟 언어의 번역 결과를 문맥에 저장
-    const firstLanguage = languageGroups.keys().next().value;
-    if (firstLanguage) {
-      try {
-        const translatedForContext =
-          await this.translationCacheService.translateWithCache(
-            originalText,
-            sourceLanguage,
-            firstLanguage,
-          );
+    // 구문 단위 번역일 경우 마지막 구문에서만 문맥 업데이트
+    if (!isPhraseChunk || isLastPhrase) {
+      // 첫 번째 타겟 언어의 번역 결과를 문맥에 저장
+      const firstLanguage = languageGroups.keys().next().value;
+      if (firstLanguage) {
+        try {
+          const translatedForContext =
+            await this.translationCacheService.translateWithCache(
+              originalText,
+              sourceLanguage,
+              firstLanguage,
+            );
 
-        await this.translationContextService.updateContext(
-          sessionId,
-          speakerUserId,
-          originalText,
-          translatedForContext,
-        );
-      } catch (error) {
-        // 문맥 번역 캐싱 실패 - 로그 후 번역 없이 원문만으로 문맥 업데이트
-        this.logger.warn(
-          `[Translation] Context caching failed for session ${sessionId}: ${error.message}`,
-        );
-        await this.translationContextService.updateContext(
-          sessionId,
-          speakerUserId,
-          originalText,
-        );
+          await this.translationContextService.updateContext(
+            sessionId,
+            speakerUserId,
+            originalText,
+            translatedForContext,
+          );
+        } catch (error) {
+          // 문맥 번역 캐싱 실패 - 로그 후 번역 없이 원문만으로 문맥 업데이트
+          this.logger.warn(
+            `[Translation] Context caching failed for session ${sessionId}: ${error.message}`,
+          );
+          await this.translationContextService.updateContext(
+            sessionId,
+            speakerUserId,
+            originalText,
+          );
+        }
       }
     }
   }

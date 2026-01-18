@@ -1,11 +1,11 @@
 import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    ManyToOne,
-    JoinColumn,
-    Unique,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Workspace } from './workspace.entity';
 import { User } from '../../users/entities/user.entity';
@@ -18,30 +18,30 @@ import { WorkspaceRole } from './workspace-role.entity';
 @Entity('workspace_member_roles')
 @Unique(['workspaceId', 'userId'])
 export class WorkspaceMemberRole {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @ManyToOne(() => Workspace, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'workspaceId' })
-    workspace: Workspace;
+  @ManyToOne(() => Workspace, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'workspaceId' })
+  workspace: Workspace;
 
-    @Column()
-    workspaceId: string;
+  @Column()
+  workspaceId: string;
 
-    @ManyToOne(() => User, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column()
-    userId: string;
+  @Column()
+  userId: string;
 
-    @ManyToOne(() => WorkspaceRole, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'roleId' })
-    role: WorkspaceRole;
+  @ManyToOne(() => WorkspaceRole, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'roleId' })
+  role: WorkspaceRole;
 
-    @Column()
-    roleId: string;
+  @Column()
+  roleId: string;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 }

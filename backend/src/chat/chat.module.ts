@@ -8,12 +8,12 @@ import { Message } from './entities/message.entity';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Channel, Message]),
-        forwardRef(() => WorkspacesModule),
-    ],
-    controllers: [ChatController],
-    providers: [ChatGateway, ChatService],
-    exports: [ChatService],
+  imports: [
+    TypeOrmModule.forFeature([Channel, Message]),
+    forwardRef(() => WorkspacesModule),
+  ],
+  controllers: [ChatController],
+  providers: [ChatGateway, ChatService],
+  exports: [ChatService],
 })
-export class ChatModule { }
+export class ChatModule {}

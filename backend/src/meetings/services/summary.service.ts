@@ -41,7 +41,7 @@ export class SummaryService {
     private meetingChatService: MeetingChatService,
     @Inject(forwardRef(() => WorkspaceGateway))
     private workspaceGateway: WorkspaceGateway,
-  ) { }
+  ) {}
 
   /**
    * 회의 요약을 생성하고 S3에 저장합니다.
@@ -96,7 +96,7 @@ export class SummaryService {
 
       this.logger.log(
         `[Summary] Found ${transcriptData.transcripts.length} transcripts, ` +
-        `${transcriptData.speakers.length} speakers for session ${sessionId}`,
+          `${transcriptData.speakers.length} speakers for session ${sessionId}`,
       );
 
       // 상태 업데이트: PROCESSING (발화 기록이 있을 때만)
@@ -116,7 +116,10 @@ export class SummaryService {
       const chatMessages = await this.meetingChatService.getMessages(sessionId);
 
       // 4. 발화 스크립트 + 채팅 메시지 통합 및 포맷팅
-      const formattedTranscript = this.formatUnifiedTranscript(transcriptData, chatMessages);
+      const formattedTranscript = this.formatUnifiedTranscript(
+        transcriptData,
+        chatMessages,
+      );
 
       // 4. Bedrock으로 구조화된 요약 생성
       const structuredSummary =
@@ -228,7 +231,7 @@ export class SummaryService {
       sender: { name: string } | null;
       content: string;
       createdAt: Date;
-    }>
+    }>,
   ): string {
     const unifiedTranscripts = transcriptData.transcripts.map((t) => ({
       type: 'speech',
@@ -247,7 +250,7 @@ export class SummaryService {
     }));
 
     const merged = [...unifiedTranscripts, ...unifiedChats].sort(
-      (a, b) => a.timestamp - b.timestamp
+      (a, b) => a.timestamp - b.timestamp,
     );
 
     return merged
@@ -264,7 +267,10 @@ export class SummaryService {
    * @param languageCode 언어 코드 (옵션)
    * @returns 요약 정보 (구조화된 요약 포함)
    */
-  async getSummary(sessionId: string, languageCode?: string): Promise<{
+  async getSummary(
+    sessionId: string,
+    languageCode?: string,
+  ): Promise<{
     status: SummaryStatus;
     content: string | null;
     structuredSummary: StructuredSummary | null;
@@ -308,21 +314,28 @@ export class SummaryService {
       } catch (e) {
         // If file not found and it's a localized request, generate translation
         if (targetLang !== 'ko') {
-          this.logger.log(`Localized summary not found for ${targetLang}, generating...`);
+          this.logger.log(
+            `Localized summary not found for ${targetLang}, generating...`,
+          );
 
           // Fetch original content
-          const originalContent = await this.s3StorageService.getSummaryContent(session.summaryS3Key);
+          const originalContent = await this.s3StorageService.getSummaryContent(
+            session.summaryS3Key,
+          );
           const originalJson = JSON.parse(originalContent);
 
           // Translate
-          const translatedSummary = await this.bedrockService.translateSummary(originalJson, targetLang);
+          const translatedSummary = await this.bedrockService.translateSummary(
+            originalJson,
+            targetLang,
+          );
           const translatedJson = JSON.stringify(translatedSummary, null, 2);
 
           // Upload localized file
           await this.s3StorageService.uploadFile(
             targetKey,
             Buffer.from(translatedJson, 'utf-8'),
-            'application/json; charset=utf-8'
+            'application/json; charset=utf-8',
           );
 
           rawContent = translatedJson;
@@ -331,9 +344,8 @@ export class SummaryService {
         }
       }
 
-      const presignedUrl = await this.s3StorageService.getPresignedUrl(
-        targetKey,
-      );
+      const presignedUrl =
+        await this.s3StorageService.getPresignedUrl(targetKey);
 
       // JSON 파싱 시도 (새 형식)
       let structuredSummary: StructuredSummary | null = null;
@@ -442,7 +454,7 @@ export class SummaryService {
 
         this.logger.log(
           `[EventExtraction] Auto-created ${result.created} events, ` +
-          `${result.pending} pending for session ${sessionId}`,
+            `${result.pending} pending for session ${sessionId}`,
         );
       } else {
         this.logger.log(

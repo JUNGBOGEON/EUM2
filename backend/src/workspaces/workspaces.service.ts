@@ -27,7 +27,7 @@ export class WorkspacesService {
     private eventTypesService: WorkspaceEventTypesService,
     @Inject(forwardRef(() => WorkspaceRolesService))
     private rolesService: WorkspaceRolesService,
-  ) { }
+  ) {}
 
   async create(
     createWorkspaceDto: CreateWorkspaceDto,
@@ -44,10 +44,16 @@ export class WorkspacesService {
     await this.eventTypesService.createDefaultTypes(savedWorkspace.id, ownerId);
 
     // [Fix] 기본 역할 초기화 및 오너에게 관리자 역할 부여
-    const roles = await this.rolesService.initializeDefaultRoles(savedWorkspace.id);
-    const adminRole = roles.find(r => r.name === '관리자');
+    const roles = await this.rolesService.initializeDefaultRoles(
+      savedWorkspace.id,
+    );
+    const adminRole = roles.find((r) => r.name === '관리자');
     if (adminRole) {
-      await this.rolesService.assignRole(savedWorkspace.id, ownerId, adminRole.id);
+      await this.rolesService.assignRole(
+        savedWorkspace.id,
+        ownerId,
+        adminRole.id,
+      );
     }
 
     return savedWorkspace;

@@ -9,7 +9,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 
-import { MeetingSession, SummaryStatus, SessionStatus } from './entities/meeting-session.entity';
+import {
+  MeetingSession,
+  SummaryStatus,
+  SessionStatus,
+} from './entities/meeting-session.entity';
 import { SessionParticipant } from './entities/session-participant.entity';
 import { Transcription } from './entities/transcription.entity';
 import { WorkspaceEvent } from '../workspaces/entities/workspace-event.entity';
@@ -53,7 +57,7 @@ export class MeetingsService {
     private ttsPreferenceService: TTSPreferenceService,
     @Inject(forwardRef(() => WorkspacesService))
     private workspacesService: WorkspacesService,
-  ) { }
+  ) {}
 
   // ==========================================
   // 글로벌 캘린더 (내 모든 미팅)

@@ -31,7 +31,7 @@ export class WorkspaceInvitationsService {
     private userRepository: Repository<User>,
     @Inject(forwardRef(() => WorkspaceRolesService))
     private rolesService: WorkspaceRolesService,
-  ) { }
+  ) {}
 
   /**
    * 워크스페이스 초대 생성
@@ -200,8 +200,9 @@ export class WorkspaceInvitationsService {
     await this.workspaceRepository.save(workspace);
 
     // [Fix] 신규 멤버에게 기본 역할 부여
-    const defaultRole = await this.rolesService.getRoles(workspace.id)
-      .then(roles => roles.find(r => r.isDefault));
+    const defaultRole = await this.rolesService
+      .getRoles(workspace.id)
+      .then((roles) => roles.find((r) => r.isDefault));
     if (defaultRole) {
       await this.rolesService.assignRole(workspace.id, userId, defaultRole.id);
     }

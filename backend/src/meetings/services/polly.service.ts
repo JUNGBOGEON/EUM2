@@ -24,18 +24,70 @@ export interface PollyVoice {
  * Supported Polly Voices by Language
  */
 const POLLY_VOICES: Record<string, PollyVoice[]> = {
-  'ko-KR': [{ id: 'Seoyeon', name: 'Seoyeon', gender: 'Female', languageCode: 'ko-KR', isNeural: true }],
+  'ko-KR': [
+    {
+      id: 'Seoyeon',
+      name: 'Seoyeon',
+      gender: 'Female',
+      languageCode: 'ko-KR',
+      isNeural: true,
+    },
+  ],
   'en-US': [
-    { id: 'Joanna', name: 'Joanna', gender: 'Female', languageCode: 'en-US', isNeural: true },
-    { id: 'Matthew', name: 'Matthew', gender: 'Male', languageCode: 'en-US', isNeural: true },
-    { id: 'Amy', name: 'Amy', gender: 'Female', languageCode: 'en-GB', isNeural: true },
-    { id: 'Ivy', name: 'Ivy', gender: 'Female', languageCode: 'en-US', isNeural: true },
+    {
+      id: 'Joanna',
+      name: 'Joanna',
+      gender: 'Female',
+      languageCode: 'en-US',
+      isNeural: true,
+    },
+    {
+      id: 'Matthew',
+      name: 'Matthew',
+      gender: 'Male',
+      languageCode: 'en-US',
+      isNeural: true,
+    },
+    {
+      id: 'Amy',
+      name: 'Amy',
+      gender: 'Female',
+      languageCode: 'en-GB',
+      isNeural: true,
+    },
+    {
+      id: 'Ivy',
+      name: 'Ivy',
+      gender: 'Female',
+      languageCode: 'en-US',
+      isNeural: true,
+    },
   ],
   'ja-JP': [
-    { id: 'Mizuki', name: 'Mizuki', gender: 'Female', languageCode: 'ja-JP', isNeural: false },
-    { id: 'Takumi', name: 'Takumi', gender: 'Male', languageCode: 'ja-JP', isNeural: true },
+    {
+      id: 'Mizuki',
+      name: 'Mizuki',
+      gender: 'Female',
+      languageCode: 'ja-JP',
+      isNeural: false,
+    },
+    {
+      id: 'Takumi',
+      name: 'Takumi',
+      gender: 'Male',
+      languageCode: 'ja-JP',
+      isNeural: true,
+    },
   ],
-  'zh-CN': [{ id: 'Zhiyu', name: 'Zhiyu', gender: 'Female', languageCode: 'cmn-CN', isNeural: true }],
+  'zh-CN': [
+    {
+      id: 'Zhiyu',
+      name: 'Zhiyu',
+      gender: 'Female',
+      languageCode: 'cmn-CN',
+      isNeural: true,
+    },
+  ],
 };
 
 /**

@@ -28,10 +28,10 @@ export interface SessionUpdatePayload {
  */
 export interface InvitationNotificationPayload {
   type:
-  | 'invitation_received'
-  | 'invitation_cancelled'
-  | 'invitation_accepted'
-  | 'invitation_rejected';
+    | 'invitation_received'
+    | 'invitation_cancelled'
+    | 'invitation_accepted'
+    | 'invitation_rejected';
   invitation?: {
     id: string;
     workspace: {

@@ -11,4 +11,4 @@ import { WhiteboardItem } from './entities/whiteboard-item.entity';
   providers: [WhiteboardService, WhiteboardGateway],
   exports: [WhiteboardService],
 })
-export class WhiteboardModule { }
+export class WhiteboardModule {}

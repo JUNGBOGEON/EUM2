@@ -52,7 +52,11 @@ export class VoiceEnrollmentService {
       this.logger.log(`Enrolling voice for user: ${userId}`);
 
       // 1. 원본 오디오를 S3에 임시 저장
-      await this.s3StorageService.uploadFile(tempAudioKey, audioBuffer, mimeType);
+      await this.s3StorageService.uploadFile(
+        tempAudioKey,
+        audioBuffer,
+        mimeType,
+      );
       this.logger.log(`Uploaded temp audio to S3: ${tempAudioKey}`);
 
       // 2. Presigned URL 생성
@@ -62,16 +66,13 @@ export class VoiceEnrollmentService {
       );
 
       // 3. AI Server에 embedding 추출 요청
-      const response = await fetch(
-        `${this.aiServerUrl}/enroll-url/${userId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ audio_url: presignedUrl }),
+      const response = await fetch(`${this.aiServerUrl}/enroll-url/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({ audio_url: presignedUrl }),
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -86,7 +87,8 @@ export class VoiceEnrollmentService {
 
       // 4. User DB 업데이트
       await this.usersRepository.update(userId, {
-        voiceEmbeddingS3Key: aiResponse.s3_key || `voice-embeddings/${userId}.pth`,
+        voiceEmbeddingS3Key:
+          aiResponse.s3_key || `voice-embeddings/${userId}.pth`,
         voiceDubbingEnabled: true,
         voiceEnrolledAt: new Date(),
       });
@@ -177,7 +179,9 @@ export class VoiceEnrollmentService {
   /**
    * 음성 데이터 삭제
    */
-  async deleteVoiceData(userId: string): Promise<{ success: boolean; message: string }> {
+  async deleteVoiceData(
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const user = await this.usersRepository.findOne({
       where: { id: userId },
       select: ['voiceEmbeddingS3Key'],
@@ -216,8 +220,13 @@ export class VoiceEnrollmentService {
         message: '음성 데이터가 삭제되었습니다.',
       };
     } catch (error) {
-      this.logger.error(`Failed to delete voice data for user: ${userId}`, error);
-      throw new InternalServerErrorException('음성 데이터 삭제에 실패했습니다.');
+      this.logger.error(
+        `Failed to delete voice data for user: ${userId}`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        '음성 데이터 삭제에 실패했습니다.',
+      );
     }
   }
 

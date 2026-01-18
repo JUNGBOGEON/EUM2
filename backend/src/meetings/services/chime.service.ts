@@ -42,7 +42,7 @@ export class ChimeService {
     private redisService: RedisService,
     private workspaceGateway: WorkspaceGateway,
     private chimeSdkService: ChimeSdkService,
-  ) { }
+  ) {}
 
   /**
    * 워크스페이스에서 새 미팅 세션 시작
@@ -341,10 +341,10 @@ export class ChimeService {
    */
   private async getHostInfo(hostId: string): Promise<
     | {
-      id: string;
-      name: string;
-      profileImage?: string;
-    }
+        id: string;
+        name: string;
+        profileImage?: string;
+      }
     | undefined
   > {
     const participant = await this.participantRepository.findOne({

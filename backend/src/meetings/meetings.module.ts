@@ -77,4 +77,4 @@ import { VoiceDubbingTTSService } from './services/voice-dubbing-tts.service';
     TranscribeUrlService,
   ],
 })
-export class MeetingsModule { }
+export class MeetingsModule {}

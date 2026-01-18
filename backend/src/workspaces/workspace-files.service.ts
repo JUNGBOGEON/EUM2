@@ -37,7 +37,7 @@ export class WorkspaceFilesService {
     private s3StorageService: S3StorageService,
     @Inject(forwardRef(() => WorkspaceRolesService))
     private rolesService: WorkspaceRolesService,
-  ) { }
+  ) {}
 
   /**
    * 워크스페이스에 파일 업로드

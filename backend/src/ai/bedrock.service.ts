@@ -164,14 +164,14 @@ export interface StructuredSummary {
 export interface SummarySection {
   id: string;
   type:
-  | 'title'
-  | 'summary'
-  | 'agenda'
-  | 'decision'
-  | 'action_item'
-  | 'note'
-  | 'unresolved'
-  | 'data';
+    | 'title'
+    | 'summary'
+    | 'agenda'
+    | 'decision'
+    | 'action_item'
+    | 'note'
+    | 'unresolved'
+    | 'data';
   content: string;
   transcriptRefs: string[];
 }
@@ -369,12 +369,8 @@ Your task is to translate the provided JSON meeting summary into the target lang
       this.logger.log(`Summary translated to ${targetLang} successfully`);
 
       return translatedSummary;
-
     } catch (error) {
-      this.logger.error(
-        `Failed to translate summary to ${targetLang}`,
-        error,
-      );
+      this.logger.error(`Failed to translate summary to ${targetLang}`, error);
       throw error;
     }
   }

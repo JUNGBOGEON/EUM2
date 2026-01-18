@@ -69,7 +69,11 @@ export class Transcription {
   languageCode: string;
 
   // 번역된 텍스트 (암호화된 JSON)
-  @Column({ type: 'text', nullable: true, transformer: encryptedJsonTransformer })
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: encryptedJsonTransformer,
+  })
   translations?: Record<string, string>;
 
   // ===== 시간 정보 =====
@@ -113,7 +117,11 @@ export class Transcription {
   isActionItem: boolean;
 
   // 액션 아이템 내용 (암호화됨)
-  @Column({ type: 'text', nullable: true, transformer: encryptedTextTransformer })
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: encryptedTextTransformer,
+  })
   actionItemContent?: string;
 
   // ===== 시스템 필드 =====

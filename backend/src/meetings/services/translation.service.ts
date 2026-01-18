@@ -1,6 +1,9 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 
-import { WorkspaceGateway, TTSReadyPayload } from '../../workspaces/workspace.gateway';
+import {
+  WorkspaceGateway,
+  TTSReadyPayload,
+} from '../../workspaces/workspace.gateway';
 import { ParticipantPreferenceService } from './participant-preference.service';
 import { TranslationCacheService } from './translation-cache.service';
 import { TranslationContextService } from './translation-context.service';
@@ -390,7 +393,10 @@ export class TranslationService {
           speakerUserId, // 발화자 userId 추가 (음성 더빙 확인용)
           timestamp,
         ).catch((err) => {
-          this.logger.error(`[TTS] TTS processing failed: ${err.message}`, err.stack);
+          this.logger.error(
+            `[TTS] TTS processing failed: ${err.message}`,
+            err.stack,
+          );
         });
       } catch (error) {
         // 조용히 실패 - 개별 언어 번역 실패해도 다른 언어는 계속 처리
@@ -471,9 +477,8 @@ export class TranslationService {
     );
 
     // 발화자의 음성 더빙 활성화 여부 확인
-    const voiceDubbingEnabled = await this.voiceDubbingTTSService.isVoiceDubbingEnabled(
-      speakerUserId,
-    );
+    const voiceDubbingEnabled =
+      await this.voiceDubbingTTSService.isVoiceDubbingEnabled(speakerUserId);
 
     // 일본어는 voice dubbing 품질이 낮아 Polly 사용
     const isJapanese = targetLanguage === 'ja-JP' || targetLanguage === 'ja';
@@ -486,12 +491,13 @@ export class TranslationService {
     // 음성 더빙 사용 시: 한 번만 생성하고 모든 청취자에게 전송 (동일 언어)
     if (useVoiceDubbing) {
       try {
-        const voiceDubbingResult = await this.voiceDubbingTTSService.synthesizeWithVoiceDubbing(
-          translatedText,
-          targetLanguage,
-          speakerUserId,
-          sessionId,
-        );
+        const voiceDubbingResult =
+          await this.voiceDubbingTTSService.synthesizeWithVoiceDubbing(
+            translatedText,
+            targetLanguage,
+            speakerUserId,
+            sessionId,
+          );
 
         if (voiceDubbingResult) {
           // 모든 TTS 활성화 사용자에게 동일한 오디오 전송

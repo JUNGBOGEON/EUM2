@@ -65,25 +65,32 @@ async function debugMeeting() {
       console.log(`\n=== 최신 세션 (${latestSessionId}) 트랜스크립션 수 ===`);
 
       // 2. 해당 세션의 트랜스크립션 수
-      const transcriptCount = await dataSource.query(`
+      const transcriptCount = await dataSource.query(
+        `
         SELECT COUNT(*) as count
         FROM transcriptions
         WHERE "sessionId" = $1
-      `, [latestSessionId]);
+      `,
+        [latestSessionId],
+      );
       console.log('트랜스크립션 개수:', transcriptCount[0].count);
 
       // 3. 해당 세션의 참가자 수
-      const participantCount = await dataSource.query(`
+      const participantCount = await dataSource.query(
+        `
         SELECT COUNT(*) as count
         FROM session_participants
         WHERE "sessionId" = $1
-      `, [latestSessionId]);
+      `,
+        [latestSessionId],
+      );
       console.log('참가자 수:', participantCount[0].count);
 
       // 4. 트랜스크립션 샘플 (있는 경우)
       if (parseInt(transcriptCount[0].count) > 0) {
         console.log('\n=== 트랜스크립션 샘플 (최대 3개) ===');
-        const transcripts = await dataSource.query(`
+        const transcripts = await dataSource.query(
+          `
           SELECT
             id,
             "resultId",
@@ -95,7 +102,9 @@ async function debugMeeting() {
           WHERE "sessionId" = $1
           ORDER BY "startTimeMs" ASC
           LIMIT 3
-        `, [latestSessionId]);
+        `,
+          [latestSessionId],
+        );
         console.table(transcripts);
       } else {
         console.log('\n⚠️ 이 세션에 트랜스크립션이 없습니다!');
@@ -108,7 +117,8 @@ async function debugMeeting() {
 
       // 5. 워크스페이스 파일 (요약) 확인
       console.log('\n=== 워크스페이스 파일 (요약) 확인 ===');
-      const files = await dataSource.query(`
+      const files = await dataSource.query(
+        `
         SELECT
           id,
           filename,
@@ -117,7 +127,9 @@ async function debugMeeting() {
           "createdAt"
         FROM workspace_files
         WHERE "sessionId" = $1
-      `, [latestSessionId]);
+      `,
+        [latestSessionId],
+      );
 
       if (files.length > 0) {
         console.table(files);
@@ -125,7 +137,6 @@ async function debugMeeting() {
         console.log('이 세션과 연결된 파일이 없습니다.');
       }
     }
-
   } catch (e) {
     console.error('Error:', e);
   } finally {

@@ -32,7 +32,7 @@ export class MeetingsController {
     private readonly meetingsService: MeetingsService,
     private readonly transcribeUrlService: TranscribeUrlService,
     private readonly rolesService: WorkspaceRolesService,
-  ) { }
+  ) {}
 
   // ==========================================
   // 세션 관리 API

@@ -29,7 +29,7 @@ export class WorkspaceEventsService {
     private workspacesRepository: Repository<Workspace>,
     @Inject(forwardRef(() => WorkspaceRolesService))
     private rolesService: WorkspaceRolesService,
-  ) { }
+  ) {}
 
   /**
    * 이벤트 생성
@@ -63,12 +63,12 @@ export class WorkspaceEventsService {
       description: createDto.description,
       eventTypeId: createDto.eventTypeId,
       color: createDto.color,
-      startTime: new Date(createDto.startTime!),
-      endTime: createDto.endTime ? new Date(createDto.endTime!) : null,
+      startTime: new Date(createDto.startTime),
+      endTime: createDto.endTime ? new Date(createDto.endTime) : null,
       isAllDay: createDto.isAllDay || false,
       recurrence: createDto.recurrence,
       recurrenceEndDate: createDto.recurrenceEndDate
-        ? new Date(createDto.recurrenceEndDate!)
+        ? new Date(createDto.recurrenceEndDate)
         : null,
       reminderMinutes: createDto.reminderMinutes,
       meetingSessionId: createDto.meetingSessionId,
@@ -173,14 +173,16 @@ export class WorkspaceEventsService {
       userId,
       'editCalendar',
     );
-    this.logger.debug(`Update Event: User ${userId} has editCalendar permission: ${hasPermission}`);
+    this.logger.debug(
+      `Update Event: User ${userId} has editCalendar permission: ${hasPermission}`,
+    );
 
     if (!hasPermission) {
       throw new ForbiddenException('이벤트를 수정할 권한이 없습니다');
     }
 
     // 2. Even with permission, usually you can only edit your own events unless you are Admin/Owner?
-    // The requirement "editCalendar" usually implies ability to edit the calendar. 
+    // The requirement "editCalendar" usually implies ability to edit the calendar.
     // If I have the permission, I can edit.
     // But typically apps restrict editing *others'* events to Admins.
     // For now, let's enforce the permission check strictly.
@@ -188,14 +190,14 @@ export class WorkspaceEventsService {
     // Re-instating the ownership check BUT combined with permission?
     // User Update request: "Only if I have permission".
 
-    // If I strictly follow the user's report "Even without permission I can edit", 
+    // If I strictly follow the user's report "Even without permission I can edit",
     // it means my previous check `if (creator !== user) checkPermission` was the problem.
     // Now I forced checkPermission.
 
     // Keep existing logic: Owner can always do everything (handled in checkPermission).
 
     // Additional check: If I have permission, can I edit ANY event?
-    // Let's assume 'editCalendar' means full write access to calendar for now, 
+    // Let's assume 'editCalendar' means full write access to calendar for now,
     // or at least write access to OWN events.
 
     // If I want to restrict editing OTHERS' events, that's a separate logic.
@@ -251,7 +253,9 @@ export class WorkspaceEventsService {
       userId,
       'editCalendar',
     );
-    this.logger.debug(`Delete Event: User ${userId} has editCalendar permission: ${hasPermission}`);
+    this.logger.debug(
+      `Delete Event: User ${userId} has editCalendar permission: ${hasPermission}`,
+    );
 
     if (!hasPermission) {
       throw new ForbiddenException('이벤트를 삭제할 권한이 없습니다');

@@ -23,7 +23,7 @@ import * as fs from 'fs';
 
 @Controller('whiteboard')
 export class WhiteboardController {
-  constructor(private readonly whiteboardService: WhiteboardService) { }
+  constructor(private readonly whiteboardService: WhiteboardService) {}
 
   @Get('storage')
   getStorageFiles() {
@@ -110,8 +110,6 @@ export class WhiteboardController {
     return this.whiteboardService.create(createWhiteboardItemDto);
   }
 
-
-
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -142,7 +140,9 @@ export class WhiteboardController {
 
   @Get(':meetingId')
   async findAll(@Param('meetingId') meetingId: string) {
-    console.log(`[WhiteboardController] GET /:meetingId hit with ID: ${meetingId}`);
+    console.log(
+      `[WhiteboardController] GET /:meetingId hit with ID: ${meetingId}`,
+    );
     return this.whiteboardService.findAll(meetingId);
   }
 }

@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsUUID, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 
 /**
  * 워크스페이스에서 새 세션 시작 DTO

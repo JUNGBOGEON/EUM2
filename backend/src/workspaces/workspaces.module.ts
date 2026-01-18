@@ -66,4 +66,4 @@ import { User } from '../users/entities/user.entity';
     WorkspaceRolesService,
   ],
 })
-export class WorkspacesModule { }
+export class WorkspacesModule {}

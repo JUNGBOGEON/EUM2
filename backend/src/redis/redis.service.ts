@@ -4,7 +4,7 @@ import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class RedisService {
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
   // 미팅 세션 정보 저장
   async setMeetingSession(
@@ -225,8 +225,8 @@ export class RedisService {
    * 화이트보드 아이템 추가 (Append)
    * Redis Key: whiteboard:items:{meetingId} -> List of JSON strings? Or one huge JSON array?
    * For simplicity and atomicity with cache-manager's simpler API, we will read-modify-write the full array
-   * or usage a specific redis command if possible. 
-   * Given the constraints, we will store the items as a single JSON array for now. 
+   * or usage a specific redis command if possible.
+   * Given the constraints, we will store the items as a single JSON array for now.
    * Optimization: In a high-traffic scenario, we should use a Hash or List structure directly.
    */
   async addWhiteboardItem(meetingId: string, item: any): Promise<void> {
@@ -243,7 +243,11 @@ export class RedisService {
     return (await this.get<any[]>(key)) || [];
   }
 
-  async updateWhiteboardItem(meetingId: string, itemId: string, updateData: any): Promise<void> {
+  async updateWhiteboardItem(
+    meetingId: string,
+    itemId: string,
+    updateData: any,
+  ): Promise<void> {
     const key = `whiteboard:items:${meetingId}`;
     const items = (await this.get<any[]>(key)) || [];
     const index = items.findIndex((i) => i.id === itemId);
@@ -255,7 +259,7 @@ export class RedisService {
 
   async removeWhiteboardItem(meetingId: string, itemId: string): Promise<void> {
     const key = `whiteboard:items:${meetingId}`;
-    let items = (await this.get<any[]>(key)) || [];
+    const items = (await this.get<any[]>(key)) || [];
     // Soft delete or hard delete? The repo uses soft delete (isDeleted=true).
     // optimizing: actually remove from redis if we want to save space, OR mark isDeleted.
     // Let's mark isDeleted to match DB logic.

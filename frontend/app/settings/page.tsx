@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, Language } from '@/contexts/LanguageContext';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -48,7 +48,7 @@ export default function SettingsPage() {
 
             <div className="space-y-3">
               <Label className="text-sm font-medium">{t('select_language')}</Label>
-              <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+              <Select value={language} onValueChange={(val) => setLanguage(val as Language)}>
                 <SelectTrigger className="w-full sm:w-[300px]">
                   <SelectValue placeholder={t('select_language')} />
                 </SelectTrigger>

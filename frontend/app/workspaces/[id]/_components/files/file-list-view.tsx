@@ -16,13 +16,8 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type { WorkspaceFile } from '../../_lib/types';
+import { cn } from '@/lib/utils';
 
 interface FileListViewProps {
   files: WorkspaceFile[];
@@ -63,14 +58,14 @@ const formatDate = (dateStr: string) => {
 function ImageThumbnail({ file, thumbnailUrl, className }: { file: WorkspaceFile; thumbnailUrl?: string; className?: string }) {
   if (!thumbnailUrl) {
     return (
-      <div className={`bg-primary/10 flex items-center justify-center ${className}`}>
-        <FileImage className="h-5 w-5 text-primary animate-pulse" />
+      <div className={cn("bg-neutral-900 flex items-center justify-center", className)}>
+        <FileImage className="h-5 w-5 text-neutral-600 animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
+    <div className={cn("relative overflow-hidden bg-neutral-900", className)}>
       <Image
         src={thumbnailUrl}
         alt={file.filename}
@@ -103,24 +98,24 @@ function FileItemWrapper({
       <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-48 bg-neutral-900 border-white/10 text-white shadow-xl">
         {isImageFile(file.mimeType) && (
-          <ContextMenuItem onClick={() => onImageClick(file)}>
+          <ContextMenuItem onClick={() => onImageClick(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
             <FileImage className="mr-2 h-4 w-4" />
             미리보기
           </ContextMenuItem>
         )}
-        <ContextMenuItem onClick={() => onDownload(file)}>
+        <ContextMenuItem onClick={() => onDownload(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
           <Download className="mr-2 h-4 w-4" />
           다운로드
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => onRename(file)}>
+        <ContextMenuItem onClick={() => onRename(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
           <Pencil className="mr-2 h-4 w-4" />
           이름 변경
         </ContextMenuItem>
-        <ContextMenuSeparator />
+        <ContextMenuSeparator className="bg-white/10" />
         <ContextMenuItem
-          className="text-destructive focus:text-destructive"
+          className="text-red-400 focus:text-red-400 focus:bg-red-500/10 cursor-pointer"
           onClick={() => onDelete(file)}
         >
           <Trash2 className="mr-2 h-4 w-4" />
@@ -142,7 +137,7 @@ export function FileListView({
 }: FileListViewProps) {
   if (viewMode === 'list') {
     return (
-      <div className="space-y-2">
+      <div className="border-t border-white/5">
         {files.map((file) => {
           const FileIcon = getFileIcon(file.mimeType);
           const isImage = isImageFile(file.mimeType);
@@ -156,8 +151,7 @@ export function FileListView({
               onImageClick={onImageClick}
             >
               <div
-                className={`group flex items-center gap-4 p-4 rounded-xl border border-border
-                         hover:border-primary/30 hover:bg-muted/30 transition-all
+                className={`group flex items-center gap-4 py-3 px-2 border-b border-white/5 hover:bg-white/[0.02] transition-colors
                          ${isImage ? 'cursor-pointer' : 'cursor-context-menu'}`}
                 onClick={isImage ? () => onImageClick(file) : undefined}
               >
@@ -166,76 +160,64 @@ export function FileListView({
                   <ImageThumbnail
                     file={file}
                     thumbnailUrl={thumbnailUrls[file.id]}
-                    className="w-10 h-10 rounded-xl flex-shrink-0"
+                    className="w-10 h-10 rounded-md flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <FileIcon className="h-5 w-5 text-primary" />
+                  <div className="w-10 h-10 rounded-md bg-neutral-900 flex items-center justify-center flex-shrink-0">
+                    <FileIcon className="h-5 w-5 text-neutral-500 group-hover:text-white transition-colors" />
                   </div>
                 )}
 
                 {/* File Info */}
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-foreground truncate">
-                    {file.filename}
-                  </h4>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                    <span>{formatFileSize(file.size)}</span>
-                    <span>{formatDate(file.createdAt)}</span>
+                <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
+                  <div className="col-span-12 md:col-span-6">
+                    <h4 className="font-medium text-sm text-neutral-300 group-hover:text-white truncate transition-colors">
+                      {file.filename}
+                    </h4>
+                  </div>
+                  <div className="col-span-6 md:col-span-2 hidden md:block">
+                    <span className="text-xs text-neutral-500">{formatFileSize(file.size)}</span>
+                  </div>
+                  <div className="col-span-6 md:col-span-2 hidden md:block">
+                    <span className="text-xs text-neutral-500">{formatDate(file.createdAt)}</span>
+                  </div>
+                  <div className="col-span-6 md:col-span-2 hidden md:block">
                     {file.uploader && (
-                      <span>{file.uploader.name}</span>
+                      <span className="text-xs text-neutral-500">{file.uploader.name}</span>
                     )}
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDownload(file);
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>다운로드</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 text-neutral-400 hover:text-white hover:bg-white/5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="bg-neutral-900 border-white/10 text-white shadow-xl">
                       {isImage && (
-                        <DropdownMenuItem onClick={() => onImageClick(file)}>
+                        <DropdownMenuItem onClick={() => onImageClick(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
                           <FileImage className="mr-2 h-4 w-4" />
                           미리보기
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={() => onDownload(file)}>
+                      <DropdownMenuItem onClick={() => onDownload(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
                         <Download className="mr-2 h-4 w-4" />
                         다운로드
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onRename(file)}>
+                      <DropdownMenuItem onClick={() => onRename(file)} className="focus:bg-white/10 focus:text-white cursor-pointer">
                         <Pencil className="mr-2 h-4 w-4" />
                         이름 변경
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
+                        className="text-red-400 focus:text-red-400 focus:bg-red-500/10 cursor-pointer"
                         onClick={() => onDelete(file)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -254,7 +236,7 @@ export function FileListView({
 
   // Grid view
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
       {files.map((file) => {
         const FileIcon = getFileIcon(file.mimeType);
         const isImage = isImageFile(file.mimeType);
@@ -268,8 +250,7 @@ export function FileListView({
             onImageClick={onImageClick}
           >
             <div
-              className={`group flex flex-col rounded-xl border border-border overflow-hidden
-                       hover:border-primary/30 hover:bg-muted/30 transition-all
+              className={`group flex flex-col rounded-lg border border-transparent hover:bg-neutral-900/50 transition-all duration-200
                        ${isImage ? 'cursor-pointer' : 'cursor-context-menu'}`}
               onClick={isImage ? () => onImageClick(file) : undefined}
             >
@@ -278,21 +259,23 @@ export function FileListView({
                 <ImageThumbnail
                   file={file}
                   thumbnailUrl={thumbnailUrls[file.id]}
-                  className="w-full h-24"
+                  className="w-full aspect-[4/3] rounded-lg border border-white/5"
                 />
               ) : (
-                <div className="w-full h-24 bg-primary/5 flex items-center justify-center">
-                  <FileIcon className="h-8 w-8 text-primary" />
+                <div className="w-full aspect-[4/3] rounded-lg bg-neutral-900 border border-white/5 flex items-center justify-center">
+                  <FileIcon className="h-10 w-10 text-neutral-600 group-hover:text-neutral-400 transition-all duration-300" />
                 </div>
               )}
               {/* File Info */}
-              <div className="p-3">
-                <h4 className="font-medium text-sm text-foreground truncate">
+              <div className="p-2">
+                <h4 className="font-medium text-xs text-neutral-300 group-hover:text-white truncate transition-colors">
                   {file.filename}
                 </h4>
-                <span className="text-xs text-muted-foreground mt-1 block">
-                  {formatFileSize(file.size)}
-                </span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px] text-neutral-600 group-hover:text-neutral-500 transition-colors">
+                    {formatFileSize(file.size)}
+                  </span>
+                </div>
               </div>
             </div>
           </FileItemWrapper>

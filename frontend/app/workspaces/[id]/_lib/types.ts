@@ -40,6 +40,8 @@ export type SummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 
 export interface MeetingSession {
   id: string;
   title: string;
+  category?: string;
+  maxParticipants?: number;
   status: 'active' | 'ended';
   hostId: string;
   host?: {
@@ -52,6 +54,15 @@ export interface MeetingSession {
   participantCount?: number;
   summaryStatus?: SummaryStatus;
   summaryS3Key?: string;
+  participants?: {
+    id: string;
+    userId: string;
+    user?: {
+      id: string;
+      name: string;
+      profileImage?: string;
+    };
+  }[];
 }
 
 export interface WorkspaceFile {

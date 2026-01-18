@@ -114,8 +114,20 @@ export class MeetingsService {
    * - 진행 중인 세션이 있으면 해당 세션에 참가
    * - 없으면 새 세션 생성
    */
-  async startSession(workspaceId: string, hostId: string, title?: string) {
-    return this.chimeService.startSession(workspaceId, hostId, title);
+  async startSession(
+    workspaceId: string,
+    hostId: string,
+    title?: string,
+    category?: string,
+    maxParticipants?: number,
+  ) {
+    return this.chimeService.startSession(
+      workspaceId,
+      hostId,
+      title,
+      category,
+      maxParticipants,
+    );
   }
 
   /**
@@ -193,7 +205,7 @@ export class MeetingsService {
    * 워크스페이스의 활성 세션 조회
    */
   async getActiveSession(workspaceId: string) {
-    return this.chimeService.getActiveSession(workspaceId);
+    return this.chimeService.getActiveSessions(workspaceId);
   }
 
   /**

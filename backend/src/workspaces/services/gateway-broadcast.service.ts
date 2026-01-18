@@ -13,6 +13,8 @@ export interface SessionUpdatePayload {
     hostId: string;
     startedAt: Date;
     participantCount?: number;
+    maxParticipants?: number;
+    category?: string;
     host?: {
       id: string;
       name: string;
@@ -26,10 +28,10 @@ export interface SessionUpdatePayload {
  */
 export interface InvitationNotificationPayload {
   type:
-    | 'invitation_received'
-    | 'invitation_cancelled'
-    | 'invitation_accepted'
-    | 'invitation_rejected';
+  | 'invitation_received'
+  | 'invitation_cancelled'
+  | 'invitation_accepted'
+  | 'invitation_rejected';
   invitation?: {
     id: string;
     workspace: {

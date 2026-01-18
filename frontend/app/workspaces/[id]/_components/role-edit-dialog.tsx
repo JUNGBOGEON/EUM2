@@ -132,7 +132,7 @@ export function RoleEditDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[450px] bg-neutral-900 border-white/10 text-white">
                 <DialogHeader>
                     <DialogTitle>
                         {isNew ? t('roles.add') : t('roles.edit')}
@@ -145,34 +145,35 @@ export function RoleEditDialog({
                 <div className="space-y-5 py-4">
                     {/* Role Name */}
                     <div className="space-y-2">
-                        <Label htmlFor="role-name">{t('roles.name')}</Label>
+                        <Label htmlFor="role-name" className="text-neutral-300">{t('roles.name')}</Label>
                         <Input
                             id="role-name"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder={t('roles.name_placeholder')}
                             disabled={role?.isSystem}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20"
                         />
                     </div>
 
                     {/* Permissions */}
                     <div className="space-y-3">
-                        <Label>{t('roles.permissions')}</Label>
-                        <div className="space-y-1 rounded-lg border p-1">
+                        <Label className="text-neutral-300">{t('roles.permissions')}</Label>
+                        <div className="space-y-1 rounded-lg border border-white/10 bg-white/[0.02] p-1">
                             {PERMISSION_ITEMS.map((item) => (
                                 <div
                                     key={item.key}
-                                    className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 transition-colors"
+                                    className="flex items-center justify-between p-2.5 rounded-md hover:bg-white/5 transition-colors"
                                 >
                                     <div className="flex items-start gap-3">
-                                        <div className="mt-0.5 text-muted-foreground">
+                                        <div className="mt-0.5 text-neutral-400">
                                             {item.icon}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium">
+                                            <p className="text-sm font-medium text-neutral-200">
                                                 {t(`roles.${item.labelKey}`)}
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-xs text-neutral-500">
                                                 {t(`roles.${item.descKey}`)}
                                             </p>
                                         </div>
@@ -180,6 +181,7 @@ export function RoleEditDialog({
                                     <Switch
                                         checked={permissions[item.key]}
                                         onCheckedChange={() => handleToggle(item.key)}
+                                        className="data-[state=checked]:bg-indigo-500"
                                     />
                                 </div>
                             ))}
@@ -188,28 +190,34 @@ export function RoleEditDialog({
 
                     {/* Default Role Toggle */}
                     {!role?.isSystem && (
-                        <div className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 transition-colors border">
-                            <Label htmlFor="is-default" className="text-sm font-normal cursor-pointer">
+                        <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 transition-colors border border-white/10 bg-white/[0.02]">
+                            <Label htmlFor="is-default" className="text-sm font-normal cursor-pointer text-neutral-300">
                                 {t('roles.set_default')}
                             </Label>
                             <Switch
                                 id="is-default"
                                 checked={isDefault}
                                 onCheckedChange={(checked) => setIsDefault(checked)}
+                                className="data-[state=checked]:bg-indigo-500"
                             />
                         </div>
                     )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="flex gap-2">
                     <Button
                         variant="outline"
                         onClick={() => onOpenChange(false)}
                         disabled={isSaving}
+                        className="bg-white/5 border-white/10 text-white hover:bg-white/10"
                     >
                         {t('common.cancel')}
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving || !name.trim()}
+                        className="bg-white text-black hover:bg-neutral-200"
+                    >
                         {isSaving ? (
                             <>
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

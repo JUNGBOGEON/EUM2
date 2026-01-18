@@ -87,12 +87,12 @@ export function WorkspaceNotifications({
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-9 w-9"
+          className="relative h-9 w-9 text-neutral-400 hover:text-white hover:bg-white/10"
         >
           <Bell className="h-5 w-5" />
           {invitations.length > 0 && (
             <Badge
-              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs bg-destructive border-transparent text-primary-foreground"
+              className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-red-500 text-white border-2 border-neutral-900"
             >
               {invitations.length > 9 ? '9+' : invitations.length}
             </Badge>
@@ -100,17 +100,17 @@ export function WorkspaceNotifications({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-96 p-0"
+        className="w-96 p-0 bg-neutral-900 border-white/10 text-white"
         align="end"
         sideOffset={8}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            <h4 className="font-semibold">알림</h4>
+            <Mail className="h-4 w-4 text-neutral-400" />
+            <h4 className="font-semibold text-white">알림</h4>
           </div>
           {invitations.length > 0 && (
-            <Badge variant="secondary">{invitations.length}개</Badge>
+            <Badge variant="secondary" className="bg-white/10 text-white hover:bg-white/20 border-white/5">{invitations.length}개</Badge>
           )}
         </div>
 
@@ -119,35 +119,35 @@ export function WorkspaceNotifications({
             <div className="p-4 space-y-4">
               {[1, 2].map((i) => (
                 <div key={i} className="flex gap-3">
-                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <Skeleton className="h-10 w-10 rounded-lg bg-white/5" />
                   <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-4 w-3/4 bg-white/5" />
+                    <Skeleton className="h-3 w-1/2 bg-white/5" />
                   </div>
                 </div>
               ))}
             </div>
           ) : invitations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                <Bell className="h-6 w-6 text-muted-foreground" />
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 ring-1 ring-white/10">
+                <Bell className="h-6 w-6 text-neutral-500" />
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-neutral-400">
                 새로운 알림이 없습니다
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-white/5 text-white">
               {invitations.map((invitation) => {
                 const isProcessing = processingIds.has(invitation.id);
                 return (
                   <div
                     key={invitation.id}
-                    className="p-4 hover:bg-muted/50 transition-colors"
+                    className="p-4 hover:bg-white/5 transition-colors"
                   >
                     <div className="flex gap-3">
                       {/* Workspace Thumbnail */}
-                      <div className="relative w-10 h-10 rounded-lg bg-primary/10 flex-shrink-0 overflow-hidden">
+                      <div className="relative w-10 h-10 rounded-lg bg-white/5 flex-shrink-0 overflow-hidden ring-1 ring-white/10">
                         {invitation.workspace.thumbnail ? (
                           <Image
                             src={invitation.workspace.thumbnail}
@@ -163,26 +163,26 @@ export function WorkspaceNotifications({
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h5 className="font-medium text-sm truncate">
+                        <h5 className="font-bold text-sm truncate text-white">
                           {invitation.workspace.name}
                         </h5>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <Avatar className="h-4 w-4">
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Avatar className="h-4 w-4 ring-1 ring-white/10">
                             <AvatarImage src={invitation.inviter.profileImage} />
-                            <AvatarFallback className="text-[8px]">
+                            <AvatarFallback className="text-[8px] bg-neutral-800 text-neutral-400">
                               {invitation.inviter.name[0]}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-xs text-muted-foreground truncate">
+                          <span className="text-xs text-neutral-400 truncate">
                             {invitation.inviter.name}님의 초대
                           </span>
                         </div>
                         {invitation.message && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          <p className="text-xs text-neutral-500 mt-1 line-clamp-2">
                             &quot;{invitation.message}&quot;
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-[10px] text-neutral-600 mt-1.5">
                           {formatDate(invitation.createdAt)}
                         </p>
                       </div>
@@ -193,7 +193,7 @@ export function WorkspaceNotifications({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
                         onClick={() => handleReject(invitation.id)}
                         disabled={isProcessing}
                       >
@@ -202,12 +202,12 @@ export function WorkspaceNotifications({
                       </Button>
                       <Button
                         size="sm"
-                        className="flex-1"
+                        className="flex-1 bg-white text-black hover:bg-neutral-200"
                         onClick={() => handleAccept(invitation.id)}
                         disabled={isProcessing}
                       >
                         {isProcessing ? (
-                          <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                          <span className="h-4 w-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                         ) : (
                           <>
                             <Check className="h-4 w-4 mr-1" />

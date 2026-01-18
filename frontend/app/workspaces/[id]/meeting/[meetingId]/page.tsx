@@ -62,6 +62,7 @@ function MeetingRoomContent() {
   const [showEndMeetingDialog, setShowEndMeetingDialog] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
+  const [muteOriginalOnTranslation, setMuteOriginalOnTranslation] = useState(true); // 번역 시 원본 음성 음소거 (기본: ON)
 
   // Voice dubbing state (내 목소리 TTS)
   const [hasVoiceEmbedding, setHasVoiceEmbedding] = useState(false);
@@ -95,6 +96,11 @@ function MeetingRoomContent() {
       setIsTogglingVoiceDubbing(false);
     }
   }, [toggleVoiceDubbing]);
+
+  // Handle mute original audio toggle
+  const handleToggleMuteOriginal = useCallback(() => {
+    setMuteOriginalOnTranslation(prev => !prev);
+  }, []);
 
   // Debug logging for Whiteboard entry point
   useEffect(() => {
@@ -278,6 +284,7 @@ function MeetingRoomContent() {
     isFading: isOriginalVolumeFading,
   } = useOriginalAudioVolume({
     translationEnabled,
+    muteOriginalOnTranslation,
   });
 
   // Voice Focus hook (노이즈 억제 - 기본 활성화)
@@ -478,6 +485,8 @@ function MeetingRoomContent() {
         originalVolume={originalVolume}
         isOriginalVolumeFading={isOriginalVolumeFading}
         onSetOriginalVolume={setOriginalVolume}
+        muteOriginalOnTranslation={muteOriginalOnTranslation}
+        onToggleMuteOriginal={handleToggleMuteOriginal}
         hasVoiceEmbedding={hasVoiceEmbedding}
         voiceDubbingEnabled={voiceDubbingEnabled}
         onOpenTTSSettings={() => setShowTTSSettings(true)}

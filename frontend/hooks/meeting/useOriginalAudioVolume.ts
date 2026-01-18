@@ -5,6 +5,7 @@ import { useAudioVideo } from 'amazon-chime-sdk-component-library-react';
 
 interface UseOriginalAudioVolumeOptions {
   translationEnabled: boolean;
+  muteOriginalOnTranslation?: boolean; // 번역 시 원본 음성 음소거 여부 (기본: true)
   fadeTimeMs?: number;
 }
 
@@ -28,6 +29,7 @@ const DEFAULT_FADE_TIME = 300; // 0.3초 페이드
  */
 export function useOriginalAudioVolume({
   translationEnabled,
+  muteOriginalOnTranslation = true,
   fadeTimeMs = DEFAULT_FADE_TIME,
 }: UseOriginalAudioVolumeOptions): UseOriginalAudioVolumeReturn {
   const audioVideo = useAudioVideo();
@@ -45,7 +47,7 @@ export function useOriginalAudioVolume({
   // 오디오 요소 가져오기
   const getAudioElement = useCallback((): HTMLAudioElement | null => {
     if (!audioVideo) return null;
-    // @ts-ignore - 내부 API 접근
+    // @ts-expect-error - 내부 API 접근 (audioMixController는 공개 API가 아님)
     return audioVideo.audioVideo?.audioMixController?.audioElement || null;
   }, [audioVideo]);
 
@@ -156,9 +158,10 @@ export function useOriginalAudioVolume({
       prevTranslationEnabledRef.current = translationEnabled;
 
       if (translationEnabled) {
-        // 번역 켜짐: 목표 볼륨으로 페이드
-        fadeToVolume(targetVolume);
-        console.log(`[OriginalAudio] Translation ON: fading to ${targetVolume}%`);
+        // 번역 켜짐: muteOriginalOnTranslation에 따라 볼륨 결정
+        const volumeToApply = muteOriginalOnTranslation ? 0 : targetVolume;
+        fadeToVolume(volumeToApply);
+        console.log(`[OriginalAudio] Translation ON: fading to ${volumeToApply}% (mute: ${muteOriginalOnTranslation})`);
       } else {
         // 번역 꺼짐: 100%로 페이드하고 muted 해제
         const audioElement = getAudioElement();
@@ -169,14 +172,31 @@ export function useOriginalAudioVolume({
         console.log('[OriginalAudio] Translation OFF: fading to 100%, unmuted');
       }
     }
-  }, [translationEnabled, targetVolume, fadeToVolume, getAudioElement]);
+  }, [translationEnabled, targetVolume, fadeToVolume, getAudioElement, muteOriginalOnTranslation]);
+
+  // muteOriginalOnTranslation 토글에 따른 볼륨 조절
+  useEffect(() => {
+    if (!translationEnabled) return; // 번역이 꺼져있으면 무시
+
+    if (muteOriginalOnTranslation) {
+      // 원본 음소거 ON: 0%로 페이드
+      fadeToVolume(0);
+      console.log('[OriginalAudio] Mute original ON: fading to 0%');
+    } else {
+      // 원본 음소거 OFF: 100%로 페이드 (또는 이전 targetVolume)
+      fadeToVolume(100);
+      console.log('[OriginalAudio] Mute original OFF: fading to 100%');
+    }
+  }, [muteOriginalOnTranslation, translationEnabled, fadeToVolume]);
 
   // audioVideo 초기화 시 현재 번역 상태에 맞게 볼륨 적용
   useEffect(() => {
     if (!audioVideo) return;
 
-    // 번역이 켜져있으면 targetVolume, 아니면 100%
-    const volumeToApply = translationEnabled ? targetVolume : 100;
+    // 번역이 켜져있고 muteOriginalOnTranslation이면 0%, 아니면 100%
+    const volumeToApply = translationEnabled
+      ? (muteOriginalOnTranslation ? 0 : targetVolume)
+      : 100;
     applyVolume(volumeToApply);
     setCurrentVolumeState(volumeToApply);
 

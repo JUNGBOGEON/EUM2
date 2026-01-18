@@ -54,6 +54,29 @@ async function run() {
       'ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS banner text',
     );
 
+    // Add stamp and postit to whiteboard_item_type_enum
+    console.log('Adding stamp to whiteboard_item_type_enum...');
+    try {
+      await dataSource.query(
+        `ALTER TYPE whiteboard_item_type_enum ADD VALUE IF NOT EXISTS 'stamp'`,
+      );
+    } catch (e: any) {
+      if (!e.message?.includes('already exists')) {
+        console.warn('Could not add stamp:', e.message);
+      }
+    }
+
+    console.log('Adding postit to whiteboard_item_type_enum...');
+    try {
+      await dataSource.query(
+        `ALTER TYPE whiteboard_item_type_enum ADD VALUE IF NOT EXISTS 'postit'`,
+      );
+    } catch (e: any) {
+      if (!e.message?.includes('already exists')) {
+        console.warn('Could not add postit:', e.message);
+      }
+    }
+
     console.log('Schema patch completed.');
   } catch (e) {
     console.error('Error during schema patch:', e);

@@ -1,28 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { ChevronLeft } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
+  SidebarRail,
 } from '@/components/ui/sidebar';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { NAV_ITEMS, type NavItemId } from '../_lib/constants';
 import type { Workspace, UserInfo, WorkspaceMember } from '../_lib/types';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { cn } from '@/lib/utils';
 
 interface WorkspaceSidebarProps {
   workspace: Workspace;
@@ -33,168 +26,174 @@ interface WorkspaceSidebarProps {
   isConnected?: boolean;
 }
 
-import { useLanguage } from '@/contexts/LanguageContext';
-
 export function WorkspaceSidebar({
   workspace,
   user,
   activeNav,
   onNavChange,
-  members = [],
-  isConnected,
 }: WorkspaceSidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
 
+  const primaryNav = NAV_ITEMS.filter(item => item.id !== 'settings');
+  const secondaryNav = NAV_ITEMS.filter(item => item.id === 'settings');
+
   return (
-    <Sidebar className="border-r border-border">
+    <Sidebar
+      collapsible="none"
+      className="border-r border-neutral-800 bg-neutral-950 w-64"
+      variant="sidebar"
+    >
       {/* Header */}
-      <SidebarHeader className="h-14 border-b border-sidebar-border">
-        <div className="flex h-full items-center justify-between px-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground hover:text-foreground"
-            onClick={() => router.push('/workspaces')}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="text-sm">{t('common.list')}</span>
-          </Button>
-          <SidebarTrigger />
+      <SidebarHeader className="h-20 border-b border-neutral-800/30">
+        <div className="flex h-full items-center px-5">
+          <div className="flex items-center gap-4 w-full">
+            {/* Monogram */}
+            <div className="h-11 w-11 bg-white flex items-center justify-center shrink-0">
+              <span className="text-[15px] font-bold text-neutral-950 uppercase tracking-[-0.02em]">
+                {workspace.name.substring(0, 2)}
+              </span>
+            </div>
+
+            {/* Workspace Info */}
+            <div className="flex flex-col min-w-0 flex-1 gap-1">
+              <span className="text-[16px] font-semibold text-neutral-50 truncate tracking-[-0.015em] leading-none">
+                {workspace.name}
+              </span>
+              {workspace.description && (
+                <span className="text-[12px] text-neutral-500 truncate tracking-[-0.005em] leading-tight font-light">
+                  {workspace.description}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        {/* Workspace Info */}
-        <SidebarGroup>
-          <div className="px-3 py-4">
-            <div className="flex items-center gap-3">
-              {workspace.thumbnail ? (
-                <img
-                  src={workspace.thumbnail}
-                  alt={workspace.name}
-                  className="w-10 h-10 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <span className="text-lg font-semibold text-muted-foreground">
-                    {workspace.name.charAt(0).toUpperCase()}
+      {/* Primary Navigation */}
+      <SidebarContent className="px-3 py-4">
+        <SidebarMenu className="gap-1">
+          {primaryNav.map((item) => {
+            const isActive = activeNav === item.id;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => onNavChange(item.id)}
+                  className={cn(
+                    "h-11 w-full rounded-none px-4",
+                    "text-neutral-400",
+                    isActive && [
+                      "bg-neutral-800/80 text-white",
+                      "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2",
+                      "before:h-5 before:w-[2px] before:bg-white"
+                    ]
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-white" : "text-neutral-500"
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <span className="ml-4 text-[15px] font-normal tracking-[-0.01em]">
+                    {t(item.label)}
                   </span>
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-foreground truncate">
-                  {workspace.name}
-                </h2>
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
-                  <span className="text-xs text-muted-foreground">
-                    {isConnected ? t('sidebar.connected') : t('sidebar.connecting')}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </SidebarGroup>
-
-        <Separator />
-
-        {/* Navigation */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeNav === item.id}
-                    onClick={() => onNavChange(item.id)}
-                    className="w-full"
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{t(item.label)}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <Separator />
-
-        {/* Members */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-3">
-            <span>{t('sidebar.members')}</span>
-            <Badge variant="secondary" className="ml-2">
-              {members.length || 1}
-            </Badge>
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <ScrollArea className="h-[200px]">
-              <div className="px-3 space-y-1">
-                {/* Owner */}
-                {workspace.owner && (
-                  <div className="flex items-center gap-2 py-1.5 px-2 rounded-md">
-                    <div className="relative">
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={workspace.owner.profileImage} />
-                        <AvatarFallback className="text-xs">
-                          {workspace.owner.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-sidebar" />
-                    </div>
-                    <span className="text-sm text-foreground truncate flex-1">
-                      {workspace.owner.name}
-                    </span>
-                    <Badge variant="outline" className="text-[10px] px-1.5">
-                      {t('sidebar.host')}
-                    </Badge>
-                  </div>
-                )}
-                {/* Members */}
-                {members.map((member) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50"
-                  >
-                    <div className="relative">
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={member.profileImage} />
-                        <AvatarFallback className="text-xs">
-                          {member.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      {member.isOnline && (
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-sidebar" />
-                      )}
-                    </div>
-                    <span className="text-sm text-foreground truncate">
-                      {member.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
       </SidebarContent>
 
-      {/* Footer - Current User */}
-      <SidebarFooter className="border-t border-sidebar-border">
+      {/* Footer */}
+      <SidebarFooter className="mt-auto border-t border-neutral-800/50 p-3">
+        {/* Settings */}
+        <SidebarMenu className="mb-3">
+          {secondaryNav.map((item) => {
+            const isActive = activeNav === item.id;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => onNavChange(item.id)}
+                  className={cn(
+                    "h-11 w-full rounded-none px-4",
+                    "text-neutral-400",
+                    isActive && "bg-neutral-800/80 text-white"
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-white" : "text-neutral-500"
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <span className="ml-4 text-[15px] font-normal tracking-[-0.01em]">
+                    {t(item.label)}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+
+        {/* Divider */}
+        <div className="h-px bg-neutral-800/50 mx-2" />
+
+        {/* User Profile */}
         {user && (
-          <div className="flex items-center gap-2 p-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user.profileImage} />
-              <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+          <div className="mt-3">
+            <div className="px-3 py-3 mx-1 bg-neutral-900/50 border border-neutral-800/60">
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="h-11 w-11 shrink-0 overflow-hidden bg-gradient-to-br from-neutral-700 to-neutral-800">
+                  {user.profileImage ? (
+                    <img
+                      src={user.profileImage}
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <span className="text-base font-semibold text-neutral-300 uppercase tracking-tight">
+                        {user.name.charAt(0)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* User Info */}
+                <div className="flex flex-col min-w-0 flex-1 gap-1">
+                  <span className="text-[15px] font-medium text-neutral-100 truncate tracking-[-0.01em] leading-tight">
+                    {user.name}
+                  </span>
+                  {user.email && (
+                    <span className="text-[12px] text-neutral-500 truncate tracking-[-0.005em] leading-tight font-mono">
+                      {user.email}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Back Button */}
+        <button
+          onClick={() => router.push('/workspaces')}
+          className="w-full h-10 flex items-center gap-3 px-4 mt-2 text-neutral-500"
+        >
+          <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={1.5} />
+          <span className="text-[14px] tracking-[-0.01em]">
+            All workspaces
+          </span>
+        </button>
       </SidebarFooter>
+
+      <SidebarRail className="hidden" />
     </Sidebar>
   );
 }

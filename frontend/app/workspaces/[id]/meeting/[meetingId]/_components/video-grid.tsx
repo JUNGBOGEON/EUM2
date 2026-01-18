@@ -4,7 +4,6 @@ import { useCallback } from 'react';
 import Image from 'next/image';
 import { VideoOff } from 'lucide-react';
 import { RemoteVideo, LocalVideo, useAudioVideo } from 'amazon-chime-sdk-component-library-react';
-import { Badge } from '@/components/ui/badge';
 import { DelayedRemoteVideo } from './delayed-remote-video';
 
 interface UserInfo {
@@ -65,25 +64,25 @@ function UserAvatar({
   initial: string;
 }) {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center p-4">
+    <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-neutral-950">
       {profileImage ? (
-        <div className="w-20 h-20 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white/10 mb-4 aspect-square">
+        <div className="w-24 h-24 md:w-36 md:h-36 overflow-hidden rounded-full border-2 border-neutral-700 mb-4 aspect-square shadow-lg">
           <Image
             src={profileImage}
             alt={name}
-            width={128}
-            height={128}
+            width={144}
+            height={144}
             className="w-full h-full object-cover"
           />
         </div>
       ) : (
-        <div className="w-20 h-20 md:w-32 md:h-32 bg-blue-500/20 rounded-full flex items-center justify-center border-4 border-white/10 mb-4 aspect-square">
-          <span className="text-3xl md:text-5xl font-bold text-blue-400">
+        <div className="w-24 h-24 md:w-36 md:h-36 bg-neutral-900 flex items-center justify-center rounded-full border-2 border-neutral-700 mb-4 aspect-square shadow-lg">
+          <span className="text-4xl md:text-6xl font-medium text-neutral-400">
             {initial}
           </span>
         </div>
       )}
-      <div className="flex items-center gap-2 text-white/50 text-sm">
+      <div className="flex items-center gap-2 text-neutral-500 text-sm">
         <VideoOff className="w-4 h-4" />
         <span>카메라 꺼짐</span>
       </div>
@@ -144,8 +143,8 @@ export function VideoGrid({
   const gridClass = getGridClass(totalCount);
 
   return (
-    <div className="flex-1 p-4 bg-[#0f0f0f] h-full flex flex-col justify-center">
-      <div className={`grid gap-4 w-full h-full ${gridClass}`}>
+    <div className="flex-1 p-3 bg-black h-full flex flex-col justify-center">
+      <div className={`grid gap-3 w-full h-full ${gridClass}`}>
         {allParticipants.map((participant) => {
           let hasVideo = false;
           let tileId: number | undefined;
@@ -160,7 +159,7 @@ export function VideoGrid({
           return (
             <div
               key={participant.id}
-              className="relative bg-[#1a1a1a] rounded-xl overflow-hidden shadow-lg border border-white/10 w-full h-full min-h-0"
+              className="relative bg-neutral-950 overflow-hidden border border-neutral-800 w-full h-full min-h-0"
             >
               {hasVideo ? (
                 // Video ON
@@ -168,7 +167,7 @@ export function VideoGrid({
                   {participant.isLocal ? (
                     <LocalVideo className="w-full h-full object-cover" />
                   ) : tileId ? (
-                    // 원격 비디오: 딜레이 적용 여부에 따라 컴포넌트 선택
+                    // Remote video: choose component based on delay setting
                     delayEnabled ? (
                       <DelayedRemoteVideo
                         tileId={tileId}
@@ -191,13 +190,10 @@ export function VideoGrid({
               )}
 
               {/* Name Badge Overlay */}
-              <div className="absolute bottom-4 left-4 z-10">
-                <Badge
-                  variant="secondary"
-                  className="bg-black/60 text-white border-none text-sm px-3 py-1"
-                >
+              <div className="absolute bottom-3 left-3 z-10">
+                <div className="bg-black/80 text-white text-sm px-3 py-1.5 font-medium tracking-tight">
                   {participant.name} {participant.isLocal && '(나)'}
-                </Badge>
+                </div>
               </div>
             </div>
           );

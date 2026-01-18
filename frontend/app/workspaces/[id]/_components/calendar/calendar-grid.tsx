@@ -121,22 +121,29 @@ export function CalendarGrid({
   };
 
   return (
-    <div className="lg:col-span-2 border border-border rounded-xl p-4">
+    <div className="lg:col-span-2 border border-white/5 rounded-2xl p-6 bg-neutral-900/40 backdrop-blur-sm shadow-2xl">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold capitalize">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold capitalize text-white flex items-center gap-2">
           {new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(currentDate)}
         </h3>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onToday}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onToday}
+            className="border-white/10 bg-white/5 text-white hover:bg-white hover:text-black hover:border-transparent transition-all"
+          >
             {t('calendar.today')}
           </Button>
-          <Button variant="ghost" size="icon" onClick={onPreviousMonth}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onNextMonth}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center bg-white/5 rounded-lg border border-white/5 p-0.5">
+            <Button variant="ghost" size="icon" onClick={onPreviousMonth} className="h-7 w-7 text-neutral-400 hover:text-white hover:bg-white/10">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onNextMonth} className="h-7 w-7 text-neutral-400 hover:text-white hover:bg-white/10">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -146,9 +153,8 @@ export function CalendarGrid({
           <div
             key={idx}
             className={cn(
-              'text-center text-sm font-medium py-2',
-              idx === 0 && 'text-red-500',
-              idx === 6 && 'text-blue-500'
+              'text-center text-xs font-semibold uppercase tracking-wider py-2',
+              idx === 0 ? 'text-rose-400' : idx === 6 ? 'text-blue-400' : 'text-neutral-500'
             )}
           >
             {day}
@@ -161,35 +167,44 @@ export function CalendarGrid({
         {calendarDays.map(({ date, isCurrentMonth }, idx) => {
           const dayEvents = getEventsForDate(date);
           const isTodayDate = isToday(date);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
           return (
             <div
               key={idx}
               className={cn(
-                'min-h-[80px] p-1 border border-border rounded-lg cursor-pointer transition-colors hover:bg-muted/50',
-                !isCurrentMonth && 'opacity-40',
-                isTodayDate && 'bg-primary/10 border-primary'
+                'min-h-[100px] p-2 border rounded-xl cursor-pointer transition-all duration-200 group relative overflow-hidden',
+                'hover:ring-1 hover:ring-white/20 hover:bg-white/5',
+                isCurrentMonth ? 'bg-white/[0.02] border-white/5' : 'bg-transparent border-transparent opacity-30',
+                isTodayDate && 'bg-indigo-500/10 border-indigo-500/30 ring-1 ring-indigo-500/30'
               )}
               onClick={() => onDateClick(date)}
             >
-              <div
-                className={cn(
-                  'text-sm font-medium mb-1',
-                  isTodayDate && 'text-primary',
-                  date.getDay() === 0 && 'text-red-500',
-                  date.getDay() === 6 && 'text-blue-500'
+              <div className="flex justify-between items-start mb-1">
+                <span
+                  className={cn(
+                    'text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full',
+                    isTodayDate
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40'
+                      : isWeekend && isCurrentMonth ? (date.getDay() === 0 ? 'text-rose-400' : 'text-blue-400') : 'text-neutral-400 group-hover:text-white'
+                  )}
+                >
+                  {date.getDate()}
+                </span>
+                {dayEvents.length > 0 && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/20 group-hover:bg-white/50 transition-colors" />
                 )}
-              >
-                {date.getDate()}
               </div>
-              <div className="space-y-0.5">
+
+              <div className="space-y-1">
                 {dayEvents.slice(0, 3).map((event) => (
                   <div
                     key={event.id}
-                    className="text-xs px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80"
+                    className="text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium transition-transform hover:scale-105"
                     style={{
                       backgroundColor: `${getEventColor(event)}20`,
-                      color: getEventColor(event),
+                      color: hasBrightColor(getEventColor(event)) ? getEventColor(event) : '#e5e5e5',
+                      borderLeft: `2px solid ${getEventColor(event)}`
                     }}
                     onClick={(e) => onEventClick(event, e)}
                   >
@@ -197,8 +212,8 @@ export function CalendarGrid({
                   </div>
                 ))}
                 {dayEvents.length > 3 && (
-                  <div className="text-xs text-muted-foreground px-1">
-                    +{dayEvents.length - 3}개 더
+                  <div className="text-[10px] text-neutral-500 px-1 font-medium group-hover:text-neutral-300">
+                    +{dayEvents.length - 3} more
                   </div>
                 )}
               </div>
@@ -208,4 +223,11 @@ export function CalendarGrid({
       </div>
     </div>
   );
+}
+
+// Helper to check if color is bright (simple heuristic)
+function hasBrightColor(color: string) {
+  // If it's a hex code, simple check. For now assume yes or just return true/false based on preference.
+  // Ideally we'd calculate luminance. But let's just return true to keep original color or near white.
+  return true;
 }

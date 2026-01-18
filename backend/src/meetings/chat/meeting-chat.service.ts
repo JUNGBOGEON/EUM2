@@ -27,6 +27,7 @@ export class MeetingChatService {
             senderId,
             content,
             sourceLanguage,
+            translations: {}, // 빈 객체로 초기화 (NOT NULL 제약 조건 충족)
         });
         return this.chatRepository.save(message);
     }

@@ -164,11 +164,11 @@ export function RoleManagementSection({
         return (
             <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">{t('roles.title')}</h3>
+                    <Shield className="h-5 w-5 text-neutral-400" />
+                    <h3 className="font-semibold text-white">{t('roles.title')}</h3>
                 </div>
                 <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
                 </div>
             </div>
         );
@@ -179,10 +179,14 @@ export function RoleManagementSection({
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">{t('roles.title')}</h3>
+                    <Shield className="h-5 w-5 text-neutral-400" />
+                    <h3 className="font-semibold text-white">{t('roles.title')}</h3>
                 </div>
-                <Button size="sm" onClick={handleAddRole}>
+                <Button
+                    size="sm"
+                    onClick={handleAddRole}
+                    className="bg-white/5 text-white hover:bg-white/10 border border-white/10"
+                >
                     <Plus className="h-4 w-4 mr-1" />
                     {t('roles.add')}
                 </Button>
@@ -193,31 +197,31 @@ export function RoleManagementSection({
                 {roles.map((role) => (
                     <div
                         key={role.id}
-                        className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+                        className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 transition-colors group"
                     >
                         <div className="flex items-center gap-3">
                             <div
-                                className="w-3 h-3 rounded-full"
+                                className="w-3 h-3 rounded-full ring-2 ring-white/10"
                                 style={{ backgroundColor: role.color || '#6b7280' }}
                             />
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <span className="font-medium">{role.name}</span>
+                                    <span className="font-medium text-neutral-200 group-hover:text-white transition-colors">{role.name}</span>
                                     {role.isSystem && (
-                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-white/10 text-neutral-400 bg-white/5">
                                             <Lock className="h-2.5 w-2.5 mr-0.5" />
                                             {t('roles.system_role')}
                                         </Badge>
                                     )}
                                     {role.isDefault && (
-                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
                                             <Star className="h-2.5 w-2.5 mr-0.5" />
                                             {t('roles.default_role')}
                                         </Badge>
                                     )}
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    {countPermissions(role)}/5 권한 활성화
+                                <p className="text-xs text-neutral-500 mt-0.5">
+                                    {countPermissions(role)}/5 permissions
                                 </p>
                             </div>
                         </div>
@@ -226,7 +230,7 @@ export function RoleManagementSection({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="h-8 w-8 text-neutral-500 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
                                 onClick={() => handleEditRole(role)}
                             >
                                 <Pencil className="h-4 w-4" />
@@ -235,7 +239,7 @@ export function RoleManagementSection({
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                    className="h-8 w-8 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                                     onClick={() => handleDeleteRole(role)}
                                 >
                                     <Trash2 className="h-4 w-4" />
@@ -257,25 +261,25 @@ export function RoleManagementSection({
 
             {/* Delete Confirmation */}
             <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-neutral-900 border-white/10 text-white">
                     <AlertDialogHeader>
                         <AlertDialogTitle>{t('roles.delete')}</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogDescription className="text-neutral-400">
                             {t('roles.delete_confirm').replace('{name}', selectedRole?.name || '')}
                             <br />
-                            <span className="text-destructive">
+                            <span className="text-red-400 mt-2 block">
                                 {t('roles.delete_warning')}
                             </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>
+                        <AlertDialogCancel disabled={isDeleting} className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
                             {t('common.cancel')}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={confirmDelete}
                             disabled={isDeleting}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            className="bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20"
                         >
                             {isDeleting ? (
                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

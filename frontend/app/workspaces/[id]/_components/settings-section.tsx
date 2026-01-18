@@ -176,15 +176,23 @@ export function SettingsSection({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Settings className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">{t('settings_title')}</h2>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-xl border border-white/10">
+            <Settings className="h-5 w-5 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              {t('settings_title')}
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5">Manage workspace details and preferences</p>
+          </div>
         </div>
+
         {hasChanges && isOwner && (
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleSave} disabled={isSaving} className="bg-white text-black hover:bg-neutral-200">
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
@@ -195,225 +203,236 @@ export function SettingsSection({
         )}
       </div>
 
-      {/* Language Section */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium flex items-center gap-2">
-          <Globe className="h-4 w-4" />
-          {t('language_settings')}
-        </Label>
-        <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-          <SelectTrigger className="max-w-[200px]">
-            <SelectValue placeholder={t('select_language')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ko">한국어</SelectItem>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="zh-CN">中文 (简体)</SelectItem>
-            <SelectItem value="ja">日本語</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-8">
+          {/* Language Section */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-neutral-400" />
+              {t('language_settings')}
+            </Label>
+            <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
+                <SelectValue placeholder={t('select_language')} />
+              </SelectTrigger>
+              <SelectContent className="bg-neutral-900 border-white/10 text-white">
+                <SelectItem value="ko" className="focus:bg-white/10 focus:text-white">한국어</SelectItem>
+                <SelectItem value="en" className="focus:bg-white/10 focus:text-white">English</SelectItem>
+                <SelectItem value="zh-CN" className="focus:bg-white/10 focus:text-white">中文 (简体)</SelectItem>
+                <SelectItem value="ja" className="focus:bg-white/10 focus:text-white">日本語</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <Separator />
-
-      {/* Banner Section */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">{t('banner_image')}</Label>
-        <div
-          className="relative h-40 rounded-xl overflow-hidden bg-muted border border-border cursor-pointer group"
-          onClick={() => isOwner && bannerInputRef.current?.click()}
-        >
-          {banner ? (
-            <>
-              <img
-                src={banner}
-                alt={t('banner_image')}
-                className="w-full h-full object-cover"
-              />
-              {isOwner && (
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Camera className="h-8 w-8 text-white" />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-              <ImageIcon className="h-10 w-10 mb-2" />
-              <p className="text-sm">
-                {isOwner ? t('click_to_add_banner') : t('no_banner_image')}
-              </p>
-            </div>
-          )}
-        </div>
-        <input
-          ref={bannerInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleBannerChange}
-          disabled={!isOwner}
-        />
-      </div>
-
-      {/* Profile Image Section */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">{t('profile_image')}</Label>
-        <div className="flex items-center gap-4">
-          <div
-            className="relative w-24 h-24 rounded-2xl overflow-hidden bg-muted border border-border cursor-pointer group"
-            onClick={() => isOwner && thumbnailInputRef.current?.click()}
-          >
-            {thumbnail ? (
-              <>
-                <img
-                  src={thumbnail}
-                  alt={t('profile_image')}
-                  className="w-full h-full object-cover"
-                />
-                {isOwner && (
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera className="h-6 w-6 text-white" />
+          {/* Profile Image Section */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-neutral-300">{t('profile_image')}</Label>
+            <div className="flex items-center gap-6 p-4 rounded-xl border border-white/5 bg-white/[0.02]">
+              <div
+                className="relative w-24 h-24 rounded-2xl overflow-hidden bg-neutral-900 border border-white/10 cursor-pointer group shadow-lg"
+                onClick={() => isOwner && thumbnailInputRef.current?.click()}
+              >
+                {thumbnail ? (
+                  <>
+                    <img
+                      src={thumbnail}
+                      alt={t('profile_image')}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    {isOwner && (
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                        <Camera className="h-6 w-6 text-white" />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-neutral-500 bg-white/5">
+                    <span className="text-3xl font-bold">
+                      {workspace.name.charAt(0).toUpperCase()}
+                    </span>
+                    {isOwner && (
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                        <Camera className="h-6 w-6 text-white" />
+                      </div>
+                    )}
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <span className="text-3xl font-bold">
-                  {workspace.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs text-neutral-400 max-w-[200px] leading-relaxed">
+                  {t('recommended_size')}
+                </p>
+                {isOwner && thumbnail && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2"
+                    onClick={() => {
+                      setThumbnail('');
+                      setHasChanges(true);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1.5" />
+                    {t('delete')}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={thumbnailInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleThumbnailChange}
+              disabled={!isOwner}
+            />
+          </div>
+
+          {/* Name Section */}
+          <div className="space-y-3">
+            <Label htmlFor="name" className="text-sm font-semibold text-neutral-300">
+              {t('workspace_name')}
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={handleInputChange(setName)}
+              placeholder={t('workspace_name')}
+              disabled={!isOwner}
+              className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20"
+            />
+          </div>
+
+          {/* Description Section */}
+          <div className="space-y-3">
+            <Label htmlFor="description" className="text-sm font-semibold text-neutral-300">
+              {t('description')}
+            </Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={handleInputChange(setDescription)}
+              placeholder={t('description_placeholder')}
+              disabled={!isOwner}
+              className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 resize-none min-h-[120px]"
+              rows={4}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          {/* Banner Section */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-neutral-300">{t('banner_image')}</Label>
+            <div
+              className="relative h-48 rounded-xl overflow-hidden bg-neutral-900 border border-white/10 cursor-pointer group shadow-lg"
+              onClick={() => isOwner && bannerInputRef.current?.click()}
+            >
+              {banner ? (
+                <>
+                  <img
+                    src={banner}
+                    alt={t('banner_image')}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
+                  {isOwner && (
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                      <Camera className="h-8 w-8 text-white" />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-500 bg-white/[0.02]">
+                  <div className="p-4 rounded-full bg-white/5 mb-3 group-hover:bg-white/10 transition-colors">
+                    <ImageIcon className="h-8 w-8" />
+                  </div>
+                  <p className="text-sm font-medium">
+                    {isOwner ? t('click_to_add_banner') : t('no_banner_image')}
+                  </p>
+                </div>
+              )}
+            </div>
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleBannerChange}
+              disabled={!isOwner}
+            />
+          </div>
+
+          {/* Info Section */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-neutral-300">{t('workspace_info')}</Label>
+            <div className="grid gap-1 text-sm bg-white/5 rounded-xl border border-white/5 p-4">
+              <div className="flex justify-between py-2 border-b border-white/5">
+                <span className="text-neutral-500">{t('created_at')}</span>
+                <span className="text-neutral-300 font-mono">
+                  {new Date(workspace.createdAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
                 </span>
               </div>
-            )}
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              {t('recommended_size')}
-            </p>
-            {isOwner && thumbnail && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => {
-                  setThumbnail('');
-                  setHasChanges(true);
-                }}
-              >
-                <X className="h-4 w-4 mr-1" />
-                {t('delete')}
-              </Button>
-            )}
-          </div>
-        </div>
-        <input
-          ref={thumbnailInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleThumbnailChange}
-          disabled={!isOwner}
-        />
-      </div>
-
-      <Separator />
-
-      {/* Name Section */}
-      <div className="space-y-3">
-        <Label htmlFor="name" className="text-sm font-medium">
-          {t('workspace_name')}
-        </Label>
-        <Input
-          id="name"
-          value={name}
-          onChange={handleInputChange(setName)}
-          placeholder={t('workspace_name')}
-          disabled={!isOwner}
-          className="max-w-md"
-        />
-      </div>
-
-      {/* Description Section */}
-      <div className="space-y-3">
-        <Label htmlFor="description" className="text-sm font-medium">
-          {t('description')}
-        </Label>
-        <Textarea
-          id="description"
-          value={description}
-          onChange={handleInputChange(setDescription)}
-          placeholder={t('description_placeholder')}
-          disabled={!isOwner}
-          className="max-w-md resize-none"
-          rows={4}
-        />
-      </div>
-
-      {/* Info Section */}
-      <Separator />
-
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">{t('workspace_info')}</Label>
-        <div className="grid gap-4 text-sm max-w-md">
-          <div className="flex justify-between py-2 border-b border-border">
-            <span className="text-muted-foreground">{t('created_at')}</span>
-            <span className="text-foreground">
-              {new Date(workspace.createdAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </span>
-          </div>
-          {workspace.updatedAt && (
-            <div className="flex justify-between py-2 border-b border-border">
-              <span className="text-muted-foreground">{t('last_updated')}</span>
-              <span className="text-foreground">
-                {new Date(workspace.updatedAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </span>
+              {workspace.updatedAt && (
+                <div className="flex justify-between py-2 border-b border-white/5">
+                  <span className="text-neutral-500">{t('last_updated')}</span>
+                  <span className="text-neutral-300 font-mono">
+                    {new Date(workspace.updatedAt).toLocaleDateString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between py-2">
+                <span className="text-neutral-500">{t('admin')}</span>
+                <span className="text-neutral-300 flex items-center gap-2">
+                  {workspace.owner?.name || '-'}
+                  {workspace.owner && <CrownWrapper />}
+                </span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between py-2 border-b border-border">
-            <span className="text-muted-foreground">{t('admin')}</span>
-            <span className="text-foreground">{workspace.owner?.name || '-'}</span>
           </div>
         </div>
       </div>
+
+      <Separator className="bg-white/5" />
 
       {/* Role Management Section */}
       {(isOwner || permissions?.managePermissions) && (
         <>
-          <Separator />
           <RoleManagementSection
             workspaceId={workspace.id}
             isOwner={isOwner}
             canManagePermissions={permissions?.managePermissions}
           />
+          <Separator className="bg-white/5" />
         </>
       )}
 
       {/* Danger Zone */}
       {isOwner && (
         <>
-          <Separator />
           <div className="space-y-3">
-            <Label className="text-sm font-medium text-destructive">{t('danger_zone')}</Label>
-            <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5">
+            <Label className="text-sm font-bold text-red-500">{t('danger_zone')}</Label>
+            <div className="p-6 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-red-500" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-medium text-foreground">{t('delete_workspace')}</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <h4 className="font-bold text-red-400">{t('delete_workspace')}</h4>
+                  <p className="text-sm text-red-400/70 mt-1 max-w-xl">
                     {t('delete_warning')}
                   </p>
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="mt-3"
+                    className="mt-4 bg-red-500 hover:bg-red-600 text-white border-none"
                     onClick={() => setShowDeleteDialog(true)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -428,21 +447,21 @@ export function SettingsSection({
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-neutral-900 border-white/10 text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('confirm_delete_title')}</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-red-500">{t('confirm_delete_title')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
               <strong>{workspace.name}</strong> {t('confirm_delete_desc').replace('이 워크스페이스를', '')}
               <br /><br />
-              {t('delete_warning')}
+              <span className="text-red-400/80">{t('delete_warning')}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting} className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-red-500 text-white hover:bg-red-600 border-none"
             >
               {isDeleting ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -456,4 +475,12 @@ export function SettingsSection({
       </AlertDialog>
     </div>
   );
+}
+
+function CrownWrapper() {
+  return (
+    <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center">
+      <span className="text-[8px] text-black font-bold">👑</span>
+    </div>
+  )
 }

@@ -16,7 +16,6 @@ import {
   PenTool,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
@@ -61,6 +60,9 @@ interface MeetingControlsProps {
   // Original Audio Volume
   originalVolume?: number;
   isOriginalVolumeFading?: boolean;
+  // Mute original audio when translation is enabled
+  muteOriginalOnTranslation?: boolean;
+  onToggleMuteOriginal?: () => void;
   // Voice dubbing (내 목소리)
   hasVoiceEmbedding?: boolean;
   voiceDubbingEnabled?: boolean;
@@ -99,8 +101,10 @@ export function MeetingControls({
   ttsQueueLength = 0,
   delayEnabled = false,
   delayMs = 1500,
-  originalVolume = 0,
+  originalVolume = 100,
   isOriginalVolumeFading = false,
+  muteOriginalOnTranslation = true,
+  onToggleMuteOriginal,
   hasVoiceEmbedding = false,
   voiceDubbingEnabled = false,
   onToggleMute,
@@ -124,242 +128,252 @@ export function MeetingControls({
 
   return (
     <TooltipProvider>
-      <footer className="h-20 flex-shrink-0 flex items-center justify-center gap-2 px-4 bg-[#1a1a1a] border-t border-white/10">
-        {/* Audio Control */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleMute}
-              className={`h-12 w-12 rounded-full transition-colors ${
-                muted
-                  ? 'bg-red-500 hover:bg-red-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{muted ? '마이크 켜기' : '마이크 끄기'}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Video Control */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleVideo}
-              className={`h-12 w-12 rounded-full transition-colors ${
-                !isVideoEnabled
-                  ? 'bg-red-500 hover:bg-red-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              {isVideoEnabled ? (
-                <Video className="h-5 w-5" />
-              ) : (
-                <VideoOff className="h-5 w-5" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{isVideoEnabled ? '카메라 끄기' : '카메라 켜기'}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Screen Share */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleScreenShare}
-              className={`h-12 w-12 rounded-full transition-colors ${
-                isLocalUserSharing
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              {isLocalUserSharing ? (
-                <MonitorOff className="h-5 w-5" />
-              ) : (
-                <Monitor className="h-5 w-5" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{isLocalUserSharing ? '화면 공유 중지' : '화면 공유'}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Translation & TTS Controls */}
-        {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && (
-          <TranslationControls
-            translationEnabled={translationEnabled}
-            isTogglingTranslation={isTogglingTranslation}
-            onToggleTranslation={onToggleTranslation}
-            ttsEnabled={ttsEnabled}
-            isTogglingTTS={isTogglingTTS}
-            isTTSPlaying={isTTSPlaying}
-            ttsVolume={ttsVolume}
-            ttsQueueLength={ttsQueueLength}
-            onToggleTTS={onToggleTTS}
-            onSetTTSVolume={onSetTTSVolume}
-            onOpenTTSSettings={onOpenTTSSettings}
-            originalVolume={originalVolume}
-            isOriginalVolumeFading={isOriginalVolumeFading}
-            onSetOriginalVolume={onSetOriginalVolume}
-            hasVoiceEmbedding={hasVoiceEmbedding}
-            voiceDubbingEnabled={voiceDubbingEnabled}
-          />
-        )}
-
-        {/* Voice Focus (Noise Suppression) - 항상 표시 */}
-        {onToggleVoiceFocus && (
+      <footer className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-black border-t border-neutral-800">
+        {/* Left: Settings */}
+        <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={onToggleVoiceFocus}
-                disabled={isVoiceFocusLoading || !isVoiceFocusSupported}
-                className={`h-12 w-12 rounded-full transition-colors ${
-                  !isVoiceFocusSupported
-                    ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                    : isVoiceFocusEnabled
-                    ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
-                }`}
+                onClick={onOpenSettings}
+                className="h-12 w-12 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
               >
-                {isVoiceFocusLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <AudioLines className="h-5 w-5" />
-                )}
+                <Settings className="h-5 w-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>
-                {!isVoiceFocusSupported
-                  ? '이 브라우저에서 지원되지 않음'
-                  : isVoiceFocusLoading
-                  ? '처리 중...'
-                  : isVoiceFocusEnabled
-                  ? '노이즈 제거 끄기'
-                  : '노이즈 제거 켜기'}
-              </p>
+            <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+              <p>설정</p>
             </TooltipContent>
           </Tooltip>
-        )}
+        </div>
 
-        {/* Media Delay Settings */}
-        {onToggleDelay && onDelayMsChange && (
-          <DelaySettingsControl
-            delayEnabled={delayEnabled}
-            delayMs={delayMs}
-            onToggleDelay={onToggleDelay}
-            onDelayMsChange={onDelayMsChange}
-          />
-        )}
-
-        {/* Whiteboard Toggle */}
-        {onToggleWhiteboard && (
+        {/* Center: Primary Controls */}
+        <div className="flex items-center gap-3">
+          {/* Audio Control */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                onClick={onToggleWhiteboard}
-                className={`h-12 px-4 rounded-full transition-colors gap-2 ${
-                  isWhiteboardEnabled
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
+                size="icon"
+                onClick={onToggleMute}
+                className={`h-14 w-14 transition-colors ${
+                  muted
+                    ? 'bg-white text-black hover:bg-neutral-200'
+                    : 'bg-neutral-900 hover:bg-neutral-800 text-white'
                 }`}
               >
-                <PenTool className="h-5 w-5" />
-                <span className="text-sm font-medium">화이트보드</span>
+                {muted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{isWhiteboardEnabled ? '화이트보드 닫기' : '화이트보드 열기'}</p>
+            <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+              <p>{muted ? '음소거 해제' : '음소거'}</p>
             </TooltipContent>
           </Tooltip>
-        )}
 
-        {/* Settings */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onOpenSettings}
-              className="h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 text-white"
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>장치 설정</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Separator orientation="vertical" className="h-8 mx-2 bg-white/20" />
-
-        {/* Leave Meeting */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              onClick={() => setShowLeaveDialog(true)}
-              className="h-12 px-4 rounded-full bg-white/10 hover:bg-white/20 text-white gap-2"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="text-sm font-medium">나가기</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>회의에서 나가기</p>
-          </TooltipContent>
-        </Tooltip>
-
-        {/* End Meeting (Host only) */}
-        {isHost && onEndMeeting && (
+          {/* Video Control */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="destructive"
-                onClick={() => setShowEndDialog(true)}
-                className="h-12 px-4 rounded-full bg-red-500 hover:bg-red-600 text-white gap-2"
+                variant="ghost"
+                size="icon"
+                onClick={onToggleVideo}
+                className={`h-14 w-14 transition-colors ${
+                  !isVideoEnabled
+                    ? 'bg-white text-black hover:bg-neutral-200'
+                    : 'bg-neutral-900 hover:bg-neutral-800 text-white'
+                }`}
               >
-                <PhoneOff className="h-5 w-5" />
-                <span className="text-sm font-medium">회의 종료</span>
+                {isVideoEnabled ? (
+                  <Video className="h-6 w-6" />
+                ) : (
+                  <VideoOff className="h-6 w-6" />
+                )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>모든 참가자의 회의 종료</p>
+            <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+              <p>{isVideoEnabled ? '비디오 끄기' : '비디오 켜기'}</p>
             </TooltipContent>
           </Tooltip>
-        )}
+
+          {/* Screen Share */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggleScreenShare}
+                className={`h-14 w-14 transition-colors ${
+                  isLocalUserSharing
+                    ? 'bg-white text-black hover:bg-neutral-200'
+                    : 'bg-neutral-900 hover:bg-neutral-800 text-white'
+                }`}
+              >
+                {isLocalUserSharing ? (
+                  <MonitorOff className="h-6 w-6" />
+                ) : (
+                  <Monitor className="h-6 w-6" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+              <p>{isLocalUserSharing ? '공유 중지' : '화면 공유'}</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <div className="w-px h-10 bg-neutral-800 mx-1" />
+
+          {/* Translation & TTS Controls */}
+          {onToggleTranslation && onToggleTTS && onSetTTSVolume && onOpenTTSSettings && onSetOriginalVolume && onToggleMuteOriginal && (
+            <TranslationControls
+              translationEnabled={translationEnabled}
+              isTogglingTranslation={isTogglingTranslation}
+              onToggleTranslation={onToggleTranslation}
+              ttsEnabled={ttsEnabled}
+              isTogglingTTS={isTogglingTTS}
+              isTTSPlaying={isTTSPlaying}
+              ttsVolume={ttsVolume}
+              ttsQueueLength={ttsQueueLength}
+              onToggleTTS={onToggleTTS}
+              onSetTTSVolume={onSetTTSVolume}
+              onOpenTTSSettings={onOpenTTSSettings}
+              originalVolume={originalVolume}
+              isOriginalVolumeFading={isOriginalVolumeFading}
+              onSetOriginalVolume={onSetOriginalVolume}
+              muteOriginalOnTranslation={muteOriginalOnTranslation}
+              onToggleMuteOriginal={onToggleMuteOriginal}
+              hasVoiceEmbedding={hasVoiceEmbedding}
+              voiceDubbingEnabled={voiceDubbingEnabled}
+            />
+          )}
+
+          {/* Voice Focus (Noise Suppression) */}
+          {onToggleVoiceFocus && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleVoiceFocus}
+                  disabled={isVoiceFocusLoading || !isVoiceFocusSupported}
+                  className={`h-12 w-12 transition-colors ${
+                    !isVoiceFocusSupported
+                      ? 'bg-neutral-950 text-neutral-700 cursor-not-allowed'
+                      : isVoiceFocusEnabled
+                      ? 'bg-white text-black hover:bg-neutral-200'
+                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {isVoiceFocusLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <AudioLines className="h-5 w-5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+                <p>
+                  {!isVoiceFocusSupported
+                    ? '지원되지 않음'
+                    : isVoiceFocusLoading
+                    ? '로딩 중...'
+                    : isVoiceFocusEnabled
+                    ? '노이즈 억제 끄기'
+                    : '노이즈 억제 켜기'}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Media Delay Settings */}
+          {onToggleDelay && onDelayMsChange && (
+            <DelaySettingsControl
+              delayEnabled={delayEnabled}
+              delayMs={delayMs}
+              onToggleDelay={onToggleDelay}
+              onDelayMsChange={onDelayMsChange}
+            />
+          )}
+
+          {/* Whiteboard Toggle */}
+          {onToggleWhiteboard && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  onClick={onToggleWhiteboard}
+                  className={`h-12 px-5 transition-colors gap-2 ${
+                    isWhiteboardEnabled
+                      ? 'bg-white text-black hover:bg-neutral-200'
+                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <PenTool className="h-5 w-5" />
+                  <span className="text-sm font-medium">화이트보드</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+                <p>{isWhiteboardEnabled ? '화이트보드 닫기' : '화이트보드 열기'}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {/* Right: Leave/End Controls */}
+        <div className="flex items-center gap-3">
+          {/* Leave Meeting */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => setShowLeaveDialog(true)}
+                className="h-12 px-5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors gap-2"
+              >
+                <LogOut className="h-5 w-5" />
+                <span className="text-sm font-medium">나가기</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+              <p>회의 나가기</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* End Meeting (Host only) */}
+          {isHost && onEndMeeting && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowEndDialog(true)}
+                  className="h-12 px-5 bg-white text-black hover:bg-neutral-200 transition-colors gap-2"
+                >
+                  <PhoneOff className="h-5 w-5" />
+                  <span className="text-sm font-medium">종료</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-neutral-900 border-neutral-800 text-white">
+                <p>전체 회의 종료</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
         {/* Leave Dialog */}
         <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
-          <AlertDialogContent className="bg-[#252525] border-white/10">
+          <AlertDialogContent className="bg-neutral-950 border-neutral-800">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-white">회의에서 나가시겠습니까?</AlertDialogTitle>
-              <AlertDialogDescription className="text-white/60">
-                회의는 계속 진행되며, 나중에 다시 참가할 수 있습니다.
+              <AlertDialogTitle className="text-white tracking-tight">회의에서 나가시겠습니까?</AlertDialogTitle>
+              <AlertDialogDescription className="text-neutral-500">
+                회의는 계속 진행되며 나중에 다시 참여할 수 있습니다.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="bg-white/10 text-white border-white/10 hover:bg-white/20">
+              <AlertDialogCancel className="bg-neutral-900 text-white border-neutral-800 hover:bg-neutral-800">
                 취소
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={onLeave}
-                className="bg-white/20 text-white hover:bg-white/30"
+                className="bg-white text-black hover:bg-neutral-200"
               >
                 나가기
               </AlertDialogAction>
@@ -369,15 +383,15 @@ export function MeetingControls({
 
         {/* End Meeting Dialog */}
         <AlertDialog open={showEndDialog} onOpenChange={setShowEndDialog}>
-          <AlertDialogContent className="bg-[#252525] border-white/10">
+          <AlertDialogContent className="bg-neutral-950 border-neutral-800">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-white">회의를 종료하시겠습니까?</AlertDialogTitle>
-              <AlertDialogDescription className="text-white/60">
-                모든 참가자의 회의가 종료됩니다. 이 작업은 되돌릴 수 없습니다.
+              <AlertDialogTitle className="text-white tracking-tight">모든 참가자의 회의를 종료하시겠습니까?</AlertDialogTitle>
+              <AlertDialogDescription className="text-neutral-500">
+                모든 참가자가 연결 해제됩니다. 이 작업은 되돌릴 수 없습니다.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="bg-white/10 text-white border-white/10 hover:bg-white/20">
+              <AlertDialogCancel className="bg-neutral-900 text-white border-neutral-800 hover:bg-neutral-800">
                 취소
               </AlertDialogCancel>
               <AlertDialogAction
@@ -385,7 +399,7 @@ export function MeetingControls({
                   onEndMeeting?.();
                   setShowEndDialog(false);
                 }}
-                className="bg-red-500 text-white hover:bg-red-600"
+                className="bg-white text-black hover:bg-neutral-200"
               >
                 회의 종료
               </AlertDialogAction>

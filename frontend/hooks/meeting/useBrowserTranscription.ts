@@ -1385,13 +1385,16 @@ export function useBrowserTranscription({
     }
 
     // 다시 시작 (이전에 스트리밍 중이었다면)
+    // NOTE: startTranscriptionRef.current() 사용 - stale closure 방지
+    // setSelectedLanguage 콜백이 생성될 때 캡처된 startTranscription은
+    // 이전 selectedLanguage 값을 가지고 있으므로 ref를 사용해야 함
     if (wasStreaming && enabled) {
       setTimeout(() => {
         if (!isMountedRef.current) return;
-        startTranscription();
+        startTranscriptionRef.current();
       }, 500);
     }
-  }, [selectedLanguage, isChangingLanguage, sessionState, sessionId, enabled, stopTranscription, startTranscription]);
+  }, [selectedLanguage, isChangingLanguage, sessionState, sessionId, enabled, stopTranscription]);
 
   // 실패한 저장 재시도
   const retryFailedSaves = useCallback(async () => {

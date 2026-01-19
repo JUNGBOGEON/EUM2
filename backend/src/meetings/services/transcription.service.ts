@@ -408,8 +408,9 @@ export class TranscriptionService {
     // 2. 최소 길이 검사 (CJK는 2글자, 알파벳은 3글자 이상)
     const MIN_CJK_LENGTH = 2;
     const MIN_ALPHA_LENGTH = 3;
-    const isCJK =
-      /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(text);
+    const isCJK = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(
+      text,
+    );
     const minLength = isCJK ? MIN_CJK_LENGTH : MIN_ALPHA_LENGTH;
 
     if (text.length < minLength) {
@@ -546,7 +547,9 @@ export class TranscriptionService {
     // 2. 최소 길이 검사 (CJK는 2글자, 알파벳은 3글자 이상)
     const MIN_CJK_LENGTH = 2;
     const MIN_ALPHA_LENGTH = 3;
-    const isCJK = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(text);
+    const isCJK = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(
+      text,
+    );
     const minLength = isCJK ? MIN_CJK_LENGTH : MIN_ALPHA_LENGTH;
 
     if (text.length < minLength) {

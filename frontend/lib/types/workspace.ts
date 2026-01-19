@@ -99,6 +99,7 @@ export interface Workspace {
   description?: string;
   icon?: string;
   thumbnail?: string;
+  banner?: string;
   createdAt: string;
   updatedAt?: string;
   owner?: WorkspaceOwner;

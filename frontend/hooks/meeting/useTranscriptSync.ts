@@ -58,6 +58,18 @@ interface LanguageChangedPayload {
   timestamp: number;
 }
 
+/**
+ * 세션 종료 WebSocket 페이로드
+ */
+export interface SessionEndedPayload {
+  sessionId: string;
+  reason: 'host_ended' | 'timeout' | 'error';
+  timestamp: number;
+  meetingTitle?: string;
+  hostName?: string;
+  willGenerateSummary: boolean;
+}
+
 export interface UseTranscriptSyncOptions {
   /** 미팅 세션 ID */
   sessionId: string | undefined;
@@ -66,7 +78,7 @@ export interface UseTranscriptSyncOptions {
   /** 현재 사용자 attendeeId (자기 트랜스크립트 필터링용) */
   currentAttendeeId: string | null | undefined;
   /** 세션 종료 시 콜백 (호스트가 회의를 종료했을 때) */
-  onSessionEnded?: (reason: string) => void;
+  onSessionEnded?: (payload: SessionEndedPayload) => void;
 }
 
 export interface UseTranscriptSyncReturn {
@@ -423,7 +435,7 @@ export function useTranscriptSync({
 
     console.log('[TranscriptSync] Setting up sessionEnded listener');
 
-    const unsubscribe = on<{ sessionId: string; reason: string; timestamp: number }>(
+    const unsubscribe = on<SessionEndedPayload>(
       'sessionEnded',
       (payload) => {
         console.log('[TranscriptSync] 🛑 Session ended event received:', payload);
@@ -431,7 +443,7 @@ export function useTranscriptSync({
         // 현재 세션과 일치하는지 확인
         if (payload.sessionId === sessionId) {
           console.log('[TranscriptSync] 🚪 Current session ended, triggering callback');
-          onSessionEnded(payload.reason);
+          onSessionEnded(payload);
         }
       }
     );

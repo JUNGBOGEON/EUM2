@@ -279,7 +279,11 @@ export class ChimeService {
   /**
    * 세션 종료 (호스트만)
    */
-  async endSession(sessionId: string, hostId: string): Promise<MeetingSession> {
+  async endSession(
+    sessionId: string,
+    hostId: string,
+    generateSummary: boolean = true,
+  ): Promise<MeetingSession> {
     const session = await this.sessionRepository.findOne({
       where: { id: sessionId },
     });
@@ -291,6 +295,9 @@ export class ChimeService {
     if (session.hostId !== hostId) {
       throw new BadRequestException('호스트만 세션을 종료할 수 있습니다.');
     }
+
+    // 호스트 정보 조회
+    const hostInfo = await this.getHostInfo(hostId);
 
     if (session.chimeMeetingId) {
       // 먼저 트랜스크립션 중지
@@ -324,8 +331,14 @@ export class ChimeService {
     // Redis 세션 삭제
     await this.redisService.deleteMeetingSession(sessionId);
 
-    // 1. 세션 참가자들에게 세션 종료 알림 (미팅 페이지에서 자동 퇴장용)
-    this.workspaceGateway.broadcastSessionEnded(sessionId, 'host_ended');
+    // 1. 세션 참가자들에게 세션 종료 알림 (미팅 페이지에서 모달 표시용)
+    this.workspaceGateway.broadcastSessionEnded({
+      sessionId,
+      reason: 'host_ended',
+      meetingTitle: session.title,
+      hostName: hostInfo?.name,
+      willGenerateSummary: generateSummary,
+    });
 
     // 2. 워크스페이스 멤버들에게 세션 상태 업데이트 (UI 업데이트용)
     this.workspaceGateway.broadcastSessionUpdate({

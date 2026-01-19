@@ -28,6 +28,7 @@ export type {
 export type {
   UseTranscriptSyncReturn,
   UseTranscriptSyncOptions,
+  SessionEndedPayload,
 } from './useTranscriptSync';
 export type {
   UseTTSReturn,

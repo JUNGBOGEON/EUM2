@@ -94,10 +94,6 @@
         {
           "name": "REDIS_PASSWORD",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:REDIS_PASSWORD::"
-        },
-        {
-          "name": "AI_SERVER_URL",
-          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:AI_SERVER_URL::"
         }
       ],
       "healthCheck": {

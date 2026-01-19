@@ -121,105 +121,125 @@ export function CalendarGrid({
   };
 
   return (
-    <div className="lg:col-span-2 border border-white/5 rounded-2xl p-6 bg-neutral-900/40 backdrop-blur-sm shadow-2xl">
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-bold capitalize text-white flex items-center gap-2">
-          {new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(currentDate)}
+    <div className="lg:col-span-2 flex flex-col h-full">
+      {/* Calendar Header - Minimalist & Airy */}
+      <div className="flex items-center justify-between mb-8 pl-2">
+        <h3 className="text-3xl font-bold capitalize text-white tracking-tight flex items-center gap-3">
+          {new Intl.DateTimeFormat(locale, { month: 'long' }).format(currentDate)}
+          <span className="text-neutral-600 font-light">
+            {currentDate.getFullYear()}
+          </span>
         </h3>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-1 bg-neutral-900/50 rounded-full border border-white/5 p-1 backdrop-blur-md">
+          <Button variant="ghost" size="icon" onClick={onPreviousMonth} className="h-8 w-8 rounded-full text-neutral-400 hover:text-white hover:bg-white/10">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={onToday}
-            className="border-white/10 bg-white/5 text-white hover:bg-white hover:text-black hover:border-transparent transition-all"
+            className="h-8 px-3 text-xs rounded-full text-neutral-300 hover:text-white hover:bg-white/10 font-medium"
           >
             {t('calendar.today')}
           </Button>
-          <div className="flex items-center bg-white/5 rounded-lg border border-white/5 p-0.5">
-            <Button variant="ghost" size="icon" onClick={onPreviousMonth} className="h-7 w-7 text-neutral-400 hover:text-white hover:bg-white/10">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onNextMonth} className="h-7 w-7 text-neutral-400 hover:text-white hover:bg-white/10">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          <Button variant="ghost" size="icon" onClick={onNextMonth} className="h-8 w-8 rounded-full text-neutral-400 hover:text-white hover:bg-white/10">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Days of Week */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {weekDays.map((day, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              'text-center text-xs font-semibold uppercase tracking-wider py-2',
-              idx === 0 ? 'text-rose-400' : idx === 6 ? 'text-blue-400' : 'text-neutral-500'
-            )}
-          >
-            {day}
-          </div>
-        ))}
-      </div>
+      {/* Glass Panel */}
+      <div className="relative flex-1 bg-white/[0.02] backdrop-blur-2xl rounded-3xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
 
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {calendarDays.map(({ date, isCurrentMonth }, idx) => {
-          const dayEvents = getEventsForDate(date);
-          const isTodayDate = isToday(date);
-          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-          return (
+        {/* Days of Week - Sleek Header */}
+        <div className="grid grid-cols-7 border-b border-white/5 bg-white/[0.01]">
+          {weekDays.map((day, idx) => (
             <div
               key={idx}
               className={cn(
-                'min-h-[100px] p-2 border rounded-xl cursor-pointer transition-all duration-200 group relative overflow-hidden',
-                'hover:ring-1 hover:ring-white/20 hover:bg-white/5',
-                isCurrentMonth ? 'bg-white/[0.02] border-white/5' : 'bg-transparent border-transparent opacity-30',
-                isTodayDate && 'bg-indigo-500/10 border-indigo-500/30 ring-1 ring-indigo-500/30'
+                'text-center text-[10px] font-medium uppercase tracking-[0.2em] py-4',
+                idx === 0 ? 'text-rose-400/70' : idx === 6 ? 'text-blue-400/70' : 'text-neutral-500'
               )}
-              onClick={() => onDateClick(date)}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span
-                  className={cn(
-                    'text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full',
-                    isTodayDate
-                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40'
-                      : isWeekend && isCurrentMonth ? (date.getDay() === 0 ? 'text-rose-400' : 'text-blue-400') : 'text-neutral-400 group-hover:text-white'
-                  )}
-                >
-                  {date.getDate()}
-                </span>
-                {dayEvents.length > 0 && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/20 group-hover:bg-white/50 transition-colors" />
-                )}
-              </div>
-
-              <div className="space-y-1">
-                {dayEvents.slice(0, 3).map((event) => (
-                  <div
-                    key={event.id}
-                    className="text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium transition-transform hover:scale-105"
-                    style={{
-                      backgroundColor: `${getEventColor(event)}20`,
-                      color: hasBrightColor(getEventColor(event)) ? getEventColor(event) : '#e5e5e5',
-                      borderLeft: `2px solid ${getEventColor(event)}`
-                    }}
-                    onClick={(e) => onEventClick(event, e)}
-                  >
-                    {event.title}
-                  </div>
-                ))}
-                {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-neutral-500 px-1 font-medium group-hover:text-neutral-300">
-                    +{dayEvents.length - 3} more
-                  </div>
-                )}
-              </div>
+              {day}
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Calendar Grid - Borderless Modern Feel */}
+        <div className="grid grid-cols-7 flex-1">
+          {calendarDays.map(({ date, isCurrentMonth }, idx) => {
+            const dayEvents = getEventsForDate(date);
+            const isTodayDate = isToday(date);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+            // Simple row borders logic (every 7th item starts a new row, but we can also rely on grid-cols-7)
+            // We'll use negative margins or just border-right/bottom for grid division
+
+            return (
+              <div
+                key={idx}
+                className={cn(
+                  'relative min-h-[120px] p-3 transition-all duration-300 group',
+                  'border-b border-r border-white/[0.03]', // Subtle grid lines
+                  // Remove right border for last column to be cleaner
+                  (idx + 1) % 7 === 0 && 'border-r-0',
+
+                  isCurrentMonth ? 'bg-transparent' : 'bg-neutral-950/30',
+                  !isCurrentMonth && 'opacity-40 saturate-0', // Dim non-current days significantly
+
+                  'hover:bg-white/[0.03]' // Subtle hover
+                )}
+                onClick={() => onDateClick(date)}
+              >
+                {/* Active Day Indicator (Background Glow) - Removed for cleaner look */}
+
+                <div className="relative z-10 flex justify-between items-start mb-3">
+                  <span
+                    className={cn(
+                      'text-sm transition-all duration-300',
+                      isTodayDate
+                        ? 'flex items-center justify-center w-7 h-7 rounded-full bg-white text-neutral-950 font-bold'
+                        : cn(
+                          'font-medium',
+                          isWeekend ? (date.getDay() === 0 ? 'text-rose-400' : 'text-blue-400') : 'text-neutral-400 group-hover:text-neutral-200'
+                        )
+                    )}
+                  >
+                    {date.getDate()}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 relative z-10">
+                  {dayEvents.slice(0, 3).map((event) => (
+                    <div
+                      key={event.id}
+                      className="group/event relative pl-3 py-1 pr-2 rounded-sm text-[11px] font-medium leading-tight truncate transition-all duration-200 hover:translate-x-1"
+                      onClick={(e) => onEventClick(event, e)}
+                    >
+                      {/* Vertical Bar Indicator */}
+                      <div
+                        className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full"
+                        style={{ backgroundColor: getEventColor(event) }}
+                      />
+                      {/* Subtle background on hover */}
+                      <div
+                        className="absolute inset-0 rounded-sm bg-white/0 group-hover/event:bg-white/5 transition-colors -z-10"
+                      />
+                      <span style={{ color: '#e5e5e5' }}>{event.title}</span>
+                    </div>
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <div className="text-[10px] text-neutral-600 pl-3 font-medium group-hover:text-neutral-400 transition-colors">
+                      +{dayEvents.length - 3} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

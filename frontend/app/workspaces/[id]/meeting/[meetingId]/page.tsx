@@ -438,6 +438,7 @@ function MeetingRoomContent() {
             <FloatingSubtitle
               translations={recentTranslations}
               getParticipantByAttendeeId={getParticipantByAttendeeId}
+              isWhiteboardActive={showWhiteboard}
             />
           )}
         </div>

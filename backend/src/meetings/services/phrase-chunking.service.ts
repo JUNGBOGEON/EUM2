@@ -167,10 +167,7 @@ export class PhraseChunkingService {
     // 남은 텍스트 처리
     const remaining = currentPhrase.trim();
     if (remaining) {
-      if (
-        phrases.length > 0 &&
-        remaining.length < this.MIN_PHRASE_LENGTH * 2
-      ) {
+      if (phrases.length > 0 && remaining.length < this.MIN_PHRASE_LENGTH * 2) {
         // 너무 짧으면 이전 구문과 병합
         phrases[phrases.length - 1] += ' ' + remaining;
       } else {

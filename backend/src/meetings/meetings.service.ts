@@ -168,7 +168,11 @@ export class MeetingsService {
       `[Session End] Flushed ${flushResult.flushed} transcriptions for session ${sessionId}`,
     );
 
-    const session = await this.chimeService.endSession(sessionId, hostId);
+    const session = await this.chimeService.endSession(
+      sessionId,
+      hostId,
+      generateSummary,
+    );
 
     // 요약 생성 (비동기 - 세션 종료 응답을 블로킹하지 않음)
     if (generateSummary) {

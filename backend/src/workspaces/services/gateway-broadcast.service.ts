@@ -103,6 +103,19 @@ export interface SummaryStatusPayload {
 }
 
 /**
+ * Session Ended Payload
+ * Sent to all participants when a meeting is ended by the host
+ */
+export interface SessionEndedPayload {
+  sessionId: string;
+  reason: 'host_ended' | 'timeout' | 'error';
+  timestamp: number;
+  meetingTitle?: string;
+  hostName?: string;
+  willGenerateSummary: boolean;
+}
+
+/**
  * Language Changed Payload
  */
 export interface LanguageChangedPayload {
@@ -173,19 +186,15 @@ export class GatewayBroadcastService {
   /**
    * Broadcast session ended to all participants
    */
-  broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
-    const roomName = `session:${sessionId}`;
+  broadcastSessionEnded(payload: SessionEndedPayload) {
+    const roomName = `session:${payload.sessionId}`;
     const clientCount = this.getRoomClientCount(roomName);
 
     this.logger.log(
-      `[Session Ended] Broadcasting to ${roomName}: ${clientCount} clients, reason: ${reason}`,
+      `[Session Ended] Broadcasting to ${roomName}: ${clientCount} clients, reason: ${payload.reason}, willGenerateSummary: ${payload.willGenerateSummary}`,
     );
 
-    this.server.to(roomName).emit('sessionEnded', {
-      sessionId,
-      reason,
-      timestamp: Date.now(),
-    });
+    this.server.to(roomName).emit('sessionEnded', payload);
   }
 
   // ==========================================

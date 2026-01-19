@@ -30,6 +30,7 @@ import {
   useParticipantVolume,
   DEFAULT_MEDIA_DELAY_CONFIG,
 } from '@/hooks/meeting';
+import type { SessionEndedPayload } from '@/hooks/meeting';
 import { useVoiceEnrollment } from '@/hooks/useVoiceEnrollment';
 // New modular components (Main 브랜치의 컴포넌트들)
 import {
@@ -41,6 +42,7 @@ import {
   FloatingSubtitle,
   EndMeetingDialog,
   TTSSettingsDialog,
+  SessionEndedModal,
 } from './_components';
 // Legacy components for loading/error states
 import {
@@ -64,6 +66,10 @@ function MeetingRoomContent() {
   const [showWhiteboard, setShowWhiteboard] = useState(false); // 화이트보드 상태 추가
   const [showTTSSettings, setShowTTSSettings] = useState(false); // TTS 설정 다이얼로그
   const [muteOriginalOnTranslation, setMuteOriginalOnTranslation] = useState(true); // 번역 시 원본 음성 음소거 (기본: ON)
+  
+  // 세션 종료 모달 상태 (호스트가 회의를 종료했을 때)
+  const [showSessionEndedModal, setShowSessionEndedModal] = useState(false);
+  const [sessionEndedPayload, setSessionEndedPayload] = useState<SessionEndedPayload | null>(null);
 
   // Voice dubbing state (내 목소리 TTS)
   const [hasVoiceEmbedding, setHasVoiceEmbedding] = useState(false);
@@ -161,9 +167,9 @@ function MeetingRoomContent() {
     });
   }, [meeting, meetingStartTime]);
 
-  // 세션 종료 시 핸들러 (호스트가 회의를 종료했을 때 다른 참가자들 자동 퇴장)
-  const handleSessionEnded = useCallback(async (reason: string) => {
-    console.log('[MeetingPage] 🛑 Session ended by host, reason:', reason);
+  // 세션 종료 시 핸들러 (호스트가 회의를 종료했을 때 다른 참가자들에게 모달 표시)
+  const handleSessionEnded = useCallback(async (payload: SessionEndedPayload) => {
+    console.log('[MeetingPage] 🛑 Session ended by host:', payload);
 
     // 트랜스크립션 중지 (ref 사용)
     try {
@@ -179,9 +185,17 @@ function MeetingRoomContent() {
       console.error('[MeetingPage] Failed to leave meeting:', error);
     }
 
-    // 워크스페이스 페이지로 리다이렉트
+    // 모달 표시 (확인 버튼 클릭 시 리다이렉트)
+    setSessionEndedPayload(payload);
+    setShowSessionEndedModal(true);
+  }, [meetingManager]);
+
+  // 세션 종료 모달 확인 핸들러
+  const handleSessionEndedConfirm = useCallback(() => {
+    setShowSessionEndedModal(false);
+    setSessionEndedPayload(null);
     router.push(`/workspaces/${workspaceId}`);
-  }, [meetingManager, router, workspaceId]);
+  }, [router, workspaceId]);
 
   // 트랜스크립트 동기화 훅 (로컬 + 원격 트랜스크립트 통합)
   const {
@@ -535,6 +549,13 @@ function MeetingRoomContent() {
         voiceDubbingEnabled={voiceDubbingEnabled}
         isTogglingVoiceDubbing={isTogglingVoiceDubbing}
         onToggleVoiceDubbing={handleToggleVoiceDubbing}
+      />
+
+      {/* Session Ended Modal (호스트가 회의를 종료했을 때 다른 참가자들에게 표시) */}
+      <SessionEndedModal
+        isOpen={showSessionEndedModal}
+        payload={sessionEndedPayload}
+        onConfirm={handleSessionEndedConfirm}
       />
     </div>
   );

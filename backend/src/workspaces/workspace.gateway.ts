@@ -283,8 +283,17 @@ export class WorkspaceGateway
     this.broadcastService.broadcastSessionUpdate(payload);
   }
 
-  broadcastSessionEnded(sessionId: string, reason: string = 'host_ended') {
-    this.broadcastService.broadcastSessionEnded(sessionId, reason);
+  broadcastSessionEnded(payload: {
+    sessionId: string;
+    reason: 'host_ended' | 'timeout' | 'error';
+    meetingTitle?: string;
+    hostName?: string;
+    willGenerateSummary: boolean;
+  }) {
+    this.broadcastService.broadcastSessionEnded({
+      ...payload,
+      timestamp: Date.now(),
+    });
   }
 
   broadcastSummaryStatus(payload: SummaryStatusPayload) {

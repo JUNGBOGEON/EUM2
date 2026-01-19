@@ -73,8 +73,7 @@ export class TranslationService {
    * Key: `${parentResultId}:${targetLanguage}`
    * Value: Map<phraseIndex, translatedText>
    */
-  private phraseTranslationBuffer: Map<string, Map<number, string>> =
-    new Map();
+  private phraseTranslationBuffer: Map<string, Map<number, string>> = new Map();
 
   constructor(
     private participantPreferenceService: ParticipantPreferenceService,
@@ -189,7 +188,9 @@ export class TranslationService {
 
     this.logger.log(
       `[Translation] Processing: speaker=${speakerName}(${speakerUserId}), sourceLanguage=${sourceLanguage}, text="${originalText.substring(0, 30)}..."` +
-        (isPhraseChunk ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]` : ''),
+        (isPhraseChunk
+          ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]`
+          : ''),
     );
 
     try {
@@ -381,7 +382,9 @@ export class TranslationService {
       try {
         this.logger.log(
           `[Translation] Translating to ${targetLanguage} for users: ${userIds.join(', ')}` +
-            (isPhraseChunk ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]` : ''),
+            (isPhraseChunk
+              ? ` [Phrase ${phraseIndex}${isLastPhrase ? ' LAST' : ''}]`
+              : ''),
         );
 
         // 항상 직접 번역 사용 (문맥 인식 번역은 추출 오류로 비활성화)
@@ -425,7 +428,10 @@ export class TranslationService {
             this.logger.debug(
               `[Translation] Sending translated transcript to user: ${userId}`,
             );
-            await this.workspaceGateway.sendTranslatedTranscript(userId, payload);
+            await this.workspaceGateway.sendTranslatedTranscript(
+              userId,
+              payload,
+            );
           }),
         );
 
@@ -436,13 +442,19 @@ export class TranslationService {
 
         // TTS 처리 (비동기, 번역 전송과 별개로 처리)
         // 구문 단위 번역일 경우: 버퍼에 저장 후 마지막 구문에서 전체 합쳐서 TTS 처리
-        if (isPhraseChunk && parentResultId !== undefined && phraseIndex !== undefined) {
+        if (
+          isPhraseChunk &&
+          parentResultId !== undefined &&
+          phraseIndex !== undefined
+        ) {
           // 구문 번역 결과를 버퍼에 저장
           const bufferKey = `${parentResultId}:${targetLanguage}`;
           if (!this.phraseTranslationBuffer.has(bufferKey)) {
             this.phraseTranslationBuffer.set(bufferKey, new Map());
           }
-          this.phraseTranslationBuffer.get(bufferKey)!.set(phraseIndex, translatedText);
+          this.phraseTranslationBuffer
+            .get(bufferKey)!
+            .set(phraseIndex, translatedText);
 
           this.logger.debug(
             `[TTS] Buffered phrase ${phraseIndex} for ${bufferKey}: "${translatedText.substring(0, 20)}..."`,

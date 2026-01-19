@@ -101,7 +101,9 @@ export class PollyCacheService {
             CACHE_TTL.TTS_AUDIO_CACHE || 24 * 60 * 60 * 1000,
           )
           .catch((err) =>
-            this.logger.warn(`[TTS Cache] Failed to update presigned URL: ${err.message}`),
+            this.logger.warn(
+              `[TTS Cache] Failed to update presigned URL: ${err.message}`,
+            ),
           );
 
         return {
@@ -184,7 +186,9 @@ export class PollyCacheService {
 
     try {
       // Redis 캐시 확인 (Base64 데이터 포함)
-      const cached = await this.redisService.get<TTSCacheMetadata & { audioBase64?: string }>(cacheKey);
+      const cached = await this.redisService.get<
+        TTSCacheMetadata & { audioBase64?: string }
+      >(cacheKey);
 
       if (cached?.audioBase64) {
         this.logger.debug(`[TTS Realtime] Cache hit (Base64): ${cacheKey}`);
@@ -218,7 +222,11 @@ export class PollyCacheService {
 
       // 비동기로 캐시 저장 (결과 대기 안함)
       this.redisService
-        .set(cacheKey, cacheData, CACHE_TTL.TTS_AUDIO_CACHE || 24 * 60 * 60 * 1000)
+        .set(
+          cacheKey,
+          cacheData,
+          CACHE_TTL.TTS_AUDIO_CACHE || 24 * 60 * 60 * 1000,
+        )
         .catch((err) =>
           this.logger.warn(`[TTS Realtime] Cache save failed: ${err.message}`),
         );

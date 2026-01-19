@@ -6,6 +6,7 @@ export { CommunicationPanel } from './communication-panel';
 export { DeviceSettingsDialog } from './device-settings-dialog';
 export { FloatingSubtitle } from './floating-subtitle';
 export { EndMeetingDialog } from './end-meeting-dialog';
+export { SessionEndedModal } from './session-ended-modal';
 export { TTSSettingsDialog } from './tts-settings-dialog';
 export { TranslationControls } from './translation-controls';
 export { DelaySettingsControl } from './delay-settings-control';

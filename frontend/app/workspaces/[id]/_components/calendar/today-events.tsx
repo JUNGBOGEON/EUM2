@@ -1,112 +1,154 @@
 'use client';
 
 import Image from 'next/image';
-import { Calendar, Clock, User } from 'lucide-react';
+import { Calendar, Clock, User, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button'; // Added Button
 import type { WorkspaceEvent } from '../../_lib/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 interface TodayEventsProps {
   events: WorkspaceEvent[];
+  date: Date; // Added date
   onEventClick: (event: WorkspaceEvent, e: React.MouseEvent) => void;
+  onAddEvent?: () => void; // Added onAddEvent
 }
 
-const getEventColor = (event: WorkspaceEvent) => {
-  if (event.color) return event.color;
-  if (event.eventType) return event.eventType.color;
-  return '#8b5cf6';
-};
-
-export function TodayEvents({ events, onEventClick }: TodayEventsProps) {
+export function TodayEvents({ events, date, onEventClick, onAddEvent }: TodayEventsProps) {
   const { language, t } = useLanguage();
+
+  const getLocale = (lang: string) => {
+    switch (lang) {
+      case 'en': return 'en-US';
+      case 'ja': return 'ja-JP';
+      case 'zh-CN': return 'zh-CN';
+      default: return 'ko-KR';
+    }
+  };
+
+  const locale = getLocale(language);
+
+  // Check if dates are same day
+  const isSelectedDateToday = (d: Date) => {
+    const today = new Date();
+    return (
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
+    );
+  };
+
+  const formatTitleDate = (d: Date) => {
+    return new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric' }).format(d);
+  };
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    const locale = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : language === 'zh-CN' ? 'zh-CN' : 'ko-KR';
     return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   };
 
+  const getEventColor = (event: WorkspaceEvent) => {
+    if (event.color) return event.color;
+    if (event.eventType) return event.eventType.color;
+    return '#8b5cf6';
+  };
+
   return (
-    <div className="border border-white/5 rounded-2xl p-6 bg-neutral-900/40 backdrop-blur-sm shadow-xl h-full flex flex-col">
-      <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-white">
-        <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
-          <Clock className="h-4 w-4 text-orange-400" />
+    <div className="h-full flex flex-col pl-2">
+      <div className="flex items-center justify-between mb-8">
+        <h3 className="text-xl font-bold text-white flex items-center gap-3">
+          <span className="w-1.5 h-6 bg-gradient-to-b from-rose-500 to-orange-500 rounded-full" />
+          {isSelectedDateToday(date) ? t('calendar.today_title') : `${formatTitleDate(date)} 일정`}
+        </h3>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs font-mono text-neutral-400 border-white/10 bg-white/5">
+            {events.length}개의 일정
+          </Badge>
+          {onAddEvent && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onAddEvent}
+              className="h-6 w-6 rounded-full text-neutral-400 hover:text-white hover:bg-white/10"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        {t('calendar.today_title')}
-        <span className="ml-auto text-xs font-normal text-neutral-500 bg-white/5 px-2 py-0.5 rounded-full">
-          {events.length}
-        </span>
-      </h3>
+      </div>
 
       <ScrollArea className="flex-1 -mr-4 pr-4">
         {events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-              <Calendar className="h-6 w-6 text-neutral-600" />
+          <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+            <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center mb-4 rotate-3">
+              <Calendar className="h-6 w-6 text-neutral-500" />
             </div>
             <p className="text-sm text-neutral-400 font-medium">{t('calendar.no_events_today')}</p>
-            <p className="text-xs text-neutral-600 mt-1">Check back later or schedule something new.</p>
+            <p className="text-xs text-neutral-600 mt-1 max-w-[200px]">
+              {isSelectedDateToday(date)
+                ? "오늘 예정된 일정이 없습니다.\n여유로운 하루를 보내세요."
+                : "예정된 일정이 없습니다.\n새로운 일정을 추가해보세요."}
+            </p>
+            {onAddEvent && (
+              <Button
+                variant="link"
+                onClick={onAddEvent}
+                className="mt-2 text-blue-400 hover:text-blue-300 text-xs"
+              >
+                + 일정 추가하기
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="space-y-3">
-            {events.map((event) => (
-              <div
-                key={event.id}
-                className="group p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 cursor-pointer transition-all duration-200 hover:border-white/10"
-                onClick={(e) => onEventClick(event, e)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div
-                      className="w-2 h-2 rounded-full ring-2 ring-transparent group-hover:ring-white/10 transition-all"
-                      style={{ backgroundColor: getEventColor(event) }}
-                    />
-                    <span className="font-medium text-sm text-neutral-200 group-hover:text-white truncate transition-colors">
-                      {event.title}
-                    </span>
-                  </div>
-                  <Badge variant="secondary" className="text-[10px] bg-white/5 hover:bg-white/10 text-neutral-400 border-none px-1.5 py-0 h-5">
-                    {event.eventType ? event.eventType.name : t('common.others')}
-                  </Badge>
-                </div>
+          <div className="space-y-2">
+            {events.map((event) => {
+              const color = getEventColor(event);
+              return (
+                <div
+                  key={event.id}
+                  className="group relative flex items-start gap-3 p-3 rounded-2xl hover:bg-white/[0.04] active:scale-[0.98] transition-all cursor-pointer border border-transparent hover:border-white/5"
+                  onClick={(e) => onEventClick(event, e)}
+                >
+                  {/* Color Indicator */}
+                  <div
+                    className="w-1 self-stretch rounded-full opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0 my-1"
+                    style={{ backgroundColor: color }}
+                  />
 
-                <div className="flex items-center gap-2 text-xs text-neutral-500 group-hover:text-neutral-400 mb-2">
-                  <Clock className="h-3 w-3" />
-                  <span>
-                    {event.isAllDay
-                      ? t('calendar.event.all_day_label')
-                      : `${formatTime(event.startTime)}${event.endTime ? ` - ${formatTime(event.endTime)}` : ''}`}
-                  </span>
-                </div>
-
-                {event.description && (
-                  <p className="text-xs text-neutral-500 line-clamp-2 mb-2 group-hover:text-neutral-400">
-                    {event.description}
-                  </p>
-                )}
-
-                {event.createdBy && (
-                  <div className="flex items-center gap-1.5 pt-2 border-t border-white/5">
-                    {event.createdBy.profileImage ? (
-                      <Image
-                        src={event.createdBy.profileImage}
-                        alt={event.createdBy.name}
-                        width={16}
-                        height={16}
-                        className="rounded-full ring-1 ring-white/10"
-                      />
-                    ) : (
-                      <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center">
-                        <User className="h-2.5 w-2.5 text-neutral-400" />
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 py-0.5">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-[10px] font-bold tracking-wide uppercase opacity-80"
+                          style={{ color: color }}
+                        >
+                          {event.isAllDay ? 'ALL DAY' : formatTime(event.startTime)}
+                        </span>
                       </div>
-                    )}
-                    <span className="text-[10px] text-neutral-500">{event.createdBy.name}</span>
+                    </div>
+
+                    <h4 className="text-sm font-semibold text-neutral-200 group-hover:text-white leading-snug mb-1 truncate">
+                      {event.title}
+                    </h4>
+
+                    <div className="flex items-center gap-2 text-[10px] text-neutral-500 group-hover:text-neutral-400 transition-colors">
+                      {event.eventType && (
+                        <span className="flex-shrink-0">{event.eventType.name}</span>
+                      )}
+                      {event.createdBy && (
+                        <>
+                          <span className="w-0.5 h-0.5 rounded-full bg-neutral-600" />
+                          <span className="truncate">by {event.createdBy.name}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         )}
       </ScrollArea>

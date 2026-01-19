@@ -21,7 +21,7 @@ import {
 export class EventExtractionService {
   private readonly logger = new Logger(EventExtractionService.name);
   private readonly bedrockClient: BedrockRuntimeClient;
-  private readonly modelId = 'apac.amazon.nova-pro-v1:0';
+  private readonly modelId = 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
 
   constructor(
     private configService: ConfigService,
@@ -146,11 +146,31 @@ export class EventExtractionService {
     transcript: string,
   ): Promise<AIEventExtractionResponse> {
     try {
+      // KST (UTC+9) 기준으로 현재 날짜/시간 계산
       const now = new Date();
-      const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
-      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
+      const kstOffset = 9 * 60; // KST는 UTC+9
+      const kstDate = new Date(now.getTime() + kstOffset * 60 * 1000);
 
-      const userPrompt = getEventExtractionPrompt(currentDate, currentTime);
+      const currentDate = kstDate.toISOString().split('T')[0]; // YYYY-MM-DD (KST)
+      const currentTime = kstDate.toISOString().split('T')[1].substring(0, 5); // HH:mm (KST)
+
+      // 요일 계산 (0=일요일, 1=월요일, ..., 6=토요일)
+      const dayNames = [
+        '일요일',
+        '월요일',
+        '화요일',
+        '수요일',
+        '목요일',
+        '금요일',
+        '토요일',
+      ];
+      const currentDayOfWeek = dayNames[kstDate.getUTCDay()];
+
+      const userPrompt = getEventExtractionPrompt(
+        currentDate,
+        currentTime,
+        currentDayOfWeek,
+      );
 
       const command = new ConverseCommand({
         modelId: this.modelId,
@@ -269,26 +289,43 @@ export class EventExtractionService {
     event: ExtractedCalendarEvent,
     sessionId: string,
   ): string {
+    const confidencePercent = Math.round(event.timeExpression.confidence * 100);
+    const confidenceEmoji =
+      confidencePercent >= 90 ? '🟢' : confidencePercent >= 70 ? '🟡' : '🟠';
+
+    const eventTypeLabels: Record<string, string> = {
+      meeting: '📅 회의',
+      deadline: '⏰ 마감',
+      reminder: '🔔 리마인더',
+      task: '✅ 작업',
+    };
+    const eventTypeLabel = eventTypeLabels[event.eventType] || '📌 일정';
+
     const parts: string[] = [];
+
+    // 헤더
+    parts.push(`${eventTypeLabel}`);
+    parts.push('');
 
     // 원본 설명
     if (event.description) {
-      parts.push(event.description);
+      parts.push(`> ${event.description}`);
+      parts.push('');
     }
 
-    // 메타데이터
+    // 상세 정보 테이블 형식
+    parts.push('**📋 상세 정보**');
+    parts.push(`• 발화자: ${event.speakerName}`);
+    if (event.assignee) {
+      parts.push(`• 담당자: ${event.assignee}`);
+    }
+    parts.push(`• 언급된 시간: "${event.timeExpression.originalText}"`);
+    parts.push(`• 추출 신뢰도: ${confidenceEmoji} ${confidencePercent}%`);
+
+    // 푸터
     parts.push('');
     parts.push('---');
-    parts.push(`발화자: ${event.speakerName}`);
-    if (event.assignee) {
-      parts.push(`담당자: ${event.assignee}`);
-    }
-    parts.push(`원본 표현: "${event.timeExpression.originalText}"`);
-    parts.push(
-      `신뢰도: ${(event.timeExpression.confidence * 100).toFixed(0)}%`,
-    );
-    parts.push('');
-    parts.push(`[회의에서 자동 추출됨 - 세션 ID: ${sessionId}]`);
+    parts.push(`🤖 *회의 중 AI가 자동 추출한 일정입니다*`);
 
     return parts.join('\n');
   }

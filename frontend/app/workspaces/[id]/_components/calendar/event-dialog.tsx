@@ -79,172 +79,188 @@ export function EventDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-neutral-900 border-white/10 text-white">
-        <DialogHeader>
-          <DialogTitle>{editingEvent ? t('calendar.event.edit_title') : t('calendar.event.new_title')}</DialogTitle>
-          <DialogDescription className="text-neutral-400">
+      <DialogContent className="sm:max-w-[500px] bg-[#0A0A0A]/80 backdrop-blur-2xl border-white/[0.08] shadow-2xl p-0 gap-0 overflow-hidden">
+        {/* Modern Header */}
+        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+          <DialogTitle className="text-lg font-semibold text-white tracking-tight">
+            {editingEvent ? t('calendar.event.edit_title') : t('calendar.event.new_title')}
+          </DialogTitle>
+          <DialogDescription className="hidden">
+            {/* Hidden description for a11y, header is self-explanatory */}
             {editingEvent ? t('calendar.event.edit_desc') : t('calendar.event.new_desc')}
           </DialogDescription>
-        </DialogHeader>
+        </div>
 
-        <div className="space-y-4 py-4">
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-neutral-300">{t('calendar.event.title_label')}</Label>
+        <div className="p-6 space-y-5">
+          {/* Title - Large Input */}
+          <div className="space-y-1.5">
+            <Label htmlFor="title" className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">
+              {t('calendar.event.title_label')}
+            </Label>
             <Input
               id="title"
               placeholder={t('calendar.event.title_placeholder')}
               value={formData.title}
               onChange={(e) => onFormDataChange({ ...formData, title: e.target.value })}
-              className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20"
+              className="h-12 bg-white/[0.03] border-white/5 text-lg text-white placeholder:text-neutral-600 focus-visible:ring-1 focus-visible:ring-white/10 focus-visible:bg-white/[0.05] rounded-xl transition-all"
             />
           </div>
 
-          {/* Event Type */}
-          <div className="space-y-2">
-            <Label className="text-neutral-300">{t('calendar.event.type_label')}</Label>
-            <Select
-              value={formData.eventTypeId || ''}
-              onValueChange={(value) => onFormDataChange({ ...formData, eventTypeId: value })}
-            >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
-                <SelectValue placeholder={t('calendar.event.type_placeholder')} />
-              </SelectTrigger>
-              <SelectContent className="bg-neutral-900 border-white/10 text-white">
-                {eventTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id} className="focus:bg-white/10 focus:text-white cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: type.color }}
-                      />
-                      {type.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Event Type */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">
+                {t('calendar.event.type_label')}
+              </Label>
+              <Select
+                value={formData.eventTypeId || ''}
+                onValueChange={(value) => onFormDataChange({ ...formData, eventTypeId: value })}
+              >
+                <SelectTrigger className="h-10 bg-white/[0.03] border-white/5 text-neutral-200 focus:ring-1 focus:ring-white/10 rounded-lg hover:bg-white/[0.05] transition-colors">
+                  <SelectValue placeholder={t('calendar.event.type_placeholder')} />
+                </SelectTrigger>
+                <SelectContent className="bg-[#111] border-white/10 text-neutral-200">
+                  {eventTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id} className="focus:bg-white/10 focus:text-white cursor-pointer py-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: type.color }}
+                        />
+                        {type.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Recurrence */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">
+                {t('calendar.event.recurrence_label')}
+              </Label>
+              <Select
+                value={formData.recurrence}
+                onValueChange={(value: RecurrenceType) =>
+                  onFormDataChange({ ...formData, recurrence: value })
+                }
+              >
+                <SelectTrigger className="h-10 bg-white/[0.03] border-white/5 text-neutral-200 focus:ring-1 focus:ring-white/10 rounded-lg hover:bg-white/[0.05] transition-colors">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#111] border-white/10 text-neutral-200">
+                  {(['none', 'daily', 'weekly', 'monthly'] as RecurrenceType[]).map((type) => (
+                    <SelectItem key={type} value={type} className="focus:bg-white/10 focus:text-white cursor-pointer py-2">
+                      {getRecurrenceLabel(type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {/* All Day */}
-          <div className="flex items-center justify-between">
-            <Label htmlFor="isAllDay" className="text-neutral-300">{t('calendar.event.all_day_label')}</Label>
-            <Switch
-              id="isAllDay"
-              checked={formData.isAllDay}
-              onCheckedChange={(checked) => onFormDataChange({ ...formData, isAllDay: checked })}
-              className="data-[state=checked]:bg-indigo-500"
-            />
-          </div>
-
-          {/* Start Time */}
-          <div className="space-y-2">
-            <Label htmlFor="startTime" className="text-neutral-300">{t('calendar.event.start_label')}</Label>
-            <Input
-              id="startTime"
-              type={formData.isAllDay ? 'date' : 'datetime-local'}
-              value={formData.isAllDay ? formData.startTime.split('T')[0] : formData.startTime}
-              onChange={(e) => onFormDataChange({ ...formData, startTime: e.target.value })}
-              className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 appearance-none [color-scheme:dark]"
-            />
-          </div>
-
-          {/* End Time */}
-          {!formData.isAllDay && (
-            <div className="space-y-2">
-              <Label htmlFor="endTime" className="text-neutral-300">{t('calendar.event.end_label')}</Label>
-              <Input
-                id="endTime"
-                type="datetime-local"
-                value={formData.endTime}
-                onChange={(e) => onFormDataChange({ ...formData, endTime: e.target.value })}
-                className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 appearance-none [color-scheme:dark]"
+          {/* Time Selection */}
+          <div className="space-y-3 bg-white/[0.02] p-4 rounded-xl border border-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="isAllDay" className="text-neutral-300 font-medium">{t('calendar.event.all_day_label')}</Label>
+              <Switch
+                id="isAllDay"
+                checked={formData.isAllDay}
+                onCheckedChange={(checked) => onFormDataChange({ ...formData, isAllDay: checked })}
+                className="data-[state=checked]:bg-white"
               />
             </div>
-          )}
 
-          {/* Recurrence */}
-          <div className="space-y-2">
-            <Label className="text-neutral-300">{t('calendar.event.recurrence_label')}</Label>
-            <Select
-              value={formData.recurrence}
-              onValueChange={(value: RecurrenceType) =>
-                onFormDataChange({ ...formData, recurrence: value })
-              }
-            >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-neutral-900 border-white/10 text-white">
-                {(['none', 'daily', 'weekly', 'monthly'] as RecurrenceType[]).map((type) => (
-                  <SelectItem key={type} value={type} className="focus:bg-white/10 focus:text-white cursor-pointer">
-                    {getRecurrenceLabel(type)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">Starts</Label>
+                <Input
+                  id="startTime"
+                  type={formData.isAllDay ? 'date' : 'datetime-local'}
+                  value={formData.isAllDay ? formData.startTime.split('T')[0] : formData.startTime}
+                  onChange={(e) => onFormDataChange({ ...formData, startTime: e.target.value })}
+                  className="h-9 bg-black/20 border-white/5 text-sm text-neutral-300 focus-visible:ring-1 focus-visible:ring-white/10 rounded-md"
+                />
+              </div>
+              {!formData.isAllDay && (
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">Ends</Label>
+                  <Input
+                    id="endTime"
+                    type="datetime-local"
+                    value={formData.endTime}
+                    onChange={(e) => onFormDataChange({ ...formData, endTime: e.target.value })}
+                    className="h-9 bg-black/20 border-white/5 text-sm text-neutral-300 focus-visible:ring-1 focus-visible:ring-white/10 rounded-md"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description" className="text-neutral-300">{t('calendar.event.desc_label')}</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="description" className="text-[10px] uppercase font-bold tracking-widest text-neutral-500 pl-1">
+              {t('calendar.event.desc_label')}
+            </Label>
             <Textarea
               id="description"
               placeholder={t('calendar.event.desc_placeholder')}
               value={formData.description}
               onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
               rows={3}
-              className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-1 focus-visible:ring-white/20 resize-none"
+              className="bg-white/[0.03] border-white/5 text-white placeholder:text-neutral-600 focus-visible:ring-1 focus-visible:ring-white/10 focus-visible:bg-white/[0.05] rounded-xl resize-none"
             />
           </div>
 
-          {/* Creator Info (for editing mode) */}
+          {/* Creator Info */}
           {editingEvent?.createdBy && (
-            <div className="pt-2 border-t border-white/10">
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
+            <div className="pt-2">
+              <div className="flex items-center gap-2 text-xs text-neutral-600 px-1">
                 {editingEvent.createdBy.profileImage ? (
                   <Image
                     src={editingEvent.createdBy.profileImage}
                     alt={editingEvent.createdBy.name}
-                    width={20}
-                    height={20}
-                    className="rounded-full ring-1 ring-white/10"
+                    width={18}
+                    height={18}
+                    className="rounded-full ring-1 ring-white/10 opacity-70"
                   />
                 ) : (
                   <User className="h-4 w-4" />
                 )}
-                <span>{t('calendar.event.created_by').replace('{name}', editingEvent.createdBy.name)}</span>
-                <span>({formatCreatedAt(editingEvent.createdAt)})</span>
+                <span>Created by <span className="text-neutral-500">{editingEvent.createdBy.name}</span></span>
+                <span className="text-neutral-700 mx-1">•</span>
+                <span>{formatCreatedAt(editingEvent.createdAt)}</span>
               </div>
             </div>
           )}
         </div>
 
-        <DialogFooter className="flex justify-between sm:justify-between">
+        <DialogFooter className="p-6 pt-2 flex justify-between sm:justify-between bg-black/20">
           {editingEvent && (
             <Button
-              variant="default" // Using default just to override class easily, or we can use custom class
+              variant="ghost"
               onClick={onShowDeleteDialog}
               disabled={isSubmitting}
-              className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+              className="text-red-500/70 hover:text-red-400 hover:bg-red-500/10 h-10 px-3"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               {t('common.delete')}
             </Button>
           )}
-          <div className="flex gap-2 ml-auto">
+          <div className="flex gap-3 ml-auto">
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="bg-white/5 border-white/10 text-white hover:bg-white/10"
+              className="text-neutral-400 hover:text-white hover:bg-white/5 h-10"
             >
               {t('common.cancel')}
             </Button>
             <Button
               onClick={onSubmit}
               disabled={isSubmitting || !formData.title.trim()}
-              className="bg-white text-black hover:bg-neutral-200"
+              className="bg-white text-black hover:bg-neutral-200 h-10 px-6 font-semibold rounded-lg"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

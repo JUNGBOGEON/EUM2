@@ -16,7 +16,7 @@ import {
 import type { WorkspaceEvent, WorkspaceEventType, CreateEventDto, CreateEventTypeDto, UpdateEventTypeDto } from '../_lib/types';
 
 // Sub-components
-import { CalendarGrid, EventDialog, EventTypeDialog, TodayEvents } from './calendar';
+import { CalendarGrid, EventDialog, EventTypeDialog, TodayEvents, EventDetailDialog } from './calendar';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface CalendarSectionProps {
@@ -48,13 +48,16 @@ export function CalendarSection({
 }: CalendarSectionProps) {
   // Calendar navigation state
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Dialog states
   const [showEventDialog, setShowEventDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEventTypesDialog, setShowEventTypesDialog] = useState(false);
 
   // Event state
+  const [selectedEvent, setSelectedEvent] = useState<WorkspaceEvent | null>(null);
   const [editingEvent, setEditingEvent] = useState<WorkspaceEvent | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -73,18 +76,17 @@ export function CalendarSection({
 
   const { t } = useLanguage();
 
-  // Get today's events
-  const todayEvents = useMemo(() => {
-    const today = new Date();
+  // Get selected date's events
+  const selectedDayEvents = useMemo(() => {
     return events.filter((event) => {
       const eventDate = new Date(event.startTime);
       return (
-        eventDate.getFullYear() === today.getFullYear() &&
-        eventDate.getMonth() === today.getMonth() &&
-        eventDate.getDate() === today.getDate()
+        eventDate.getFullYear() === selectedDate.getFullYear() &&
+        eventDate.getMonth() === selectedDate.getMonth() &&
+        eventDate.getDate() === selectedDate.getDate()
       );
     });
-  }, [events]);
+  }, [events, selectedDate]);
 
   // Format helpers
   const formatDateTimeLocal = (date: Date) => {
@@ -102,20 +104,28 @@ export function CalendarSection({
   };
 
   const goToToday = () => {
-    setCurrentDate(new Date());
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(today);
   };
 
   // Event handlers
   const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+  };
+
+  const handleCreateEvent = (date?: Date) => {
     if (!canEditCalendar) return;
+    const targetDate = date || selectedDate;
+
     setEditingEvent(null);
     const defaultType = eventTypes.find(t => t.name === '기타') || eventTypes[0];
     setFormData({
       title: '',
       description: '',
       eventTypeId: defaultType?.id,
-      startTime: formatDateTimeLocal(date),
-      endTime: formatDateTimeLocal(new Date(date.getTime() + 60 * 60 * 1000)),
+      startTime: formatDateTimeLocal(targetDate),
+      endTime: formatDateTimeLocal(new Date(targetDate.getTime() + 60 * 60 * 1000)),
       isAllDay: false,
       recurrence: 'none',
       reminderMinutes: undefined,
@@ -125,18 +135,33 @@ export function CalendarSection({
 
   const handleEventClick = (event: WorkspaceEvent, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingEvent(event);
+    setSelectedEvent(event);
+    setShowDetailDialog(true);
+  };
+
+  const handleEditClick = () => {
+    if (!selectedEvent) return;
+
+    setEditingEvent(selectedEvent);
     setFormData({
-      title: event.title,
-      description: event.description || '',
-      eventTypeId: event.eventTypeId,
-      startTime: formatDateTimeLocal(new Date(event.startTime)),
-      endTime: event.endTime ? formatDateTimeLocal(new Date(event.endTime)) : '',
-      isAllDay: event.isAllDay,
-      recurrence: event.recurrence,
-      reminderMinutes: event.reminderMinutes,
+      title: selectedEvent.title,
+      description: selectedEvent.description || '',
+      eventTypeId: selectedEvent.eventTypeId,
+      startTime: formatDateTimeLocal(new Date(selectedEvent.startTime)),
+      endTime: selectedEvent.endTime ? formatDateTimeLocal(new Date(selectedEvent.endTime)) : '',
+      isAllDay: selectedEvent.isAllDay,
+      recurrence: selectedEvent.recurrence,
+      reminderMinutes: selectedEvent.reminderMinutes,
     });
-    setShowEventDialog(true);
+    setShowDetailDialog(false); // Close detail
+    setShowEventDialog(true); // Open edit form
+  };
+
+  const handleDeleteClick = () => {
+    if (!selectedEvent) return;
+    setEditingEvent(selectedEvent); // Prepare for delete execution
+    setShowDetailDialog(false);
+    setShowDeleteDialog(true);
   };
 
   const handleSubmit = async () => {
@@ -198,36 +223,24 @@ export function CalendarSection({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="h-full flex flex-col animate-in fade-in duration-700">
+      {/* Top Actions - Floating above */}
+      <div className="flex justify-end mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-xl border border-white/10">
-            <Calendar className="h-5 w-5 text-indigo-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              {t('calendar.title')}
-            </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">Mange your team schedules and events</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
           {canEditCalendar && (
             <>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => setShowEventTypesDialog(true)}
-                className="border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 hover:border-white/20"
+                className="text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
               >
                 <Settings2 className="h-4 w-4 mr-2" />
                 {t('calendar.manage_types')}
               </Button>
               <Button
-                onClick={() => handleDateClick(new Date())}
-                className="bg-white text-black hover:bg-neutral-200 border-none font-semibold shadow-lg shadow-white/10"
+                onClick={() => handleCreateEvent()}
+                className="bg-white text-black hover:bg-neutral-200 border-none font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-transform active:scale-95"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 {t('calendar.add_event')}
@@ -237,8 +250,8 @@ export function CalendarSection({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-250px)] min-h-[600px]">
-        {/* Calendar Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-200px)] min-h-[600px]">
+        {/* Calendar Grid - Takes 2/3 */}
         <CalendarGrid
           currentDate={currentDate}
           events={events}
@@ -249,16 +262,27 @@ export function CalendarSection({
           onToday={goToToday}
         />
 
-        {/* Today's Events Sidebar */}
-        <div className="lg:col-span-1 h-full">
+        {/* Selected Date Events Timeline - Takes 1/3 */}
+        <div className="lg:col-span-1 h-full pl-6 border-l border-white/5">
           <TodayEvents
-            events={todayEvents}
+            events={selectedDayEvents}
+            date={selectedDate}
             onEventClick={handleEventClick}
+            onAddEvent={() => handleCreateEvent(selectedDate)}
           />
         </div>
       </div>
 
-      {/* Event Dialog */}
+      {/* Event Detail Dialog - Read Only */}
+      <EventDetailDialog
+        isOpen={showDetailDialog}
+        onOpenChange={setShowDetailDialog}
+        event={selectedEvent}
+        onEdit={handleEditClick}
+        onDelete={handleDeleteClick}
+      />
+
+      {/* Event Dialog - Edit/Create */}
       <EventDialog
         isOpen={showEventDialog}
         onOpenChange={setShowEventDialog}

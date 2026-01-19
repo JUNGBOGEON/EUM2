@@ -6,6 +6,8 @@ import type { RecentTranslation } from '@/hooks/meeting';
 interface FloatingSubtitleProps {
   translations: RecentTranslation[];
   getParticipantByAttendeeId?: (attendeeId: string) => { name: string; profileImage?: string } | undefined;
+  /** 화이트보드가 활성화되었는지 여부 - 활성화 시 자막 위치를 위로 이동 */
+  isWhiteboardActive?: boolean;
 }
 
 /**
@@ -22,13 +24,21 @@ interface FloatingSubtitleProps {
 export function FloatingSubtitle({
   translations,
   getParticipantByAttendeeId,
+  isWhiteboardActive = false,
 }: FloatingSubtitleProps) {
   if (translations.length === 0) {
     return null;
   }
 
+  // 화이트보드 활성화 시 자막을 상단으로 이동 (툴바와 겹치지 않도록)
+  // 일반 모드: bottom-6 (하단 중앙)
+  // 화이트보드 모드: top-4 (상단 중앙) - 화이트보드 툴바는 하단에 위치
+  const positionClass = isWhiteboardActive
+    ? 'top-4 left-1/2 -translate-x-1/2'
+    : 'bottom-6 left-1/2 -translate-x-1/2';
+
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
+    <div className={`absolute ${positionClass} z-50 flex flex-col gap-2 items-center pointer-events-none`}>
       {translations.map((translation) => {
         // Get speaker info
         const speaker = getParticipantByAttendeeId?.(translation.speakerId);

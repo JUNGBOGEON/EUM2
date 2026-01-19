@@ -94,10 +94,34 @@
         {
           "name": "REDIS_PASSWORD",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:REDIS_PASSWORD::"
+        },
+        {
+          "name": "CHIME_REGION",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:CHIME_REGION::"
+        },
+        {
+          "name": "AWS_BEDROCK_REGION",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:AWS_BEDROCK_REGION::"
+        },
+        {
+          "name": "S3_REGION",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:S3_REGION::"
+        },
+        {
+          "name": "ENCRYPTION_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:ENCRYPTION_KEY::"
+        },
+        {
+          "name": "ENCRYPTION_ENABLED",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:ENCRYPTION_ENABLED::"
+        },
+        {
+          "name": "AI_SERVER_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:149850910112:secret:eum/production:AI_SERVER_URL::"
         }
       ],
       "healthCheck": {
-        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"],
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1"],
         "interval": 30,
         "timeout": 5,
         "retries": 3,

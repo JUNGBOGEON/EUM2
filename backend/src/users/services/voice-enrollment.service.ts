@@ -28,9 +28,12 @@ export class VoiceEnrollmentService {
     private readonly s3StorageService: S3StorageService,
     private readonly configService: ConfigService,
   ) {
-    this.aiServerUrl =
-      this.configService.get<string>('AI_SERVER_URL') ||
-      'http://localhost:8000';
+    const configuredUrl =
+      this.configService.get<string>('AI_SERVER_URL') || 'localhost:8000';
+    // 프로토콜이 없으면 http:// 자동 추가
+    this.aiServerUrl = configuredUrl.startsWith('http')
+      ? configuredUrl
+      : `http://${configuredUrl}`;
     this.logger.log(`AI Server URL: ${this.aiServerUrl}`);
   }
 

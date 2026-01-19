@@ -28,9 +28,12 @@ export class VoiceDubbingTTSService {
     private readonly s3StorageService: S3StorageService,
     private readonly configService: ConfigService,
   ) {
-    const httpUrl =
-      this.configService.get<string>('AI_SERVER_URL') ||
-      'http://localhost:8000';
+    const configuredUrl =
+      this.configService.get<string>('AI_SERVER_URL') || 'localhost:8000';
+    // 프로토콜이 없으면 http:// 자동 추가
+    const httpUrl = configuredUrl.startsWith('http')
+      ? configuredUrl
+      : `http://${configuredUrl}`;
     this.aiServerUrl = httpUrl;
     // Convert http to ws for WebSocket URL
     this.aiServerWsUrl = httpUrl.replace(/^http/, 'ws');

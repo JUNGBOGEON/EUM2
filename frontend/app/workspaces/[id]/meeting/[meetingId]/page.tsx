@@ -121,6 +121,7 @@ function MeetingRoomContent() {
   const {
     devicesInitialized,
     audioInitialized,
+    isAudioInitializing,
     permissionError,
     videoDevices,
     audioInputDevices,
@@ -140,11 +141,11 @@ function MeetingRoomContent() {
 
   // 회의 연결 후 오디오 자동 초기화 (음소거 버튼 빠른 응답을 위해)
   useEffect(() => {
-    if (meeting && !audioInitialized) {
+    if (meeting && !audioInitialized && !isAudioInitializing) {
       console.log('[MeetingPage] Auto-initializing audio after meeting connection...');
       initializeAudioOnly();
     }
-  }, [meeting, audioInitialized, initializeAudioOnly]);
+  }, [meeting, audioInitialized, isAudioInitializing, initializeAudioOnly]);
   // Meeting start time (timestamp) - ensure UTC parsing
   const meetingStartTime = (() => {
     if (!meeting?.startedAt) return null;
@@ -358,11 +359,18 @@ function MeetingRoomContent() {
 
   // Microphone toggle handler (오디오만 초기화 - 빠른 응답)
   const handleToggleMute = useCallback(async () => {
-    if (!audioInitialized) {
-      const success = await initializeAudioOnly();
-      if (!success) return;
+    // 이미 초기화 완료 - 즉시 토글
+    if (audioInitialized) {
+      toggleMute();
+      return;
     }
-    toggleMute();
+
+    // 초기화 필요 (initializeAudioOnly가 중복 호출 방지함)
+    console.log('[MeetingPage] Audio not initialized, initializing before mute toggle...');
+    const success = await initializeAudioOnly();
+    if (success) {
+      toggleMute();
+    }
   }, [audioInitialized, initializeAudioOnly, toggleMute]);
 
   // 회의 나가기 (트랜스크립션 먼저 중지)

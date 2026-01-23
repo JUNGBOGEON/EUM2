@@ -364,8 +364,18 @@ export function useTTS({
       );
 
       if (response.ok) {
-        setSelectedVoices((prev) => ({ ...prev, [languageCode]: voiceId }));
-        console.log(`[TTS] Voice set: ${languageCode} -> ${voiceId}`);
+        const result = await response.json();
+
+        if (result.success) {
+          setSelectedVoices((prev) => ({ ...prev, [languageCode]: result.voiceId }));
+          console.log(`[TTS] Voice set: ${languageCode} -> ${result.voiceId}`);
+        } else {
+          console.error(`[TTS] Failed to set voice: ${result.message}`, {
+            availableVoices: result.availableVoices,
+          });
+        }
+      } else {
+        console.error('[TTS] Failed to set voice: HTTP error', response.status);
       }
     } catch (error) {
       console.error('[TTS] Failed to set voice:', error);

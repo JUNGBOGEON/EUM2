@@ -36,7 +36,7 @@ export default function Slide7_Architecture() {
 
                 {/* Header */}
                 <motion.div variants={itemVariants} className="flex flex-col items-center gap-2 shrink-0">
-                    <span className="text-sm tracking-[0.4em] text-neutral-500 font-medium uppercase">System Architecture</span>
+                    <span className="text-xl tracking-[0.4em] text-neutral-500 font-medium uppercase">System Architecture</span>
                     <h2 className="text-4xl md:text-5xl font-['IncheonEducation'] text-white drop-shadow-xl text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 to-neutral-500">
                         시스템 아키텍처
                     </h2>

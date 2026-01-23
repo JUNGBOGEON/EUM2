@@ -406,7 +406,7 @@ export default function Slide10_Team() {
                                         animate={{ opacity: 1 }}
                                         transition={{ delay: 0.7, duration: 0.8 }}
                                     >
-                                        <span className="text-[12px] md:text-[18px] font-['Presentation'] font-[400] tracking-[0.3em] text-white/40 uppercase">
+                                        <span className="text-lg md:text-2xl font-['Presentation'] font-[400] tracking-[0.3em] text-white/40 uppercase">
                                             [ 팀장 ]
                                         </span>
                                     </motion.div>
@@ -414,7 +414,7 @@ export default function Slide10_Team() {
 
                                 {/* Role Label */}
                                 <span className={`
-                                    text-xs md:text-sm lg:text-base
+                                    text-lg md:text-xl lg:text-2xl
                                     ${member.color}
                                     font-['Presentation'] font-[600]
                                     tracking-[0.15em] md:tracking-[0.2em]
@@ -449,7 +449,7 @@ export default function Slide10_Team() {
             >
                 <div className="flex items-center gap-4 md:gap-6 mb-3 md:mb-4">
                     <div className="h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent w-[60px] md:w-[150px]" />
-                    <span className="text-xs md:text-sm font-[300] font-['Presentation'] uppercase tracking-[0.4em] md:tracking-[0.5em] text-white/60">
+                    <span className="text-lg md:text-xl font-[300] font-['Presentation'] uppercase tracking-[0.4em] md:tracking-[0.5em] text-white/60">
                         TEAM
                     </span>
                     <div className="h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent w-[60px] md:w-[150px]" />

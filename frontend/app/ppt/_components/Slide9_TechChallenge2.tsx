@@ -29,10 +29,10 @@ const TextStep = ({
             <h3 className="text-2xl md:text-4xl font-['IncheonEducation'] text-white mb-2">
                 {title}
             </h3>
-            <p className="text-blue-400 font-mono text-xs md:text-sm uppercase tracking-wider mb-2">
+            <p className="text-blue-400 font-mono text-lg md:text-xl uppercase tracking-wider mb-2">
                 {tech}
             </p>
-            <p className="text-neutral-400 font-['Presentation'] font-light text-sm md:text-base leading-relaxed break-keep">
+            <p className="text-neutral-400 font-['Presentation'] font-light text-lg md:text-xl leading-relaxed break-keep">
                 {desc}
             </p>
         </div>

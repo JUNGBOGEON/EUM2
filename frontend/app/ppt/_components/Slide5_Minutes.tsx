@@ -74,7 +74,7 @@ const MinutesDemo = () => {
                 </motion.div>
             </div>
 
-            <div className="mt-6 text-xs text-emerald-400/40 font-mono tracking-[0.5em] uppercase">
+            <div className="mt-6 text-lg text-emerald-400/40 font-mono tracking-[0.5em] uppercase">
                 AI Speech-to-Text & Summary
             </div>
         </div>
@@ -115,7 +115,7 @@ export default function Slide5_Minutes() {
 
                 {/* Header */}
                 <motion.div variants={itemVariants} className="flex flex-col items-center gap-2">
-                    <span className="text-sm tracking-[0.4em] text-emerald-400 font-medium uppercase">Solution 03</span>
+                    <span className="text-xl tracking-[0.4em] text-emerald-400 font-medium uppercase">Solution 03</span>
                     <h2 className="text-5xl md:text-7xl font-['IncheonEducation'] text-white drop-shadow-xl leading-tight">
                         AI 자동 회의록,<br className="md:hidden" /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400">기록은 AI에게 맡기세요.</span>
                     </h2>
@@ -145,9 +145,9 @@ export default function Slide5_Minutes() {
                             variants={itemVariants}
                             className={`flex flex-col items-center flex-1 ${idx !== 2 ? 'md:border-r border-white/20' : ''}`}
                         >
-                            <span className="text-xs font-mono text-emerald-400 tracking-widest uppercase mb-2">{item.label}</span>
+                            <span className="text-lg font-mono text-emerald-400 tracking-widest uppercase mb-2">{item.label}</span>
                             <div className="text-4xl md:text-5xl font-['IncheonEducation'] text-white mb-2">{item.value}</div>
-                            <p className="text-neutral-400 font-['Presentation'] font-light text-sm">
+                            <p className="text-neutral-400 font-['Presentation'] font-light text-xl">
                                 {item.desc}
                             </p>
                         </motion.div>

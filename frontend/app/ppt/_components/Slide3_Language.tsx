@@ -69,7 +69,7 @@ const TranslationDemo = () => {
                     안녕, 세상아
                 </motion.span>
             </div>
-            <div className="mt-4 text-xs text-blue-400/40 font-mono tracking-[0.5em] uppercase">
+            <div className="mt-4 text-lg text-blue-400/40 font-mono tracking-[0.5em] uppercase">
                 Real-time Translation
             </div>
         </div>
@@ -115,7 +115,7 @@ export default function Slide3_Language() {
 
                 {/* Header */}
                 <motion.div variants={itemVariants} className="flex flex-col items-center gap-2">
-                    <span className="text-sm tracking-[0.4em] text-blue-400 font-medium uppercase">Solution 01</span>
+                    <span className="text-xl tracking-[0.4em] text-blue-400 font-medium uppercase">Solution 01</span>
                     <h2 className="text-5xl md:text-7xl font-['IncheonEducation'] text-white drop-shadow-xl leading-tight">
                         언어의 장벽,<br className="md:hidden" /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-400">더 이상 문제가 아닙니다.</span>
                     </h2>
@@ -145,9 +145,9 @@ export default function Slide3_Language() {
                             variants={itemVariants}
                             className={`flex flex-col items-center flex-1 ${idx !== 2 ? 'md:border-r border-white/20' : ''}`}
                         >
-                            <span className="text-xs font-mono text-blue-400 tracking-widest uppercase mb-2">{item.label}</span>
+                            <span className="text-lg font-mono text-blue-400 tracking-widest uppercase mb-2">{item.label}</span>
                             <div className="text-4xl md:text-5xl font-['IncheonEducation'] text-white mb-2">{item.value}</div>
-                            <p className="text-neutral-400 font-['Presentation'] font-light text-sm">
+                            <p className="text-neutral-400 font-['Presentation'] font-light text-xl">
                                 {item.desc}
                             </p>
                         </motion.div>

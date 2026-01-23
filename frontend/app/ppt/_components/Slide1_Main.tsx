@@ -181,10 +181,10 @@ export default function Slide1_Main() {
                         현대적인 협업을 위한 공간
                     </p>
                     <div className="flex items-center gap-4 mt-2">
-                        <span className="text-sm md:text-base text-neutral-400 font-[200] font-['Presentation'] tracking-widest uppercase border border-neutral-700 px-6 py-2 rounded-full backdrop-blur-sm bg-black/30">
+                        <span className="text-base md:text-lg text-neutral-400 font-[200] font-['Presentation'] tracking-widest uppercase border border-neutral-700 px-6 py-2 rounded-full backdrop-blur-sm bg-black/30">
                             SMART WORKSPACE
                         </span>
-                        <span className="text-sm md:text-base text-neutral-400 font-[200] font-['Presentation'] tracking-widest uppercase border border-neutral-700 px-6 py-2 rounded-full backdrop-blur-sm bg-black/30">
+                        <span className="text-base md:text-lg text-neutral-400 font-[200] font-['Presentation'] tracking-widest uppercase border border-neutral-700 px-6 py-2 rounded-full backdrop-blur-sm bg-black/30">
                             REAL-TIME SYNC
                         </span>
                     </div>

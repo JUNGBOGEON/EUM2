@@ -435,13 +435,27 @@ export class MeetingsService {
     languageCode: string,
     voiceId: string,
   ) {
-    await this.ttsPreferenceService.setVoicePreference(
+    const result = await this.ttsPreferenceService.setVoicePreference(
       sessionId,
       userId,
       languageCode,
       voiceId,
     );
-    return { success: true, languageCode, voiceId };
+
+    if (!result.saved) {
+      // 유효하지 않은 음성인 경우, 사용 가능한 음성 목록과 함께 에러 반환
+      const availableVoices = this.pollyService.getAvailableVoices(languageCode);
+      return {
+        success: false,
+        error: 'INVALID_VOICE',
+        message: `Voice "${voiceId}" is not available for ${languageCode}`,
+        availableVoices: availableVoices.map(v => v.id),
+        languageCode,
+        voiceId,
+      };
+    }
+
+    return { success: true, languageCode, voiceId: result.voiceId };
   }
 
   /**

@@ -11,6 +11,8 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { WorkspaceEvent } from '../../_lib/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
@@ -132,10 +134,24 @@ export function EventDetailDialog({
                                 <div className="mt-1 w-10 h-10 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center flex-shrink-0 group-hover:bg-white/[0.05] transition-colors">
                                     <AlignLeft className="h-5 w-5 text-neutral-300" />
                                 </div>
-                                <div className="pt-1.5">
-                                    <p className="text-base text-neutral-300 leading-relaxed font-light whitespace-pre-wrap">
+                                <div className="pt-1.5 prose prose-sm prose-invert max-w-none">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{
+                                            p: ({ children }) => <p className="text-base text-neutral-300 leading-relaxed font-light mb-2 last:mb-0">{children}</p>,
+                                            strong: ({ children }) => <strong className="font-semibold text-neutral-200">{children}</strong>,
+                                            em: ({ children }) => <em className="italic text-neutral-300">{children}</em>,
+                                            blockquote: ({ children }) => <blockquote className="border-l-2 border-neutral-600 pl-4 my-2 text-neutral-400 italic">{children}</blockquote>,
+                                            ul: ({ children }) => <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>,
+                                            ol: ({ children }) => <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>,
+                                            li: ({ children }) => <li className="text-neutral-300">{children}</li>,
+                                            hr: () => <hr className="border-neutral-700 my-3" />,
+                                            a: ({ href, children }) => <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                                            code: ({ children }) => <code className="bg-neutral-800 px-1.5 py-0.5 rounded text-sm text-neutral-200">{children}</code>,
+                                        }}
+                                    >
                                         {event.description}
-                                    </p>
+                                    </ReactMarkdown>
                                 </div>
                             </div>
                         )}

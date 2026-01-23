@@ -79,19 +79,20 @@ export class TTSPreferenceService {
 
   /**
    * Set voice preference for a language
+   * @returns object with success status and saved voiceId (or null if failed)
    */
   async setVoicePreference(
     sessionId: string,
     userId: string,
     languageCode: string,
     voiceId: string,
-  ): Promise<void> {
+  ): Promise<{ saved: boolean; voiceId: string | null }> {
     // Validate voice
     if (!this.pollyService.isValidVoice(voiceId, languageCode)) {
       this.logger.warn(
-        `[TTS Preference] Invalid voice "${voiceId}" for ${languageCode}, ignoring`,
+        `[TTS Preference] Invalid voice "${voiceId}" for ${languageCode}, available voices: ${JSON.stringify(this.pollyService.getAvailableVoices(languageCode).map(v => v.id))}`,
       );
-      return;
+      return { saved: false, voiceId: null };
     }
 
     const pref = await this.getPreference(sessionId, userId);
@@ -109,6 +110,7 @@ export class TTSPreferenceService {
     this.logger.log(
       `[TTS Preference] User ${userId} set voice for ${languageCode}: ${voiceId}`,
     );
+    return { saved: true, voiceId };
   }
 
   /**

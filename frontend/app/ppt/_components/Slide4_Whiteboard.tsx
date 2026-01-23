@@ -23,7 +23,7 @@ const Cursor = ({ color, label, delay }: { color: string, label: string, delay: 
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19138L11.7841 12.3673H5.65376Z" fill={color} stroke="white" strokeWidth="1" />
         </svg>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-opacity-80 backdrop-blur-sm" style={{ backgroundColor: color }}>
+        <span className="px-2 py-0.5 rounded-full text-sm font-bold text-white bg-opacity-80 backdrop-blur-sm" style={{ backgroundColor: color }}>
             {label}
         </span>
     </motion.div>
@@ -128,7 +128,7 @@ export default function Slide4_Whiteboard() {
 
                 {/* Header */}
                 <motion.div variants={itemVariants} className="flex flex-col items-center gap-2">
-                    <span className="text-sm tracking-[0.4em] text-purple-400 font-medium uppercase">Solution 02</span>
+                    <span className="text-xl tracking-[0.4em] text-purple-400 font-medium uppercase">Solution 02</span>
                     <h2 className="text-5xl md:text-7xl font-['IncheonEducation'] text-white drop-shadow-xl leading-tight">
                         실시간 협업,<br className="md:hidden" /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-400">아이디어가 흐르는 공간</span>
                     </h2>
@@ -158,9 +158,9 @@ export default function Slide4_Whiteboard() {
                             variants={itemVariants}
                             className={`flex flex-col items-center flex-1 ${idx !== 2 ? 'md:border-r border-white/20' : ''}`}
                         >
-                            <span className="text-xs font-mono text-purple-400 tracking-widest uppercase mb-2">{item.label}</span>
+                            <span className="text-lg font-mono text-purple-400 tracking-widest uppercase mb-2">{item.label}</span>
                             <div className="text-4xl md:text-5xl font-['IncheonEducation'] text-white mb-2">{item.value}</div>
-                            <p className="text-neutral-400 font-['Presentation'] font-light text-sm">
+                            <p className="text-neutral-400 font-['Presentation'] font-light text-xl">
                                 {item.desc}
                             </p>
                         </motion.div>

@@ -65,7 +65,7 @@ export default function Slide2_Problem() {
                 {/* Left Column: The Statement (Headline) */}
                 <div className="lg:col-span-7 flex flex-col justify-center pr-4">
                     <motion.div variants={textVariants}>
-                        <p className="text-blue-400 font-mono text-sm tracking-[0.2em] mb-6 uppercase opacity-80">
+                        <p className="text-blue-400 font-mono text-xl tracking-[0.2em] mb-6 uppercase opacity-80">
                             The Challenge
                         </p>
                     </motion.div>
